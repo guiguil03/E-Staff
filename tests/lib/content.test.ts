@@ -5,7 +5,7 @@ describe('content loader', () => {
   it('lists all articles sorted by publishedAt descending', () => {
     const articles = getAllArticles()
     expect(articles.length).toBeGreaterThan(0)
-    expect(articles[0].author.firstname).toBe('Fara')
+    expect(articles[0].author.firstname).toBe('Hery')
     expect(articles[0]).not.toHaveProperty('lastname')
   })
 
