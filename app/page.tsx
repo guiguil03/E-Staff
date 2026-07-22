@@ -43,17 +43,65 @@ export default function HomePage() {
               <span>Infrastructure sécurisée 24/7</span>
             </div>
           </div>
-          <div className="rounded bg-primary p-8 flex flex-col gap-6 justify-center min-h-[400px]">
-            <p className="font-mono text-xs text-background/70 uppercase tracking-wide">
-              Le niveau visé avant un premier appel client
-            </p>
-            <p className="font-display text-4xl text-background">B2 minimum</p>
-            <LanguageRibbon variant="static" reachedLevel="B2" />
-            <p className="text-background/90 text-sm">
-              Chaque candidat progresse sur cette échelle avant d&apos;être proposé en
-              production. En dessous du seuil, direction l&apos;académie pour continuer à
-              progresser, plutôt qu&apos;un refus sans suite.
-            </p>
+          <div className="relative -m-3 p-3 md:-m-6 md:p-6 overflow-hidden">
+            <div
+              aria-hidden="true"
+              className="absolute -z-10 -top-10 -right-10 w-40 h-40 md:w-56 md:h-56 rounded-full bg-accent/10 blur-3xl"
+            />
+            <div
+              aria-hidden="true"
+              className="absolute -z-10 -bottom-12 -left-12 w-48 h-48 md:w-64 md:h-64 rounded-full bg-success/10 blur-3xl"
+            />
+            <div
+              aria-hidden="true"
+              className="absolute -z-10 top-1/3 -right-8 w-28 h-28 rounded-full bg-primary/10 blur-2xl"
+            />
+
+            <div className="relative rounded bg-primary p-6 md:p-8 flex flex-col justify-center md:min-h-[420px]">
+              <div
+                className="absolute top-4 right-4 md:top-5 md:right-5 rotate-6 w-12 h-12 md:w-14 md:h-14 rounded-full border-2 border-success bg-background/10 flex items-center justify-center"
+                aria-hidden="true"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="w-6 h-6 md:w-7 md:h-7 text-success"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+
+              <div className="pr-14 md:pr-16">
+                <p className="font-mono text-xs uppercase tracking-wide text-background/60">
+                  Parcours vérifié
+                </p>
+                <p className="font-display text-xl text-background mt-1">Fara</p>
+              </div>
+
+              <div className="mt-8">
+                <p className="font-mono text-xs uppercase tracking-wide text-background/60 mb-1">
+                  Niveau atteint
+                </p>
+                <p className="font-display text-3xl md:text-4xl text-accent mb-4">B2</p>
+                <LanguageRibbon variant="static" reachedLevel="B2" />
+              </div>
+
+              <div className="border-t border-dashed border-background/30 my-6" />
+
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-2 h-2 rounded-full bg-success shrink-0" aria-hidden="true" />
+                  <p className="text-background/90 text-sm">
+                    En poste — support client international
+                  </p>
+                </div>
+                <p className="font-mono text-xs text-background/50">
+                  17 jours de formation intensive avant le premier poste
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
