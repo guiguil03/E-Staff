@@ -2,11 +2,11 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
 
-export function ContactForm() {
+export function ContactForm({ defaultSubject = '' }: { defaultSubject?: string }) {
   // TODO(task-11): replace useState with useDraftSave for localStorage draft persistence
   const [firstName, setFirstName] = useState('')
   const [email, setEmail] = useState('')
-  const [subject, setSubject] = useState('')
+  const [subject, setSubject] = useState(defaultSubject)
   const [body, setBody] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [pending, setPending] = useState(false)
