@@ -11,17 +11,18 @@ export default function HomePage() {
       <section id="hero" className="bg-background">
         <div className="mx-auto max-w-5xl px-4 py-16 md:py-24 grid gap-10 md:grid-cols-2 items-center">
           <div>
-            <p className="font-mono text-xs text-muted mb-3">
-              Niveau de langue. Turnover. Coupures d&apos;électricité.
+            <p className="font-mono text-xs uppercase tracking-wide text-muted mb-3">
+              Académie de langues et agence de staffing B2B — Madagascar
             </p>
             <LanguageRibbon variant="animated" reachedLevel="B2" />
             <h1 className="text-3xl md:text-4xl mt-6 mb-4">
-              On règle les trois avant que l&apos;agent ne prenne son premier appel.
+              Des agents de centre d&apos;appel formés en langues, prêts avant leur premier
+              appel client.
             </h1>
             <p className="mb-6 text-muted">
-              Sélection sur niveau réel, formation continue, infrastructure secourue
-              (onduleurs, connexion stable). Résultat : des agents qui tiennent dans la
-              durée, pas des CV qui déclarent un niveau.
+              On forme des candidats en langues à l&apos;académie et on place les agents
+              qualifiés chez des clients internationaux, avec une infrastructure sécurisée
+              déjà en place.
             </p>
             <QuoteBlock
               quote="Je ne pensais pas tenir une conversation de 20 minutes sans bloquer."
