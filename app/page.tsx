@@ -1,101 +1,96 @@
-import Image from "next/image";
+import Image from 'next/image'
+import Link from 'next/link'
+import { getAllArticles } from '@/lib/content'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
+import { QuoteBlock } from '@/components/ui/QuoteBlock'
+import { LanguageRibbon } from '@/components/LanguageRibbon'
 
-export default function Home() {
+export default function HomePage() {
+  const articles = getAllArticles().slice(0, 3)
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <main>
+      <section className="mx-auto max-w-5xl px-4 py-16 grid gap-10 md:grid-cols-2 items-center">
+        <div>
+          <LanguageRibbon variant="animated" reachedLevel="B2" />
+          <h1 className="text-3xl md:text-4xl mt-6 mb-4">
+            17 jours de formation intensive. 5 métiers accessibles derrière.
+          </h1>
+          <QuoteBlock
+            quote="Je ne pensais pas tenir une conversation de 20 minutes sans bloquer."
+            person={{ firstname: 'Fara' }}
+            result="poste de support client international"
+          />
+          <div className="mt-6 flex gap-3">
+            <Button href="/offres/carrieres" variant="accent">Déposer mon CV</Button>
+            <Button href="/publications" variant="ghost">Lire les publications</Button>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+        <Image
+          src="/images/hero-placeholder.jpg"
+          alt="Fara, en formation"
+          width={480}
+          height={560}
+          className="rounded object-cover w-full h-auto"
+        />
+      </section>
+
+      <section className="mx-auto max-w-5xl px-4 py-16">
+        <h2 className="text-2xl mb-8">Ce qu&apos;on fait</h2>
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card>
+            <h3 className="text-xl mb-2">Académie</h3>
+            <p>
+              Préparation aux examens internationaux et programme FOL pour professionnels.
+              On sélectionne, on forme, on teste — pas de diplôme sans niveau réel derrière.
+            </p>
+          </Card>
+          <Card>
+            <h3 className="text-xl mb-2">Production B2B</h3>
+            <p>
+              Des agents formés, mis à disposition pour des centres d&apos;appels et clients
+              internationaux, avec une infrastructure fiable (électricité, connexion, supervision).
+            </p>
+          </Card>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-5xl px-4 py-16">
+        <h2 className="text-2xl mb-8">Publications récentes</h2>
+        <div className="grid gap-6 md:grid-cols-3">
+          {articles.map((article) => (
+            <Link key={article.slug} href={`/publications/${article.slug}`}>
+              <Card>
+                <p className="font-mono text-xs text-muted mb-2">{article.category}</p>
+                <h3 className="text-lg mb-2">{article.title}</h3>
+                <p className="text-sm text-muted">{article.excerpt}</p>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-5xl px-4 py-16">
+        <h2 className="text-2xl mb-8">Nos offres</h2>
+        <div className="grid gap-6 md:grid-cols-3">
+          <Card>
+            <h3 className="text-lg mb-2">Examens internationaux</h3>
+            <p className="text-sm text-muted mb-4">Préparation ciblée par niveau, du A2 au C1.</p>
+            <Button href="/offres/examens" variant="ghost">Voir la préparation aux examens</Button>
+          </Card>
+          <Card>
+            <h3 className="text-lg mb-2">Programme FOL</h3>
+            <p className="text-sm text-muted mb-4">Français oratoire pour professionnels et leaders.</p>
+            <Button href="/offres/fol" variant="ghost">Voir le programme FOL</Button>
+          </Card>
+          <Card>
+            <h3 className="text-lg mb-2">Vous cherchez du travail ?</h3>
+            <p className="text-sm text-muted mb-4">Déposez votre candidature, on vous recontacte.</p>
+            <Button href="/offres/carrieres" variant="accent">Déposer mon CV</Button>
+          </Card>
+        </div>
+      </section>
+    </main>
+  )
 }
