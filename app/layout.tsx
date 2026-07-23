@@ -5,8 +5,8 @@ import { Footer } from '@/components/Footer'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Académie & Production — Madagascar',
-  description: "Formation en langues et mise à disposition d'agents formés, à Madagascar.",
+  title: 'e-taff — Académie de langues & staffing B2B, Madagascar',
+  description: "e-taff forme des candidats en langues et place des agents formés chez des clients internationaux, depuis Madagascar.",
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
