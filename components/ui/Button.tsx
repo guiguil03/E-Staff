@@ -18,7 +18,7 @@ export function Button({
   children: ReactNode
   type?: 'button' | 'submit'
 }) {
-  const classes = `inline-block rounded px-5 py-2.5 font-medium transition-colors ${VARIANTS[variant]}`
+  const classes = `inline-block rounded px-5 py-2.5 font-medium motion-safe:transition motion-safe:duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0 ${VARIANTS[variant]}`
   if (href) {
     return (
       <Link href={href} className={classes}>
