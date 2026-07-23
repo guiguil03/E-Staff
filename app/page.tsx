@@ -4,10 +4,13 @@ import { Card } from '@/components/ui/Card'
 import { QuoteBlock } from '@/components/ui/QuoteBlock'
 import { LanguageRibbon } from '@/components/LanguageRibbon'
 import { ContactForm } from '@/components/ContactForm'
+import { ScrollProgressRail } from '@/components/ScrollProgressRail'
 
 export default function HomePage() {
   return (
     <main>
+      <ScrollProgressRail />
+
       <section id="hero" className="bg-background">
         <div className="mx-auto max-w-5xl px-4 py-16 md:py-24 grid gap-10 md:grid-cols-2 items-center">
           <div>
@@ -15,7 +18,7 @@ export default function HomePage() {
               Académie de langues et agence de staffing B2B — Madagascar
             </p>
             <LanguageRibbon variant="animated" reachedLevel="B2" />
-            <h1 className="text-3xl md:text-4xl mt-6 mb-4">
+            <h1 className="text-4xl md:text-6xl leading-[1.05] tracking-tight mt-6 mb-4">
               Des agents de centre d&apos;appel formés en langues, prêts avant leur premier
               appel client.
             </h1>
@@ -149,7 +152,7 @@ export default function HomePage() {
         <div className="mx-auto max-w-5xl px-4 py-16 md:py-24">
           <h2 className="text-2xl md:text-3xl mb-8">La solution</h2>
           <div className="flex flex-col gap-6">
-            <div className="flex gap-4">
+            <div className="flex gap-4 md:max-w-xl md:self-start">
               <span className="font-mono text-2xl text-primary shrink-0">01</span>
               <div>
                 <h3 className="text-xl mb-2">Sélection sur test de niveau réel</h3>
@@ -162,7 +165,7 @@ export default function HomePage() {
                 </p>
               </div>
             </div>
-            <div className="flex gap-4">
+            <div className="flex gap-4 md:max-w-xl md:self-end">
               <span className="font-mono text-2xl text-primary shrink-0">02</span>
               <div>
                 <h3 className="text-xl mb-2">Formation continue pendant la mission</h3>
@@ -175,7 +178,7 @@ export default function HomePage() {
                 </p>
               </div>
             </div>
-            <div className="flex gap-4">
+            <div className="flex gap-4 md:max-w-xl md:self-start">
               <span className="font-mono text-2xl text-primary shrink-0">03</span>
               <div>
                 <h3 className="text-xl mb-2">Infrastructure sécurisée déjà en place</h3>
@@ -188,7 +191,7 @@ export default function HomePage() {
                 </p>
               </div>
             </div>
-            <div className="flex gap-4">
+            <div className="flex gap-4 md:max-w-xl md:self-end">
               <span className="font-mono text-2xl text-primary shrink-0">04</span>
               <div>
                 <h3 className="text-xl mb-2">Le client branche juste ses outils métier</h3>
@@ -204,10 +207,17 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="double-moteur" className="bg-primary">
-        <div className="mx-auto max-w-5xl px-4 py-16 md:py-24">
+      <section
+        id="double-moteur"
+        className="bg-primary"
+        style={{
+          clipPath:
+            'polygon(0 32px, 100% 0, 100% calc(100% - 32px), 0 100%)',
+        }}
+      >
+        <div className="mx-auto max-w-5xl px-4 py-20 md:py-28">
           <h2 className="text-2xl md:text-3xl mb-8 text-background">Le double moteur</h2>
-          <div className="grid gap-6 md:grid-cols-2 mb-6">
+          <div className="grid gap-6 md:grid-cols-[3fr_2fr] mb-6">
             <Card>
               <h3 className="text-xl mb-2">Académie</h3>
               <ul className="text-sm text-muted flex flex-col gap-2">
@@ -413,7 +423,7 @@ export default function HomePage() {
             production.
           </p>
           <div className="grid gap-6 md:grid-cols-3">
-            <Card>
+            <Card className="motion-safe:transition motion-safe:duration-200 motion-safe:hover:-translate-y-1 hover:shadow-md">
               <h3 className="text-xl mb-2">Préparation aux examens internationaux</h3>
               <p className="text-sm text-muted mb-4">
                 DELF/DALF, TEF Canada, EAF, DFP — préparation ciblée par niveau, du A2 au
@@ -423,7 +433,7 @@ export default function HomePage() {
                 Voir la préparation aux examens
               </Button>
             </Card>
-            <Card>
+            <Card className="motion-safe:transition motion-safe:duration-200 motion-safe:hover:-translate-y-1 hover:shadow-md">
               <h3 className="text-xl mb-2">Programme FOL</h3>
               <p className="text-sm text-muted mb-4">
                 Français oratoire pour professionnels et leaders qui parlent déjà bien
@@ -434,7 +444,7 @@ export default function HomePage() {
                 Voir le programme FOL
               </Button>
             </Card>
-            <Card>
+            <Card className="motion-safe:transition motion-safe:duration-200 motion-safe:hover:-translate-y-1 hover:shadow-md">
               <h3 className="text-xl mb-2">Vous cherchez du travail ?</h3>
               <p className="text-sm text-muted mb-4">
                 Déposez votre CV et vos coordonnées, puis passez une évaluation en ligne :
@@ -501,7 +511,10 @@ export default function HomePage() {
                 Ça dépend du niveau de départ, mais ça peut aller vite : Fara, par
                 exemple, a rejoint un poste de support client international après 17
                 jours de formation intensive (
-                <Link href="/publications/decroche-poste-apres-17-jours" className="underline">
+                <Link
+                  href="/publications/decroche-poste-apres-17-jours"
+                  className="relative text-ink after:absolute after:-bottom-0.5 after:left-0 after:h-px after:w-full after:origin-left after:scale-x-0 after:bg-ink after:content-[''] hover:after:scale-x-100 motion-safe:after:transition-transform motion-safe:after:duration-300 motion-reduce:underline"
+                >
                   son histoire
                 </Link>
                 ) — un exemple, pas une durée garantie pour tous les profils.
