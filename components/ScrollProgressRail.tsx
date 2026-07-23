@@ -8,7 +8,7 @@ const LEVELS = ['A1', 'B1', 'B2', 'C1'] as const
 // (A1) is simply "top of page" and needs no marker. Once the visitor
 // scrolls past a marker's midpoint, its band lights up — the rail is a
 // literal scroll-position readout using the site's own level progression.
-const BAND_SECTION_IDS = ['solution', 'double-moteur', 'apporteurs-clients'] as const
+const BAND_SECTION_IDS = ['solution', 'double-moteur', 'confiance'] as const
 
 export function ScrollProgressRail() {
   const [reachedBand, setReachedBand] = useState(0)

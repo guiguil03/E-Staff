@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 
 const VARIANTS = {
   primary: 'bg-primary text-white hover:opacity-90',
-  accent: 'bg-accent text-ink hover:opacity-90',
+  accent: 'bg-accent text-ink hover:opacity-90 motion-safe:hover:scale-[1.02]',
   ghost: 'bg-transparent text-primary border border-primary hover:bg-primary hover:text-white',
 } as const
 
