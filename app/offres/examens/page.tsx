@@ -19,8 +19,8 @@ export default function ExamensPage() {
       </div>
       <h2 className="text-xl mb-2">Durée et rythme</h2>
       <p className="mb-6">
-        Sessions intensives de 3 à 6 semaines selon le niveau de départ et l&apos;examen visé.
-        Cours en présentiel, groupes de 8 élèves maximum, tests blancs chronométrés dès la
+        Sessions intensives selon le niveau de départ et l&apos;examen visé.
+        Micro-groupes stricts de 5 élèves, tests blancs chronométrés dès la
         deuxième semaine.
       </p>
       <p className="mb-6 text-sm text-muted">

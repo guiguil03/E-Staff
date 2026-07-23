@@ -823,18 +823,18 @@ export default function HomePage() {
               [
                 [
                   '01',
-                  'Dépôt du CV et des coordonnées',
-                  'Vous déposez votre CV et vos coordonnées via la page candidature. Cette première étape ne prend que quelques minutes.',
+                  'Dépôt du CV, des coordonnées et d’une vidéo',
+                  'Vous déposez votre CV, vos coordonnées et un lien vidéo de présentation (Loom, YouTube non répertorié ou Google Drive). Cette première étape ne prend que quelques minutes.',
                 ],
                 [
                   '02',
-                  "Passage d'un test d'évaluation en ligne",
-                  "Vous passez ensuite un test d'évaluation en ligne qui mesure votre niveau réel, pour orienter la suite du parcours vers l'option la plus adaptée.",
+                  'Évaluation : vidéo + test de grammaire en ligne',
+                  'Un formateur visionne votre vidéo et l’évalue sur une grille de critères précise. En parallèle, vous passez un test de grammaire en ligne. Les deux ensemble mesurent votre niveau réel.',
                 ],
                 [
                   '03',
                   'Orientation selon le niveau',
-                  "Si le niveau est suffisant, vous accédez directement aux postes en production. En dessous du niveau requis, vous êtes orienté vers un renforcement à l'académie plutôt que laissé sans suite — l'idée reste la même que partout ailleurs sur ce site : aucun candidat n'est perdu.",
+                  'Entre B1 et B2, vous êtes orienté vers les offres de formation pour élever votre niveau — aucun candidat motivé n’est laissé sans option. À partir de C1, vous accédez aux cinq types de métiers recherchés par nos clients, puis à la formation intensive de 17 jours avant la prise de poste.',
                 ],
               ] as const
             ).map(([index, title, body], i) => (
