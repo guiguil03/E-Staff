@@ -1,12 +1,10 @@
 import Link from 'next/link'
 
 const NAV = [
-  { href: '/publications', label: 'Publications' },
-  { href: '/offres/examens', label: 'Examens' },
-  { href: '/offres/fol', label: 'FOL' },
-  { href: '/offres/carrieres', label: 'Recrutement' },
-  { href: '/a-propos', label: 'À propos' },
-  { href: '/contact', label: 'Contact' },
+  { href: '/publications', label: 'Actualités' },
+  { href: '/offres/examens', label: 'Se préparer aux examens' },
+  { href: '/offres/carrieres', label: 'Candidater' },
+  { href: '/#apporteurs-clients', label: 'Proposer un partenariat' },
 ]
 
 export function Header() {
@@ -14,7 +12,7 @@ export function Header() {
     <header className="border-b border-muted/30">
       <nav className="mx-auto max-w-5xl px-4 py-4 flex flex-wrap items-center justify-between gap-4">
         <Link href="/" className="font-display text-xl text-primary">
-          e-taff
+          e-Staf
         </Link>
         <ul className="flex flex-wrap gap-4 text-sm">
           {NAV.map((item) => (

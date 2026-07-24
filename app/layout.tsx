@@ -5,8 +5,8 @@ import { Footer } from '@/components/Footer'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'e-taff — Académie de langues & staffing B2B, Madagascar',
-  description: "e-taff forme des candidats en langues et place des agents formés chez des clients internationaux, depuis Madagascar.",
+  title: 'e-Staf — Académie de langues & externalisation d’élite, Madagascar',
+  description: "e-Staf lève deux freins à la fois : la barrière de la langue pour les talents, et les craintes liées à l'externalisation pour les entreprises. Formation d'élite et staffing B2B depuis Madagascar.",
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
