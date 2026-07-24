@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import type { CSSProperties, ReactNode } from 'react'
+import { Fragment, type CSSProperties, type ReactNode } from 'react'
 import { Button } from '@/components/ui/Button'
 import { QuoteBlock } from '@/components/ui/QuoteBlock'
 import { LanguageRibbon } from '@/components/LanguageRibbon'
@@ -7,7 +7,9 @@ import { ContactForm } from '@/components/ContactForm'
 import { ScrollProgressRail } from '@/components/ScrollProgressRail'
 import { Reveal } from '@/components/Reveal'
 import { HeroRibbon } from '@/components/HeroRibbon'
+import { HeroFX } from '@/components/HeroFX'
 import { MarqueeBand } from '@/components/MarqueeBand'
+import { SpotlightCard } from '@/components/SpotlightCard'
 
 const TESTIMONIALS = [
   {
@@ -195,7 +197,7 @@ function ActWatermark({
   return (
     <span
       aria-hidden="true"
-      className={`pointer-events-none absolute top-2 select-none font-mono font-medium leading-none text-[8rem] md:text-[14rem] ${
+      className={`watermark-float pointer-events-none absolute top-2 select-none font-mono font-medium leading-none text-[8rem] md:text-[14rem] ${
         side === 'right' ? 'right-0 md:right-4' : 'left-0 md:left-4'
       } ${tone === 'dark' ? 'text-background/5' : 'text-primary/5'}`}
     >
@@ -204,11 +206,35 @@ function ActWatermark({
   )
 }
 
-/** Mono act kicker: "Acte 01 · Niveau A1 — Le problème". */
+/** Per-word staggered rise for the biggest act headings: each word carries
+ * its own transition delay and lifts in once the surrounding Reveal fires
+ * (see .stagger-rise in globals.css — static under reduced motion). */
+function SplitWords({ text }: { text: string }) {
+  const words = text.split(' ')
+  return (
+    <>
+      {words.map((word, i) => (
+        <Fragment key={`${word}-${i}`}>
+          <span
+            className="stagger-rise inline-block"
+            style={{ '--sd': `${i * 70}ms` } as CSSProperties}
+          >
+            {word}
+          </span>
+          {i < words.length - 1 ? ' ' : null}
+        </Fragment>
+      ))}
+    </>
+  )
+}
+
+/** Mono act kicker: "Acte 01 · Niveau A1 — Le problème". A thin accent rule
+ * draws itself beside the label shortly after the reveal (see .kicker-rule). */
 function ActKicker({ children }: { children: ReactNode }) {
   return (
-    <p className="mb-3 font-mono text-xs uppercase tracking-widest text-accent">
-      {children}
+    <p className="mb-3 flex items-center gap-3 font-mono text-xs uppercase tracking-widest text-accent">
+      <span>{children}</span>
+      <span aria-hidden="true" className="kicker-rule h-px w-10 shrink-0 bg-accent/70 md:w-16" />
     </p>
   )
 }
@@ -308,12 +334,18 @@ function StatusBadge({
 }) {
   return (
     <span
-      className={`inline-block rounded border px-2 py-1 font-mono text-[10px] uppercase tracking-wide ${
+      className={`inline-flex items-center rounded border px-2 py-1 font-mono text-[10px] uppercase tracking-wide ${
         available
           ? 'border-success/40 bg-success/10 text-success'
           : 'border-primary/20 bg-primary/5 text-primary/80'
       }`}
     >
+      {available && (
+        <span aria-hidden="true" className="relative mr-1.5 inline-flex h-1.5 w-1.5 shrink-0">
+          <span className="badge-ping absolute inset-0 rounded-full bg-success opacity-50" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
+        </span>
+      )}
       {children}
     </span>
   )
@@ -354,16 +386,28 @@ export default function HomePage() {
         />
         <div
           aria-hidden="true"
-          className="blob-drift-1 pointer-events-none absolute -top-24 right-[10%] h-72 w-72 rounded-full bg-accent/15 blur-3xl"
-        />
+          className="hero-par pointer-events-none absolute -top-24 right-[10%]"
+          style={{ '--pf': '-0.05' } as CSSProperties}
+        >
+          <div className="blob-drift-1 h-72 w-72 rounded-full bg-accent/15 blur-3xl" />
+        </div>
         <div
           aria-hidden="true"
-          className="blob-drift-2 pointer-events-none absolute bottom-[15%] -left-20 h-80 w-80 rounded-full bg-success/15 blur-3xl"
-        />
+          className="hero-par pointer-events-none absolute bottom-[15%] -left-20"
+          style={{ '--pf': '0.04' } as CSSProperties}
+        >
+          <div className="blob-drift-2 h-80 w-80 rounded-full bg-success/15 blur-3xl" />
+        </div>
         <div
           aria-hidden="true"
-          className="blob-drift-3 pointer-events-none absolute top-[40%] right-[-5%] h-56 w-56 rounded-full bg-background/10 blur-3xl"
-        />
+          className="hero-par pointer-events-none absolute top-[40%] right-[-5%]"
+          style={{ '--pf': '-0.03' } as CSSProperties}
+        >
+          <div className="blob-drift-3 h-56 w-56 rounded-full bg-background/10 blur-3xl" />
+        </div>
+
+        {/* Cursor spotlight overlay + custom-property writer (desktop only) */}
+        <HeroFX />
 
         <div className="relative mx-auto flex min-h-[max(560px,calc(100svh-4rem))] max-w-6xl flex-col justify-center px-4 pb-32 pt-14 md:pt-16">
           <p
@@ -395,7 +439,7 @@ export default function HomePage() {
                 className="hero-line-inner block text-5xl leading-[1.05] sm:text-6xl md:text-8xl md:leading-none"
                 style={{ '--d': '450ms' } as CSSProperties}
               >
-                e-Staf est le <em className="italic text-accent">pont</em>.
+                e-Staf est le <em className="text-shimmer italic text-accent">pont</em>.
               </span>
             </span>
           </h1>
@@ -458,7 +502,9 @@ export default function HomePage() {
         <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
           <Reveal>
             <ActKicker>Acte 01 · Niveau A1 — Deux portes d&apos;entrée</ActKicker>
-            <h2 className="mb-4 text-3xl md:text-5xl">Deux espaces, une même identité</h2>
+            <h2 className="mb-4 text-3xl md:text-5xl">
+              <SplitWords text="Deux espaces, une même identité" />
+            </h2>
             <p className="mb-10 max-w-2xl text-muted">
               Que vous soyez un talent freiné par vos compétences linguistiques ou une
               entreprise freinée par les risques de l&apos;externalisation, votre porte
@@ -467,7 +513,7 @@ export default function HomePage() {
           </Reveal>
           <div className="grid gap-6 md:grid-cols-2 md:gap-8">
             <Reveal from="left" className="h-full">
-              <div className="flex h-full flex-col rounded bg-primary p-6 md:p-8">
+              <SpotlightCard tone="dark" className="flex h-full flex-col rounded bg-primary p-6 md:p-8">
                 <p className="mb-4 font-mono text-xs uppercase tracking-widest text-accent">
                   Espace entreprises — B2B
                 </p>
@@ -487,10 +533,13 @@ export default function HomePage() {
                     Nous contacter pour un projet d&apos;externalisation
                   </Button>
                 </div>
-              </div>
+              </SpotlightCard>
             </Reveal>
             <Reveal from="right" delay={100} className="h-full">
-              <div className="flex h-full flex-col rounded border border-muted/30 bg-background p-6 md:p-8">
+              <SpotlightCard
+                tone="light"
+                className="flex h-full flex-col rounded border border-muted/30 bg-background p-6 md:p-8"
+              >
                 <p className="mb-4 font-mono text-xs uppercase tracking-widest text-success">
                   Espace talents & candidats
                 </p>
@@ -525,7 +574,7 @@ export default function HomePage() {
                     Passer le test & rejoindre e-Staf
                   </Button>
                 </div>
-              </div>
+              </SpotlightCard>
             </Reveal>
           </div>
         </div>
@@ -539,7 +588,9 @@ export default function HomePage() {
         <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
           <Reveal>
             <ActKicker>Acte 02 · Niveau B1 — La montée</ActKicker>
-            <h2 className="mb-4 text-3xl md:text-5xl">La méthode</h2>
+            <h2 className="mb-4 text-3xl md:text-5xl">
+              <SplitWords text="La méthode" />
+            </h2>
             <p className="max-w-2xl text-muted">
               Profils sous-qualifiés, turnover massif, coupures en pleine mission : vous
               connaissez les craintes. Voici, étape par étape, comment nous les neutralisons
@@ -587,14 +638,17 @@ export default function HomePage() {
         id="double-moteur"
         className="relative overflow-hidden bg-primary"
         style={{
-          clipPath: 'polygon(0 56px, 100% 0, 100% 100%, 0 calc(100% - 56px))',
+          clipPath:
+            'polygon(0 clamp(40px, 5vw, 72px), 100% 0, 100% 100%, 0 calc(100% - clamp(40px, 5vw, 72px)))',
         }}
       >
         <ActWatermark level="B2" tone="dark" side="right" />
         <div className="relative mx-auto max-w-5xl px-4 py-28 md:py-36">
           <Reveal>
             <ActKicker>Acte 03 · Niveau B2 — Le mécanisme</ActKicker>
-            <h2 className="mb-4 text-3xl text-background md:text-5xl">Le double moteur</h2>
+            <h2 className="mb-4 text-3xl text-background md:text-5xl">
+              <SplitWords text="Le double moteur" />
+            </h2>
             <p className="mb-10 max-w-2xl text-sm text-background/70 md:text-base">
               Deux publics distincts, deux promesses distinctes : les élèves de
               l&apos;académie ne sont pas de futurs agents — ils poursuivent leurs propres
@@ -690,7 +744,7 @@ export default function HomePage() {
           <Reveal>
             <ActKicker>Acte 04 · Niveau C1 — La preuve</ActKicker>
             <h2 className="mb-4 text-3xl md:text-5xl">
-              Les promesses d&apos;e-Staf & standards de performance
+              <SplitWords text="Les promesses d'e-Staf & standards de performance" />
             </h2>
             <p className="mb-10 max-w-2xl text-muted">
               Ce que nous mettons en place pour sécuriser vos projets et exiger
@@ -796,18 +850,23 @@ export default function HomePage() {
 
           <Reveal>
             <div className="mb-14 grid grid-cols-2 divide-x divide-y divide-muted/30 border-y border-muted/30 md:grid-cols-4 md:divide-y-0">
-              <div className="p-4 md:p-6">
-                <StatChip label="Sélection" value="Test + examens officiels" />
-              </div>
-              <div className="p-4 md:p-6">
-                <StatChip label="Formation" value="Continue en poste" />
-              </div>
-              <div className="p-4 md:p-6">
-                <StatChip label="Infrastructure" value="Sécurisée 24/7" />
-              </div>
-              <div className="p-4 md:p-6">
-                <StatChip label="Pilotage" value="Reporting hebdomadaire" />
-              </div>
+              {(
+                [
+                  ['Sélection', 'Test + examens officiels'],
+                  ['Formation', 'Continue en poste'],
+                  ['Infrastructure', 'Sécurisée 24/7'],
+                  ['Pilotage', 'Reporting hebdomadaire'],
+                ] as const
+              ).map(([label, value], i) => (
+                <div key={label} className="p-4 md:p-6">
+                  <div
+                    className="stagger-rise"
+                    style={{ '--sd': `${i * 90}ms` } as CSSProperties}
+                  >
+                    <StatChip label={label} value={value} />
+                  </div>
+                </div>
+              ))}
             </div>
           </Reveal>
 
@@ -853,6 +912,8 @@ export default function HomePage() {
         ]}
         variant="dark"
         duration={44}
+        direction="right"
+        tilt
       />
 
       {/* ============================================================ */}
@@ -886,7 +947,7 @@ export default function HomePage() {
           <div className="mb-16 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {LOTS.map((lot, i) => (
               <Reveal key={lot.name} delay={(i % 3) * 80} className="h-full">
-                <div className="flex h-full flex-col border border-muted/30 bg-white p-5">
+                <SpotlightCard className="flex h-full flex-col border border-muted/30 bg-white p-5">
                   <h4 className="mb-2 font-display text-lg leading-snug">{lot.name}</h4>
                   <p className="mb-4 text-sm text-muted">{lot.mission}</p>
                   <div className="mt-auto">
@@ -902,7 +963,7 @@ export default function HomePage() {
                       </CardAction>
                     </div>
                   </div>
-                </div>
+                </SpotlightCard>
               </Reveal>
             ))}
           </div>
@@ -921,7 +982,7 @@ export default function HomePage() {
           <div className="grid gap-4 sm:grid-cols-2">
             {MISSIONS.map((mission, i) => (
               <Reveal key={mission.name} delay={(i % 2) * 80} className="h-full">
-                <div className="flex h-full flex-col border border-muted/30 bg-white p-5">
+                <SpotlightCard className="flex h-full flex-col border border-muted/30 bg-white p-5">
                   <h4 className="mb-2 font-display text-lg leading-snug">{mission.name}</h4>
                   <p className="mb-4 text-sm text-muted">{mission.body}</p>
                   <div className="mt-auto">
@@ -930,7 +991,7 @@ export default function HomePage() {
                       <CardAction href="#apporteurs-clients">Lancer une mission</CardAction>
                     </div>
                   </div>
-                </div>
+                </SpotlightCard>
               </Reveal>
             ))}
           </div>
@@ -1056,20 +1117,22 @@ export default function HomePage() {
           <div className="flex max-w-2xl flex-col gap-8">
             {FAQ.map((item, i) => (
               <Reveal key={item.q} delay={(i % 2) * 100}>
-                <div>
+                <div className="group">
                   <h3 className="mb-2 text-xl">
                     <span className="mr-2 font-mono text-sm text-accent">Q0{i + 1}</span>
-                    {item.q}
+                    <span className="faq-underline">{item.q}</span>
                   </h3>
                   <p className="text-sm text-muted">{item.a}</p>
                 </div>
               </Reveal>
             ))}
             <Reveal>
-              <div>
+              <div className="group">
                 <h3 className="mb-2 text-xl">
                   <span className="mr-2 font-mono text-sm text-accent">Q06</span>
-                  Combien de temps dure la formation avant un placement en production ?
+                  <span className="faq-underline">
+                    Combien de temps dure la formation avant un placement en production ?
+                  </span>
                 </h3>
                 <p className="text-sm text-muted">
                   Ça dépend du niveau de départ, mais ça peut aller vite : Fara, par
