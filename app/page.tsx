@@ -10,6 +10,23 @@ import { HeroRibbon } from '@/components/HeroRibbon'
 import { HeroFX } from '@/components/HeroFX'
 import { MarqueeBand } from '@/components/MarqueeBand'
 import { SpotlightCard } from '@/components/SpotlightCard'
+import {
+  DoubleEngineSchema,
+  EnvelopeSchema,
+  FunnelSchema,
+  GateSchema,
+  MarkBars,
+  MarkLayers,
+  MarkLock,
+  MarkPulse,
+  MarkRefresh,
+  MarkShield,
+  NetworkSchema,
+  RoughRing,
+  RoughUnderline,
+  SealSchema,
+  StaircaseSchema,
+} from '@/components/Schemas'
 
 const TESTIMONIALS = [
   {
@@ -239,37 +256,25 @@ function ActKicker({ children }: { children: ReactNode }) {
   )
 }
 
-/** A ledger row: an oversized, muted mono index number beside a heading + body.
- * Kept from the previous pass for plain, non-clickable informational content.
- * Stack rows inside a `divide-y divide-muted/30` container. */
-function LedgerRow({
-  index,
-  title,
-  children,
-}: {
-  index: string
-  title: string
-  children: ReactNode
-}) {
+/** Chapter break between two light sections: a centered mono divider mark
+ * (short accent rules + dots) so every act boundary reads as intentional.
+ * Placed at the top of the section that opens the new chapter. */
+function ChapterBreak() {
   return (
-    <div className="flex gap-5 md:gap-10 items-start py-6 md:py-8">
-      <span
-        aria-hidden="true"
-        className="font-mono text-4xl md:text-7xl leading-none shrink-0 w-14 md:w-24 text-primary/15"
-      >
-        {index}
-      </span>
-      <div className="flex-1 min-w-0">
-        <h3 className="text-lg md:text-xl mb-2">{title}</h3>
-        <div className="text-sm text-muted">{children}</div>
-      </div>
+    <div
+      aria-hidden="true"
+      className="flex items-center justify-center gap-4 pt-14 md:pt-16"
+    >
+      <span className="h-px w-10 bg-accent/60 md:w-14" />
+      <span className="font-mono text-xs tracking-[0.6em] text-muted">···</span>
+      <span className="h-px w-10 bg-accent/60 md:w-14" />
     </div>
   )
 }
 
-/** The clickable counterpart to LedgerRow: same oversized index number, but
- * wrapped in a Link with a trailing arrow affordance and a hover tint/left-accent. */
-function OffreRow({
+/** Course-catalogue row: oversized Fraunces programme name on the left,
+ * description + CTA in the second editorial column. Whole row is a link. */
+function CatalogueRow({
   href,
   index,
   title,
@@ -285,17 +290,16 @@ function OffreRow({
   return (
     <Link
       href={href}
-      className="group flex gap-5 md:gap-10 items-start py-6 md:py-8 -mx-4 px-4 md:-mx-6 md:px-6 border-l-2 border-transparent hover:border-l-accent hover:bg-background/70 motion-safe:transition-colors motion-safe:duration-200"
+      className="group grid gap-3 py-8 md:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] md:gap-12 md:py-10"
     >
-      <span
-        aria-hidden="true"
-        className="font-mono text-4xl md:text-7xl leading-none shrink-0 w-14 md:w-24 text-primary/15"
-      >
-        {index}
-      </span>
-      <div className="flex-1 min-w-0">
-        <h3 className="text-lg md:text-xl mb-2">{title}</h3>
-        <p className="text-sm text-muted mb-3">{description}</p>
+      <div>
+        <p className="mb-3 font-mono text-xs tracking-widest text-accent">{index}</p>
+        <h3 className="font-display text-2xl leading-[1.08] tracking-tight text-ink motion-safe:transition-colors motion-safe:duration-200 group-hover:text-primary md:text-4xl">
+          {title}
+        </h3>
+      </div>
+      <div className="md:pt-8">
+        <p className="mb-3 text-sm text-muted">{description}</p>
         <span className="inline-flex items-center gap-1.5 text-sm font-medium text-primary">
           {cta}
           <span
@@ -309,6 +313,9 @@ function OffreRow({
     </Link>
   )
 }
+
+/** Ordered marks for the six promises, same order as PROMESSES. */
+const PROMISE_MARKS = [MarkShield, MarkPulse, MarkLayers, MarkLock, MarkBars, MarkRefresh] as const
 
 /** A small honest-claim chip: mono uppercase label + punchy display value. */
 function StatChip({ label, value }: { label: string; value: string }) {
@@ -497,26 +504,39 @@ export default function HomePage() {
       {/* ============================================================ */}
       {/* ACTE 01 · A1 — Les deux espaces                              */}
       {/* ============================================================ */}
-      <section id="espaces" className="relative overflow-hidden bg-white">
+      <section id="espaces" className="relative overflow-hidden bg-background">
         <ActWatermark level="A1" side="right" />
-        <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
+        <div className="relative mx-auto max-w-5xl px-4 pb-12 pt-20 md:pb-16 md:pt-28">
           <Reveal>
             <ActKicker>Acte 01 · Niveau A1 — Deux portes d&apos;entrée</ActKicker>
             <h2 className="mb-4 text-3xl md:text-5xl">
               <SplitWords text="Deux espaces, une même identité" />
             </h2>
-            <p className="mb-10 max-w-2xl text-muted">
+            <p className="max-w-2xl text-muted">
               Que vous soyez un talent freiné par vos compétences linguistiques ou une
               entreprise freinée par les risques de l&apos;externalisation, votre porte
               d&apos;entrée est ici.
             </p>
           </Reveal>
-          <div className="grid gap-6 md:grid-cols-2 md:gap-8">
-            <Reveal from="left" className="h-full">
-              <SpotlightCard tone="dark" className="flex h-full flex-col rounded bg-primary p-6 md:p-8">
-                <p className="mb-4 font-mono text-xs uppercase tracking-widest text-accent">
-                  Espace entreprises — B2B
-                </p>
+        </div>
+
+        {/* Full-bleed split-screen diptych: two doors meeting at a sharp seam. */}
+        <div className="relative grid md:grid-cols-2">
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-0 left-1/2 z-10 hidden w-px bg-accent/70 md:block"
+          />
+
+          {/* Door 1 — Entreprises (dark) */}
+          <Reveal from="left" className="h-full">
+            <div className="flex h-full flex-col bg-primary px-4 py-12 md:px-10 md:py-16">
+              <div className="mx-auto flex w-full max-w-lg flex-1 flex-col">
+                <div className="mb-8 flex items-start justify-between gap-6">
+                  <p className="pt-1 font-mono text-xs uppercase tracking-widest text-accent">
+                    Espace entreprises — B2B
+                  </p>
+                  <NetworkSchema className="w-24 shrink-0 text-background md:w-32" />
+                </div>
                 <h3 className="mb-4 font-display text-2xl leading-snug text-background md:text-3xl">
                   « Des agents qualifiés au service de vos ambitions. »
                 </h3>
@@ -528,21 +548,25 @@ export default function HomePage() {
                   locaux équipés et un encadrement managérial rigoureux. Un seul objectif :
                   simplifier et sécuriser vos opérations d&apos;externalisation.
                 </p>
-                <div className="mt-auto">
+                <div className="mt-auto pt-2">
                   <Button href="#apporteurs-clients" variant="accent">
                     Nous contacter pour un projet d&apos;externalisation
                   </Button>
                 </div>
-              </SpotlightCard>
-            </Reveal>
-            <Reveal from="right" delay={100} className="h-full">
-              <SpotlightCard
-                tone="light"
-                className="flex h-full flex-col rounded border border-muted/30 bg-background p-6 md:p-8"
-              >
-                <p className="mb-4 font-mono text-xs uppercase tracking-widest text-success">
-                  Espace talents & candidats
-                </p>
+              </div>
+            </div>
+          </Reveal>
+
+          {/* Door 2 — Talents (light) */}
+          <Reveal from="right" delay={100} className="h-full">
+            <div className="flex h-full flex-col bg-white px-4 py-12 md:px-10 md:py-16">
+              <div className="mx-auto flex w-full max-w-lg flex-1 flex-col">
+                <div className="mb-8 flex items-start justify-between gap-6">
+                  <p className="pt-1 font-mono text-xs uppercase tracking-widest text-success">
+                    Espace talents & candidats
+                  </p>
+                  <StaircaseSchema className="w-24 shrink-0 text-primary md:w-32" />
+                </div>
                 <h3 className="mb-4 font-display text-2xl leading-snug text-ink md:text-3xl">
                   « Votre carrière de rêve en quelques clics. »
                 </h3>
@@ -554,7 +578,7 @@ export default function HomePage() {
                   diplômes et votre expertise aux besoins exigeants du marché du travail
                   actuel.
                 </p>
-                <div className="mb-4 border-l-4 border-accent bg-white p-4">
+                <div className="mb-4 border-l-4 border-accent bg-background p-4">
                   <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-muted">
                     Condition d&apos;accès
                   </p>
@@ -569,51 +593,73 @@ export default function HomePage() {
                   Passez le test, faites votre inscription, et nous, on se chargera de vous
                   fournir votre courbe de progression en temps réel.
                 </p>
-                <div className="mt-auto">
+                <div className="mt-auto pt-2">
                   <Button href="/offres/carrieres" variant="primary">
                     Passer le test & rejoindre e-Staf
                   </Button>
                 </div>
-              </SpotlightCard>
-            </Reveal>
-          </div>
+              </div>
+            </div>
+          </Reveal>
         </div>
       </section>
 
       {/* ============================================================ */}
       {/* ACTE 02 · B1 — La méthode (alternating center timeline)      */}
       {/* ============================================================ */}
-      <section id="solution" className="relative overflow-hidden bg-background">
+      {/* overflow-x-clip (not hidden): the funnel schéma bleeds upward across
+          the seam into the diptych while horizontal overflow stays clipped. */}
+      <section id="solution" className="relative overflow-x-clip bg-background">
         <ActWatermark level="B1" side="left" />
-        <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
-          <Reveal>
-            <ActKicker>Acte 02 · Niveau B1 — La montée</ActKicker>
-            <h2 className="mb-4 text-3xl md:text-5xl">
-              <SplitWords text="La méthode" />
-            </h2>
-            <p className="max-w-2xl text-muted">
-              Profils sous-qualifiés, turnover massif, coupures en pleine mission : vous
-              connaissez les craintes. Voici, étape par étape, comment nous les neutralisons
-              avant le premier appel client.
-            </p>
-          </Reveal>
+        <ChapterBreak />
+        <div className="relative mx-auto max-w-5xl px-4 pb-20 pt-10 md:pb-28 md:pt-14">
+          <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-12">
+            <Reveal>
+              <h2 className="mb-3 text-3xl md:text-5xl">
+                La{' '}
+                <span className="relative inline-block italic">
+                  méthode
+                  <RoughUnderline className="absolute -bottom-2 left-0 h-3 w-full text-accent md:-bottom-3" />
+                </span>
+              </h2>
+              <p className="mb-5 font-mono text-xs text-muted">
+                Acte 02 · Niveau B1 — La montée
+              </p>
+              <p className="max-w-2xl text-muted">
+                Profils sous-qualifiés, turnover massif, coupures en pleine mission : vous
+                connaissez les craintes. Voici, étape par étape, comment nous les neutralisons
+                avant le premier appel client.
+              </p>
+            </Reveal>
+            {/* The section's schéma: the selection funnel — candidates in, C1
+                out. On desktop it deliberately breaks the section boundary,
+                straddling the seam with the diptych above. */}
+            <Reveal from="right" delay={150} className="relative z-10 md:-mt-40">
+              <FunnelSchema className="mx-auto w-44 text-primary md:w-56" />
+            </Reveal>
+          </div>
           <div className="relative mt-10">
-            {/* Central spine of the timeline */}
-            <span
-              aria-hidden="true"
-              className="absolute bottom-4 left-4 top-4 w-px bg-primary/20 md:left-1/2 md:-translate-x-1/2"
-            />
+            {/* Central spine of the timeline — the section's signature. It draws
+                itself downward once the timeline enters the viewport. */}
+            <Reveal className="absolute bottom-6 left-4 top-4 -ml-[1.5px] w-[3px] md:left-1/2">
+              <span
+                aria-hidden="true"
+                className="spine-draw block h-full w-full rounded-full bg-primary/25"
+              />
+            </Reveal>
             {SOLUTION_STEPS.map((step, i) => {
               const fromLeft = i % 2 === 0
               return (
                 <div key={step.title} className="relative py-6 md:py-8">
                   <span
                     aria-hidden="true"
-                    className="absolute left-4 top-10 h-3 w-3 -translate-x-1/2 rounded-full border-2 border-primary bg-accent md:left-1/2 md:top-12"
-                  />
+                    className="absolute left-4 top-8 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border-2 border-primary bg-background font-mono text-[11px] font-medium text-primary md:left-1/2 md:top-10"
+                  >
+                    0{i + 1}
+                  </span>
                   <Reveal from={fromLeft ? 'left' : 'right'}>
                     <div
-                      className={`pl-10 md:pl-0 ${
+                      className={`pl-12 md:pl-0 ${
                         fromLeft
                           ? 'md:pr-[calc(50%+2.5rem)] md:text-right'
                           : 'md:pl-[calc(50%+2.5rem)]'
@@ -644,8 +690,15 @@ export default function HomePage() {
       >
         <ActWatermark level="B2" tone="dark" side="right" />
         <div className="relative mx-auto max-w-5xl px-4 py-28 md:py-36">
+          {/* Act label runs vertically along the section's right edge on large
+              screens — a different opening device than the mono kicker line. */}
+          <p className="absolute right-0 top-28 hidden font-mono text-xs uppercase tracking-widest text-accent [writing-mode:vertical-rl] lg:block">
+            Acte 03 · Niveau B2 — Le mécanisme
+          </p>
           <Reveal>
-            <ActKicker>Acte 03 · Niveau B2 — Le mécanisme</ActKicker>
+            <p className="mb-3 font-mono text-xs uppercase tracking-widest text-accent lg:hidden">
+              Acte 03 · Niveau B2 — Le mécanisme
+            </p>
             <h2 className="mb-4 text-3xl text-background md:text-5xl">
               <SplitWords text="Le double moteur" />
             </h2>
@@ -656,6 +709,16 @@ export default function HomePage() {
               sanctionné par les examens officiels.
             </p>
           </Reveal>
+
+          {/* The representative schéma: two rotors, the C1-gated flow between
+              them, and the return loop drawn in success green — the mechanism
+              made literally visible. */}
+          <Reveal>
+            <div className="mb-12 md:mb-16">
+              <DoubleEngineSchema className="mx-auto w-full max-w-[40rem] text-background" />
+            </div>
+          </Reveal>
+
           <div className="mb-14 grid gap-10 md:grid-cols-2">
             <Reveal from="left">
               <div>
@@ -740,7 +803,7 @@ export default function HomePage() {
       {/* ============================================================ */}
       <section id="promesses" className="relative overflow-hidden bg-white">
         <ActWatermark level="C1" side="left" />
-        <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
+        <div className="relative mx-auto max-w-5xl px-4 pb-24 pt-16 md:pb-32 md:pt-20">
           <Reveal>
             <ActKicker>Acte 04 · Niveau C1 — La preuve</ActKicker>
             <h2 className="mb-4 text-3xl md:text-5xl">
@@ -752,20 +815,82 @@ export default function HomePage() {
             </p>
           </Reveal>
 
-          <div className="mb-14 grid gap-10 md:grid-cols-[7fr_5fr] md:gap-14">
-            <div className="flex flex-col divide-y divide-muted/30">
-              {PROMESSES.map(([index, title, body], i) => (
-                <Reveal key={index} delay={(i % 3) * 80}>
-                  <LedgerRow index={index} title={title}>
-                    <p>{body}</p>
-                  </LedgerRow>
+          {/* Promise composition: deliberately uneven — one dominant wide block
+              per row (tinted, larger type) beside narrower quiet ones, each
+              with its tiny schéma-mark in the shared 1.6px stroke language. */}
+          <div className="mb-14 grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+            {PROMESSES.map(([index, title, body], i) => {
+              const Mark = PROMISE_MARKS[i]
+              const wide = i === 0 || i === 3 || i === 4
+              const nudge = i === 1 ? 'lg:mt-8' : i === 5 ? 'lg:mt-10' : ''
+              return (
+                <Reveal
+                  key={index}
+                  delay={(i % 3) * 80}
+                  className={`h-full ${wide ? 'lg:col-span-2' : ''}`}
+                >
+                  <div
+                    className={`flex h-full flex-col ${
+                      wide
+                        ? 'border-t-2 border-primary/25 bg-background p-6 md:p-7'
+                        : `border-t-2 border-muted/40 pt-5 ${nudge}`
+                    }`}
+                  >
+                    <div className="mb-4 flex items-start justify-between">
+                      <Mark className={wide ? 'h-9 w-9 text-primary' : 'h-7 w-7 text-primary'} />
+                      <span className="font-mono text-xs text-accent">{index}</span>
+                    </div>
+                    <h3 className={`mb-2 ${wide ? 'text-xl md:text-2xl' : 'text-lg'}`}>
+                      {title}
+                    </h3>
+                    <p className={`text-muted ${wide ? 'max-w-xl text-sm md:text-base' : 'text-sm'}`}>
+                      {body}
+                    </p>
+                  </div>
                 </Reveal>
-              ))}
-            </div>
+              )
+            })}
+          </div>
 
-            {/* Fara's verified-journey certificate (moved out of the hero) */}
-            <Reveal from="right">
-              <div className="relative rotate-0 rounded bg-primary p-6 md:-rotate-1 md:p-8">
+          <div className="mb-14 grid gap-10 md:grid-cols-[7fr_5fr] md:gap-14">
+            {/* Accent-tinted sub-band: what e-Staf asks in return. */}
+            <Reveal>
+              <div className="h-full border-l-4 border-accent bg-accent/10 p-6 md:p-8">
+                <h3 className="mb-2 text-xl md:text-2xl">Ce que e-Staf attend de vous</h3>
+                <p className="mb-6 text-sm text-muted">
+                  Deux engagements de votre côté, rien de plus :
+                </p>
+                <div className="grid gap-6">
+                  <div className="border border-muted/30 bg-white p-6">
+                    <p className="mb-2 font-mono text-xs uppercase tracking-widest text-accent">
+                      Engagement 01
+                    </p>
+                    <h4 className="mb-2 text-lg">Vos outils & CRM</h4>
+                    <p className="text-sm text-muted">
+                      Vous mettez à notre disposition vos logiciels métiers et votre CRM pour
+                      que nos équipes s&apos;immergent directement dans votre écosystème.
+                    </p>
+                  </div>
+                  <div className="border border-muted/30 bg-white p-6">
+                    <p className="mb-2 font-mono text-xs uppercase tracking-widest text-accent">
+                      Engagement 02
+                    </p>
+                    <h4 className="mb-2 text-lg">Une formation métier (5 jours)</h4>
+                    <p className="text-sm text-muted">
+                      Vos équipes dispensent une formation initiale de 5 jours dédiée à vos
+                      spécificités, vos produits et vos process pour calibrer nos profils
+                      avant le premier appel.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* Fara's verified-journey certificate (moved out of the hero).
+                Sits slightly off-grid: rotated, pulled up out of its row and
+                overhanging the container alignment on the right. */}
+            <Reveal from="right" className="md:relative md:z-10 md:-mr-6 md:-mt-10">
+              <div className="relative rotate-0 rounded bg-primary p-6 md:-rotate-2 md:p-8">
                 <div
                   className="absolute right-4 top-4 flex h-12 w-12 rotate-6 items-center justify-center rounded-full border-2 border-success bg-background/10 md:right-5 md:top-5 md:h-14 md:w-14"
                   aria-hidden="true"
@@ -815,38 +940,6 @@ export default function HomePage() {
               </div>
             </Reveal>
           </div>
-
-          <Reveal>
-            <div className="mb-14">
-              <h3 className="mb-2 text-xl md:text-2xl">Ce que e-Staf attend de vous</h3>
-              <p className="mb-6 text-sm text-muted">
-                Deux engagements de votre côté, rien de plus :
-              </p>
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="border border-muted/30 bg-background p-6">
-                  <p className="mb-2 font-mono text-xs uppercase tracking-widest text-accent">
-                    Engagement 01
-                  </p>
-                  <h4 className="mb-2 text-lg">Vos outils & CRM</h4>
-                  <p className="text-sm text-muted">
-                    Vous mettez à notre disposition vos logiciels métiers et votre CRM pour
-                    que nos équipes s&apos;immergent directement dans votre écosystème.
-                  </p>
-                </div>
-                <div className="border border-muted/30 bg-background p-6">
-                  <p className="mb-2 font-mono text-xs uppercase tracking-widest text-accent">
-                    Engagement 02
-                  </p>
-                  <h4 className="mb-2 text-lg">Une formation métier (5 jours)</h4>
-                  <p className="text-sm text-muted">
-                    Vos équipes dispensent une formation initiale de 5 jours dédiée à vos
-                    spécificités, vos produits et vos process pour calibrer nos profils
-                    avant le premier appel.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </Reveal>
 
           <Reveal>
             <div className="mb-14 grid grid-cols-2 divide-x divide-y divide-muted/30 border-y border-muted/30 md:grid-cols-4 md:divide-y-0">
@@ -922,7 +1015,13 @@ export default function HomePage() {
       <section id="collaboration" className="relative overflow-hidden bg-background">
         <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
           <Reveal>
-            <ActKicker>Partenaires — Déploiement</ActKicker>
+            {/* Opening device: a bordered mono chip echoing the deployment
+                board's chrome, not the act-kicker line. */}
+            <p className="mb-4">
+              <span className="inline-block border border-primary/30 px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest text-primary/80">
+                Partenaires — Déploiement
+              </span>
+            </p>
             <h2 className="mb-4 text-3xl md:text-5xl">Vos options de collaboration</h2>
             <p className="mb-12 max-w-2xl text-muted">
               Le recrutement classique est un gouffre financier. L&apos;externalisation
@@ -936,7 +1035,13 @@ export default function HomePage() {
           <Reveal>
             <div className="mb-8">
               <p className="mb-2 font-mono text-sm text-accent">Option 01</p>
-              <h3 className="mb-3 text-2xl md:text-3xl">La Squad Long Terme — lots de 10</h3>
+              <h3 className="mb-3 text-2xl md:text-3xl">
+                La Squad Long Terme — lots de{' '}
+                <span className="relative inline-block">
+                  10
+                  <RoughRing className="absolute -left-3 -top-1.5 h-[calc(100%+0.9rem)] w-[calc(100%+1.5rem)] text-accent" />
+                </span>
+              </h3>
               <p className="max-w-2xl text-sm text-muted md:text-base">
                 Sécurisez votre structure. Intégrez instantanément 10 profils calibrés pour
                 encaisser la charge, tenir la cadence et transformer chaque fichier froid en
@@ -944,28 +1049,45 @@ export default function HomePage() {
               </p>
             </div>
           </Reveal>
-          <div className="mb-16 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {LOTS.map((lot, i) => (
-              <Reveal key={lot.name} delay={(i % 3) * 80} className="h-full">
-                <SpotlightCard className="flex h-full flex-col border border-muted/30 bg-white p-5">
-                  <h4 className="mb-2 font-display text-lg leading-snug">{lot.name}</h4>
-                  <p className="mb-4 text-sm text-muted">{lot.mission}</p>
-                  <div className="mt-auto">
-                    <StatusBadge>
-                      {`En attente de déploiement — fin de formation : ${lot.date}`}
-                    </StatusBadge>
-                    <div className="mt-3 flex flex-col items-start gap-1.5">
-                      <CardAction href="#apporteurs-clients">
-                        Collaborer (dispo immédiate)
-                      </CardAction>
-                      <CardAction href="#apporteurs-clients">
-                        {`Réserver pour le ${lot.date}`}
-                      </CardAction>
+          {/* Deployment board: a mono table-chrome frame around the six units. */}
+          <div className="mb-16 border border-primary/25 bg-white/60">
+            <div
+              aria-hidden="true"
+              className="flex items-center justify-between gap-4 border-b border-primary/25 px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-primary/70 md:px-6"
+            >
+              <span>Unité × 06</span>
+              <span className="hidden sm:inline">Mission</span>
+              <span>Déploiement</span>
+            </div>
+            <div className="grid gap-4 p-4 sm:grid-cols-2 md:p-6 lg:grid-cols-3">
+              {LOTS.map((lot, i) => (
+                <Reveal key={lot.name} delay={(i % 3) * 80} className="h-full">
+                  <SpotlightCard className="flex h-full flex-col border border-muted/30 bg-white p-5">
+                    <span
+                      aria-hidden="true"
+                      className="mb-2 font-mono text-[10px] tracking-widest text-primary/50"
+                    >
+                      U-0{i + 1}
+                    </span>
+                    <h4 className="mb-2 font-display text-lg leading-snug">{lot.name}</h4>
+                    <p className="mb-4 text-sm text-muted">{lot.mission}</p>
+                    <div className="mt-auto">
+                      <StatusBadge>
+                        {`En attente de déploiement — fin de formation : ${lot.date}`}
+                      </StatusBadge>
+                      <div className="mt-3 flex flex-col items-start gap-1.5">
+                        <CardAction href="#apporteurs-clients">
+                          Collaborer (dispo immédiate)
+                        </CardAction>
+                        <CardAction href="#apporteurs-clients">
+                          {`Réserver pour le ${lot.date}`}
+                        </CardAction>
+                      </div>
                     </div>
-                  </div>
-                </SpotlightCard>
-              </Reveal>
-            ))}
+                  </SpotlightCard>
+                </Reveal>
+              ))}
+            </div>
           </div>
 
           <Reveal>
@@ -979,19 +1101,27 @@ export default function HomePage() {
               </p>
             </div>
           </Reveal>
-          <div className="grid gap-4 sm:grid-cols-2">
+          {/* Band-list: full-width mission rows with status pinned right — a
+              deliberately different data-display metaphor from the board above. */}
+          <div className="divide-y divide-muted/30 border-y border-muted/30">
             {MISSIONS.map((mission, i) => (
-              <Reveal key={mission.name} delay={(i % 2) * 80} className="h-full">
-                <SpotlightCard className="flex h-full flex-col border border-muted/30 bg-white p-5">
-                  <h4 className="mb-2 font-display text-lg leading-snug">{mission.name}</h4>
-                  <p className="mb-4 text-sm text-muted">{mission.body}</p>
-                  <div className="mt-auto">
-                    <StatusBadge available={mission.available}>{mission.status}</StatusBadge>
-                    <div className="mt-3">
-                      <CardAction href="#apporteurs-clients">Lancer une mission</CardAction>
-                    </div>
+              <Reveal key={mission.name} delay={i * 60}>
+                <div className="flex flex-col gap-3 py-6 md:grid md:grid-cols-[minmax(0,4fr)_minmax(0,5fr)_minmax(0,3fr)] md:items-center md:gap-8">
+                  <div className="flex items-baseline gap-3">
+                    <span
+                      aria-hidden="true"
+                      className="font-mono text-xs text-primary/40"
+                    >
+                      M-0{i + 1}
+                    </span>
+                    <h4 className="font-display text-xl md:text-2xl">{mission.name}</h4>
                   </div>
-                </SpotlightCard>
+                  <p className="text-sm text-muted">{mission.body}</p>
+                  <div className="flex flex-col items-start gap-2 md:items-end md:text-right">
+                    <StatusBadge available={mission.available}>{mission.status}</StatusBadge>
+                    <CardAction href="#apporteurs-clients">Lancer une mission</CardAction>
+                  </div>
+                </div>
               </Reveal>
             ))}
           </div>
@@ -1001,18 +1131,31 @@ export default function HomePage() {
       {/* ============================================================ */}
       {/* Catalogue des programmes — compact summary                   */}
       {/* ============================================================ */}
-      <section id="catalogue" className="relative overflow-hidden bg-white">
-        <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
-          <Reveal>
-            <ActKicker>Académie — Formations</ActKicker>
-            <h2 className="mb-4 text-3xl md:text-5xl">Catalogue des programmes</h2>
-            <p className="mb-8 max-w-2xl text-muted">
-              Des préparations pour celles et ceux qui poursuivent leurs propres objectifs —
-              immigration, carrière, diplôme — et un programme phare pour les leaders. Nos
-              futurs agents passent les mêmes examens officiels pour certifier leur niveau.
-            </p>
-          </Reveal>
-          <div className="flex flex-col divide-y divide-muted/30">
+      {/* overflow-x-clip: the diploma seal bleeds upward across the section
+          boundary like a sticker slapped over the fold. */}
+      <section id="catalogue" className="relative overflow-x-clip bg-white">
+        <ChapterBreak />
+        <div className="relative mx-auto max-w-5xl px-4 pb-24 pt-12 md:pb-36 md:pt-16">
+          <div className="mb-10 grid gap-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-12">
+            <Reveal>
+              {/* Editorial catalogue opening: italic serif lead-in, oversized title. */}
+              <p className="mb-3 font-display text-lg italic text-muted">
+                Académie — Formations
+              </p>
+              <h2 className="mb-5 text-4xl md:text-6xl">Catalogue des programmes</h2>
+              <p className="max-w-2xl text-muted">
+                Des préparations pour celles et ceux qui poursuivent leurs propres objectifs —
+                immigration, carrière, diplôme — et un programme phare pour les leaders. Nos
+                futurs agents passent les mêmes examens officiels pour certifier leur niveau.
+              </p>
+            </Reveal>
+            {/* The catalogue's schéma: the diploma seal, rotated and breaking
+                the section boundary on desktop. */}
+            <Reveal from="right" delay={150} className="relative z-10 md:-mt-36">
+              <SealSchema className="mx-auto w-28 -rotate-6 text-primary md:w-32" />
+            </Reveal>
+          </div>
+          <div className="flex flex-col divide-y divide-muted/30 border-t border-muted/30">
             {(
               [
                 {
@@ -1050,7 +1193,7 @@ export default function HomePage() {
               ] as const
             ).map((offre, i) => (
               <Reveal key={offre.href} delay={i * 100}>
-                <OffreRow {...offre} />
+                <CatalogueRow {...offre} />
               </Reveal>
             ))}
           </div>
@@ -1061,12 +1204,16 @@ export default function HomePage() {
       {/* Parcours candidat                                            */}
       {/* ============================================================ */}
       <section id="parcours" className="relative overflow-hidden bg-background">
-        <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
+        <ChapterBreak />
+        <div className="relative mx-auto max-w-5xl px-4 pb-24 pt-10 md:pb-36 md:pt-16">
           <Reveal>
             <ActKicker>Votre ascension commence ici</ActKicker>
-            <h2 className="mb-8 text-3xl md:text-5xl">Parcours candidat</h2>
+            <h2 className="mb-10 text-3xl md:text-5xl">Parcours candidat</h2>
           </Reveal>
-          <div className="mb-8 flex flex-col divide-y divide-muted/30">
+          {/* Horizontal step-flow on desktop: three numbered stations linked by
+              an arrowed line, with the C1 checkpoint gate drawn on the last
+              connector. Stacks vertically on mobile. */}
+          <ol className="mb-10 grid gap-12 md:grid-cols-3 md:gap-8">
             {(
               [
                 [
@@ -1086,13 +1233,47 @@ export default function HomePage() {
                 ],
               ] as const
             ).map(([index, title, body], i) => (
-              <Reveal key={index} delay={i * 100}>
-                <LedgerRow index={index} title={title}>
-                  <p>{body}</p>
-                </LedgerRow>
-              </Reveal>
+              <li key={index} className="relative">
+                {i < 2 && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute -bottom-12 left-[1.375rem] top-14 w-px bg-primary/20 md:hidden"
+                  />
+                )}
+                <Reveal delay={i * 120}>
+                  <div className="mb-4 flex items-center gap-4">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-primary bg-white font-mono text-sm text-primary">
+                      {index}
+                    </span>
+                    {i < 2 && (
+                      <span
+                        aria-hidden="true"
+                        className="hidden flex-1 items-center gap-2 md:flex"
+                      >
+                        <span className="h-px flex-1 bg-primary/25" />
+                        {i === 1 && (
+                          <GateSchema className="h-11 w-[4.5rem] shrink-0 text-primary" />
+                        )}
+                        <span className="h-px w-5 bg-primary/25" />
+                        <svg
+                          viewBox="0 0 8 10"
+                          className="h-2.5 w-2 shrink-0 text-primary/50"
+                          fill="currentColor"
+                          aria-hidden="true"
+                        >
+                          <path d="M0 0 L8 5 L0 10 Z" />
+                        </svg>
+                      </span>
+                    )}
+                  </div>
+                  <div className="pl-16 md:pl-0">
+                    <h3 className="mb-2 text-lg md:text-xl">{title}</h3>
+                    <p className="text-sm text-muted">{body}</p>
+                  </div>
+                </Reveal>
+              </li>
             ))}
-          </div>
+          </ol>
           <Reveal>
             <Button href="/offres/carrieres" variant="accent">
               Passer le test & rejoindre e-Staf
@@ -1105,9 +1286,19 @@ export default function HomePage() {
       {/* FAQ                                                          */}
       {/* ============================================================ */}
       <section id="faq" className="relative overflow-hidden bg-white">
-        <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
+        <ChapterBreak />
+        {/* Oversized italic question mark as the section's only ornament. */}
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute right-4 top-16 select-none font-display text-[9rem] italic leading-none text-primary/5 md:right-16 md:text-[17rem]"
+        >
+          ?
+        </span>
+        <div className="relative mx-auto max-w-5xl px-4 pb-16 pt-8 md:pb-20 md:pt-10">
           <Reveal>
-            <ActKicker>Avant de vous lancer</ActKicker>
+            <p className="mb-2 font-display text-lg italic text-muted">
+              Avant de vous lancer
+            </p>
             <h2 className="mb-4 text-3xl md:text-5xl">Questions fréquentes</h2>
             <p className="mb-8 max-w-2xl text-muted">
               Les questions qui reviennent le plus souvent, côté candidats, entreprises et
@@ -1156,9 +1347,15 @@ export default function HomePage() {
       {/* Proposer un partenariat — apporteurs, entreprises, contact   */}
       {/* ============================================================ */}
       <section id="apporteurs-clients" className="relative overflow-hidden bg-background">
-        <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
+        <ChapterBreak />
+        <div className="relative mx-auto max-w-5xl px-4 pb-20 pt-10 md:pb-28 md:pt-14">
           <Reveal>
-            <ActKicker>Proposer un partenariat</ActKicker>
+            {/* Inverted mono chip — the page's last opening device. */}
+            <p className="mb-4">
+              <span className="inline-block bg-primary px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest text-background">
+                Proposer un partenariat
+              </span>
+            </p>
             <h2 className="mb-8 text-3xl md:text-5xl">
               Apporteurs d&apos;affaires et entreprises
             </h2>
@@ -1229,12 +1426,18 @@ export default function HomePage() {
               </div>
             </Reveal>
             <Reveal from="right" delay={100}>
-              <div>
-                <h3 className="mb-2 text-xl">Nous contacter</h3>
-                <p className="mb-4 font-mono text-xs uppercase tracking-wide text-muted">
-                  Formulaire de contact
-                </p>
-                <div className="border border-muted/30 bg-white p-6">
+              {/* Framed contact panel: chrome header with the envelope schéma. */}
+              <div className="border border-primary/25 bg-white">
+                <div className="flex items-center justify-between gap-4 border-b border-primary/25 px-6 py-4">
+                  <div>
+                    <h3 className="text-xl">Nous contacter</h3>
+                    <p className="mt-1 font-mono text-xs uppercase tracking-wide text-muted">
+                      Formulaire de contact
+                    </p>
+                  </div>
+                  <EnvelopeSchema className="h-11 w-[3.75rem] shrink-0 text-primary" />
+                </div>
+                <div className="p-6">
                   <ContactForm defaultSubject="Devenir apporteur d'affaires" />
                 </div>
               </div>

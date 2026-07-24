@@ -338,6 +338,19 @@
     transform: none;
   }
 
+  /* --- Méthode timeline: the central spine draws itself downward ---- */
+  /* Wrapped in a Reveal (see app/page.tsx): scaleY 0 → 1 from the top   */
+  /* once the timeline scrolls into view. Static full-height under       */
+  /* reduced motion (this whole block never applies).                    */
+  .spine-draw {
+    transform: scaleY(0);
+    transform-origin: top;
+    transition: transform 1.6s cubic-bezier(0.22, 1, 0.36, 1) 0.15s;
+  }
+  .is-revealed .spine-draw {
+    transform: scaleY(1);
+  }
+
   /* --- Live dot on "Disponible" status badges ----------------------- */
   .badge-ping {
     animation: badge-ping 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
