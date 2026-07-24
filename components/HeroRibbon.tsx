@@ -48,6 +48,7 @@ export function HeroRibbon() {
             style={{ '--d': `${1.2 + i * 0.35}s` } as CSSProperties}
           >
             <circle
+              className={isFinal ? 'ribbon-final-glow' : undefined}
               cx={marker.x}
               cy={marker.y}
               r={7}

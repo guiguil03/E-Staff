@@ -13,12 +13,54 @@
     background: #D99A2B;
     color: #1A1D1B;
   }
+
+  /* Thin custom scrollbar in the site's own inks (Firefox + Chromium 121+,
+     with the WebKit pseudos as the Safari fallback). */
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: #1B3A4B #F3F5F1;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #F3F5F1;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1B3A4B;
+    border-radius: 9999px;
+    border: 2px solid #F3F5F1;
+  }
+
+  /* Visible custom focus ring on every interactive element. */
+  :focus-visible {
+    outline: 2px solid #D99A2B;
+    outline-offset: 2px;
+  }
 }
 
 /* Outlined display text used by the dark marquee band (token: background). */
 .text-stroke-light {
   color: transparent;
   -webkit-text-stroke: 1.5px rgba(243, 245, 241, 0.55);
+}
+
+/* ------------------------------------------------------------------ */
+/* FAQ hover underline. The gradient is twice the box width with a     */
+/* hard color stop at 50%: sliding background-position from 100% to 0% */
+/* wipes the accent underline in from the left (background-position is */
+/* the only property that transitions — see the motion block below).   */
+/* Works under reduced motion too, just without the slide.             */
+/* ------------------------------------------------------------------ */
+.faq-underline {
+  background-image: linear-gradient(90deg, rgba(217, 154, 43, 0.9) 50%, transparent 50%);
+  background-size: 200% 1px;
+  background-repeat: no-repeat;
+  background-position: 100% 100%;
+}
+.group:hover .faq-underline {
+  background-position: 0% 100%;
 }
 
 /* ------------------------------------------------------------------ */
@@ -139,6 +181,23 @@
       transform: translateX(-100%);
     }
   }
+  /* Reverse direction: same two-track layout, played backwards. */
+  .marquee-track-reverse {
+    animation: marquee-reverse var(--marquee-duration, 36s) linear infinite;
+  }
+  @keyframes marquee-reverse {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+  /* Hovering a band freezes it so the phrases become readable. */
+  .marquee-band:hover .marquee-track,
+  .marquee-band:hover .marquee-track-reverse {
+    animation-play-state: paused;
+  }
 
   /* --- Scroll reveals (driven by components/Reveal.tsx) ------------- */
   .reveal {
@@ -175,6 +234,192 @@
     }
     100% {
       opacity: 0;
+    }
+  }
+
+  /* --- Hero: slow shimmer across the accent word ("pont") ----------- */
+  /* A pale band (background token) panning over solid accent, clipped  */
+  /* to the glyphs. Both gradient extremities are solid accent so the   */
+  /* loop restart is invisible.                                         */
+  .text-shimmer {
+    background-image: linear-gradient(
+      110deg,
+      #D99A2B 0%,
+      #D99A2B 40%,
+      #F3F5F1 50%,
+      #D99A2B 60%,
+      #D99A2B 100%
+    );
+    background-size: 300% 100%;
+    background-position: 100% 0;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer-pan 7s linear infinite;
+  }
+  @keyframes shimmer-pan {
+    to {
+      background-position: 0% 0;
+    }
+  }
+
+  /* --- Hero: cursor spotlight + blob scroll parallax ---------------- */
+  /* --mx/--my/--hero-scroll are written by components/HeroFX.tsx.      */
+  @media (hover: hover) and (pointer: fine) {
+    .hero-spotlight {
+      opacity: 0;
+      transition: opacity 0.6s ease;
+      background: radial-gradient(
+        640px circle at var(--mx, 60%) var(--my, 40%),
+        rgba(217, 154, 43, 0.12),
+        transparent 70%
+      );
+    }
+    [data-spot='on'] .hero-spotlight {
+      opacity: 1;
+    }
+  }
+  .hero-par {
+    transform: translateY(calc(var(--hero-scroll, 0) * var(--pf, 0) * 1px));
+  }
+
+  /* --- Hero ribbon: soft breathing glow on the C1 endpoint ---------- */
+  /* Starts once the draw has finished (draw ends ~2.5s in).            */
+  .ribbon-final-glow {
+    animation: ribbon-glow 3.4s ease-in-out 2.6s infinite;
+  }
+  @keyframes ribbon-glow {
+    0%,
+    100% {
+      filter: drop-shadow(0 0 2px rgba(217, 154, 43, 0.4));
+    }
+    50% {
+      filter: drop-shadow(0 0 9px rgba(217, 154, 43, 0.9));
+    }
+  }
+
+  /* --- Act kickers: thin accent rule draws in after the reveal ------ */
+  .kicker-rule {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  .is-revealed .kicker-rule {
+    animation: rule-draw 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.4s forwards;
+  }
+  @keyframes rule-draw {
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  /* --- Watermark level letters: barely-there vertical float --------- */
+  .watermark-float {
+    animation: wm-float 9s ease-in-out infinite alternate;
+  }
+  @keyframes wm-float {
+    to {
+      transform: translateY(-0.6rem);
+    }
+  }
+
+  /* --- Staggered child rise inside a Reveal ------------------------- */
+  /* Used per-word on the act headings and per-chip on the stat strip;  */
+  /* --sd is the per-child stagger set inline.                          */
+  .stagger-rise {
+    opacity: 0;
+    transform: translateY(0.45em);
+    transition:
+      opacity 0.55s ease-out,
+      transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: calc(var(--reveal-delay, 0ms) + var(--sd, 0ms) + 100ms);
+  }
+  .is-revealed .stagger-rise {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* --- Live dot on "Disponible" status badges ----------------------- */
+  .badge-ping {
+    animation: badge-ping 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+  @keyframes badge-ping {
+    0% {
+      transform: scale(1);
+      opacity: 0.5;
+    }
+    70%,
+    100% {
+      transform: scale(2.4);
+      opacity: 0;
+    }
+  }
+
+  /* --- FAQ underline slide (state itself lives outside this block) -- */
+  .faq-underline {
+    transition: background-position 0.4s ease;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Spotlight cards (components/SpotlightCard.tsx). Desktop fine-pointer */
+/* only, and only when motion is allowed: touch and reduced-motion      */
+/* visitors get exactly the previous static cards. --px/--py are the    */
+/* cursor position written by the component, once per frame.            */
+/* ------------------------------------------------------------------ */
+@media (hover: hover) and (pointer: fine) {
+  @media (prefers-reduced-motion: no-preference) {
+    .spot-card {
+      transition:
+        transform 0.25s ease,
+        box-shadow 0.25s ease;
+    }
+    .spot-card::before,
+    .spot-card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    /* Gradient border that brightens near the cursor: the layer is
+       masked down to a 1px frame via mask-composite. */
+    .spot-card::before {
+      padding: 1px;
+      background: radial-gradient(
+        220px circle at var(--px, 50%) var(--py, 50%),
+        var(--spot-border),
+        transparent 70%
+      );
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask-composite: exclude;
+    }
+    /* Faint interior highlight following the cursor. */
+    .spot-card::after {
+      background: radial-gradient(
+        340px circle at var(--px, 50%) var(--py, 50%),
+        var(--spot-fill),
+        transparent 70%
+      );
+    }
+    .spot-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 18px 40px -18px rgba(27, 58, 75, 0.35);
+    }
+    .spot-card:hover::before,
+    .spot-card:hover::after {
+      opacity: 1;
+    }
+    .spot-card-light {
+      --spot-border: rgba(217, 154, 43, 0.65);
+      --spot-fill: rgba(217, 154, 43, 0.07);
+    }
+    .spot-card-dark {
+      --spot-border: rgba(217, 154, 43, 0.55);
+      --spot-fill: rgba(243, 245, 241, 0.05);
     }
   }
 }
