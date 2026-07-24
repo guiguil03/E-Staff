@@ -34,11 +34,11 @@ const TESTIMONIALS = [
   },
 ] as const
 
-// The 4 steps of the solution, staged as an alternating timeline in Acte B1.
+// The 4 steps of the method, staged as an alternating timeline in Acte B1.
 const SOLUTION_STEPS = [
   {
-    title: 'Sélection sur test de niveau réel',
-    body: "Avant toute embauche, chaque candidat passe un test de niveau réel, pas une déclaration sur CV. On mesure la capacité à tenir une conversation orale de bout en bout, dans des conditions proches d'un appel client. Seuls les profils qui atteignent le niveau requis sont proposés en production.",
+    title: 'Sélection : test réel, puis examens officiels',
+    body: "Avant toute mise en production, chaque candidat passe notre test de sélection, pas une déclaration sur CV. L'accès aux missions est réservé aux talents validant le niveau C1 — et ce niveau est certifié par le passage réel des examens officiels, jamais auto-déclaré. Seuls ces profils sont proposés en production.",
   },
   {
     title: 'Formation continue pendant la mission',
@@ -54,19 +54,104 @@ const SOLUTION_STEPS = [
   },
 ] as const
 
-// The 3 objections of Acte A1, staged as large staggered statements.
-const PROBLEMS = [
+// The 6 partner-facing promises of Acte C1.
+const PROMESSES = [
+  [
+    '01',
+    'Des locaux équipés & sécurisés',
+    "Une infrastructure professionnelle prête à l'emploi sur nos pôles pour garantir une continuité de service irréprochable, sans coupure ni risque technique.",
+  ],
+  [
+    '02',
+    'Un encadrement managérial rigoureux',
+    "Un pilotage constant sur le terrain pour suivre les indicateurs, optimiser la cadence et s'assurer que chaque objectif de performance est atteint.",
+  ],
+  [
+    '03',
+    'Maîtrise des outils & CRM',
+    'Intégration et maîtrise parfaite de vos logiciels et outils métiers pour une immersion immédiate dans vos écosystèmes.',
+  ],
+  [
+    '04',
+    'Transparence & confidentialité tarifaire',
+    'Les grilles tarifaires et conditions financières ne sont pas étalées en vitrine. Elles sont communiquées et détaillées dans le contrat officiel, transmis exclusivement à vous.',
+  ],
+  [
+    '05',
+    'Pilotage & reporting hebdomadaire',
+    "Point de contact direct d'une heure chaque semaine entre nos managers et vos équipes, appuyé par un reporting graphique et statistique complet : progression sur la prod, atteinte des objectifs, constats, analyses et axes d'amélioration.",
+  ],
+  [
+    '06',
+    'Zéro turnover / remplacement garanti',
+    'Zéro compromis sur la stabilité. Nous garantissons une continuité absolue et, au pire, nous disposons des ressources et de la réactivité immédiate pour remplacer un profil sans impacter votre production.',
+  ],
+] as const
+
+// Option 1 — the six "Squad Long Terme" lots of 10.
+const LOTS = [
   {
-    title: 'Profils sous-qualifiés',
-    body: "Beaucoup de candidats visés n'ont pas le niveau de langue réel pour tenir un appel de 20 minutes, même avec un CV qui dit le contraire. Le décalage n'apparaît souvent qu'au premier appel client, une fois le coût de recrutement déjà engagé.",
+    name: 'Lot de 10 « Setters »',
+    mission:
+      'Saturez vos agendas, brisez les barrières et qualifiez un maximum de prospects pour remplir votre pipeline commercial.',
+    date: '15 août 2026',
   },
   {
-    title: 'Turnover massif',
-    body: "Une partie des agents recrutés ailleurs part après un mois, souvent avant d'être rentable pour le client qui les a formés. Chaque départ oblige à retrouver, réembaucher et reformer un remplaçant, ce qui coûte du temps et de l'argent au client plutôt qu'à l'agence.",
+    name: 'Lot de 10 « Closers »',
+    mission:
+      'Maîtrisez la négociation à fort impact, éliminez les dernières objections et transformez vos prospects chauds en signatures.',
+    date: '18 août 2026',
   },
   {
-    title: 'Infrastructure instable',
-    body: "Coupures d'électricité et de connexion en pleine mission client : le premier frein cité contre l'outsourcing vers Madagascar. Un appel coupé en plein milieu, côté agent, retombe directement sur l'image du client final.",
+    name: 'Lot de 10 « Campagnes Collecte de Dons »',
+    mission:
+      'Maniez la persuasion avec une rigueur absolue pour convaincre, engager et décrocher des prélèvements automatiques et des dons à fort volume.',
+    date: '25 août 2026',
+  },
+  {
+    name: 'Lot de 10 « Campagnes & Mailing »',
+    mission: 'Pilotez des campagnes de prospection écrite à haut taux de conversion.',
+    date: '1er septembre 2026',
+  },
+  {
+    name: 'Lot de 10 « Opérateurs Téléphoniques & Support »',
+    mission:
+      "Maîtrisez la voix, encadrez chaque interaction et gérez vos flux de support et d'appels massifs sans fausse note.",
+    date: '10 août 2026',
+  },
+  {
+    name: 'Lot de 10 « Opérateurs de Saisie & Back-Office »',
+    mission:
+      'Alimentez vos CRM, nettoyez vos fichiers et garantissez une rigueur administrative infaillible.',
+    date: '20 août 2026',
+  },
+] as const
+
+// Option 2 — the four one-off missions.
+const MISSIONS = [
+  {
+    name: 'Voix Off',
+    body: "Dominez l'attention dès la première seconde sur vos spots publicitaires, modules e-learning ou vidéos de vente.",
+    status: 'Disponible — livraison 24/48 h',
+    available: true,
+  },
+  {
+    name: 'Montage Vidéo',
+    body: 'Du format court (TikTok, Reels, Shorts) au montage institutionnel : un rythme qui capte et qui retient.',
+    status: 'Disponible',
+    available: true,
+  },
+  {
+    name: 'Assistanat Virtuel',
+    body: "Libérez votre temps stratégique en déléguant la gestion d'agendas complexes et le filtrage des urgences à une élite rigoureuse.",
+    status: 'En attente — prochain créneau : 10 août 2026',
+    available: false,
+  },
+  {
+    name: 'Copywriting & Rédaction',
+    body: 'Pages de vente, e-mails et scripts rédigés pour convertir, pas seulement pour être lus.',
+    status: 'Disponible',
+    available: true,
   },
 ] as const
 
@@ -77,7 +162,7 @@ const FAQ = [
   },
   {
     q: 'Quels outils dois-je fournir en tant que client ?',
-    a: "Uniquement vos outils et logiciels métier (CRM, scripts, procédures internes). L'infrastructure — onduleurs, secours énergétique, connexion stable — est déjà fournie et opérationnelle, sans rien à financer ni à mettre en place de votre côté.",
+    a: "Vos outils et logiciels métier (CRM, scripts, procédures internes), plus une formation initiale de 5 jours dédiée à vos spécificités pour calibrer nos profils. L'infrastructure — onduleurs, secours énergétique, connexion stable — est déjà fournie et opérationnelle, sans rien à financer ni à mettre en place de votre côté.",
   },
   {
     q: "Comment fonctionne la commission apporteur d'affaires ?",
@@ -85,7 +170,11 @@ const FAQ = [
   },
   {
     q: "Quels examens sont préparés à l'académie ?",
-    a: "DELF/DALF, TEF Canada, EAF et DFP, ainsi que le programme FOL pour les professionnels et leaders qui parlent déjà bien mais veulent plus d'impact à l'oral.",
+    a: 'DELF/DALF (B1 à C2), TEF Canada / TCF et les Diplômes de Français Professionnel — DFP Affaires, Relations Internationales, Tourisme-Hôtellerie-Restauration, Santé —, ainsi que le programme phare FOL pour les professionnels et leaders qui veulent plus d’impact à l’oral.',
+  },
+  {
+    q: "Faut-il vouloir devenir agent pour s'inscrire aux préparations d'examens ?",
+    a: "Non. Les préparations s'adressent à des personnes qui ont leurs propres objectifs : immigration, carrière, diplôme. La montée en compétences des candidats destinés à la production est un parcours distinct — et ces candidats passent réellement les examens officiels pour certifier leur niveau C1.",
   },
 ] as const
 
@@ -207,6 +296,47 @@ function StatChip({ label, value }: { label: string; value: string }) {
   )
 }
 
+/** Mono availability/status badge — the typographic replacement for the
+ * client's emoji markers. `available` renders in success green, otherwise a
+ * muted primary "waiting" treatment. */
+function StatusBadge({
+  available = false,
+  children,
+}: {
+  available?: boolean
+  children: string
+}) {
+  return (
+    <span
+      className={`inline-block rounded border px-2 py-1 font-mono text-[10px] uppercase tracking-wide ${
+        available
+          ? 'border-success/40 bg-success/10 text-success'
+          : 'border-primary/20 bg-primary/5 text-primary/80'
+      }`}
+    >
+      {children}
+    </span>
+  )
+}
+
+/** Compact in-card action link with the site's arrow affordance. */
+function CardAction({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="group inline-flex items-center gap-1.5 text-sm font-medium text-primary"
+    >
+      {children}
+      <span
+        aria-hidden="true"
+        className="motion-safe:transition-transform motion-safe:duration-200 group-hover:translate-x-1"
+      >
+        →
+      </span>
+    </Link>
+  )
+}
+
 export default function HomePage() {
   return (
     <main>
@@ -240,7 +370,7 @@ export default function HomePage() {
             className="hero-rise font-mono text-xs uppercase tracking-widest text-background/60"
             style={{ '--d': '0ms' } as CSSProperties}
           >
-            Académie de langues et agence de staffing B2B — Madagascar
+            e-Staf — Académie de langues & externalisation d&apos;élite — Madagascar
           </p>
 
           <h1 className="mt-6 font-display tracking-tight text-background">
@@ -249,23 +379,23 @@ export default function HomePage() {
                 className="hero-line-inner block text-3xl leading-[1.1] sm:text-4xl md:text-6xl md:leading-[1.05]"
                 style={{ '--d': '150ms' } as CSSProperties}
               >
-                Des agents de centre d&apos;appel
-              </span>
-            </span>
-            <span className="block overflow-hidden pb-[0.12em] -mb-[0.12em]">
-              <span
-                className="hero-line-inner block text-5xl leading-[1.05] sm:text-6xl md:text-8xl md:leading-none"
-                style={{ '--d': '300ms' } as CSSProperties}
-              >
-                formés en <em className="italic text-accent">langues</em>,
+                Des talents freinés par la langue,
               </span>
             </span>
             <span className="block overflow-hidden pb-[0.12em] -mb-[0.12em]">
               <span
                 className="hero-line-inner block text-3xl leading-[1.1] sm:text-4xl md:text-6xl md:leading-[1.05]"
+                style={{ '--d': '300ms' } as CSSProperties}
+              >
+                des partenaires freinés par le doute.
+              </span>
+            </span>
+            <span className="block overflow-hidden pb-[0.12em] -mb-[0.12em]">
+              <span
+                className="hero-line-inner block text-5xl leading-[1.05] sm:text-6xl md:text-8xl md:leading-none"
                 style={{ '--d': '450ms' } as CSSProperties}
               >
-                prêts avant leur premier appel client.
+                e-Staf est le <em className="italic text-accent">pont</em>.
               </span>
             </span>
           </h1>
@@ -274,9 +404,10 @@ export default function HomePage() {
             className="hero-rise mt-6 max-w-xl text-background/70"
             style={{ '--d': '650ms' } as CSSProperties}
           >
-            On forme des candidats en langues à l&apos;académie et on place les agents
-            qualifiés chez des clients internationaux, avec une infrastructure sécurisée
-            déjà en place.
+            D&apos;un côté, des professionnels dont la seule barrière est la maîtrise de la
+            langue. De l&apos;autre, des entreprises freinées par les risques de
+            l&apos;externalisation. Lever ces deux freins à la fois, c&apos;est la solution
+            qui fait notre identité.
           </p>
 
           <div
@@ -284,11 +415,11 @@ export default function HomePage() {
             style={{ '--d': '800ms' } as CSSProperties}
           >
             <Button href="/offres/carrieres" variant="accent">
-              Déposer ma candidature
+              Passer le test & rejoindre e-Staf
             </Button>
             <Link href="#apporteurs-clients" className="group font-medium text-background">
               <span className="relative after:absolute after:-bottom-0.5 after:left-0 after:h-px after:w-full after:origin-left after:scale-x-0 after:bg-background after:content-[''] group-hover:after:scale-x-100 motion-safe:after:transition-transform motion-safe:after:duration-300 motion-reduce:underline">
-                Je suis une entreprise ou un apporteur d&apos;affaires
+                Nous contacter pour un projet d&apos;externalisation
               </span>{' '}
               <span
                 aria-hidden="true"
@@ -315,54 +446,105 @@ export default function HomePage() {
 
       {/* Marquee band 1 — the exams the académie prepares */}
       <MarqueeBand
-        items={['DELF / DALF', 'TEF Canada', 'EAF', 'DFP', 'Programme FOL']}
+        items={['DELF / DALF', 'TEF Canada / TCF', 'DFP', 'Programme FOL']}
         variant="accent"
       />
 
       {/* ============================================================ */}
-      {/* ACTE 01 · A1 — Le problème                                   */}
+      {/* ACTE 01 · A1 — Les deux espaces                              */}
       {/* ============================================================ */}
-      <section id="probleme" className="relative overflow-hidden bg-white">
+      <section id="espaces" className="relative overflow-hidden bg-white">
         <ActWatermark level="A1" side="right" />
         <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
           <Reveal>
-            <ActKicker>Acte 01 · Niveau A1 — Le point de départ</ActKicker>
-            <h2 className="mb-4 text-3xl md:text-5xl">Le problème</h2>
-            <p className="mb-6 max-w-2xl text-muted">
-              Ce sont, dans cet ordre, les trois raisons qui font hésiter une entreprise à
-              confier son service client à un centre d&apos;appel basé en Afrique.
+            <ActKicker>Acte 01 · Niveau A1 — Deux portes d&apos;entrée</ActKicker>
+            <h2 className="mb-4 text-3xl md:text-5xl">Deux espaces, une même identité</h2>
+            <p className="mb-10 max-w-2xl text-muted">
+              Que vous soyez un talent freiné par vos compétences linguistiques ou une
+              entreprise freinée par les risques de l&apos;externalisation, votre porte
+              d&apos;entrée est ici.
             </p>
           </Reveal>
-          <div className="mt-6 flex flex-col">
-            {PROBLEMS.map((problem, i) => (
-              <Reveal key={problem.title} delay={i * 100}>
-                <div className="grid items-start gap-3 border-t border-muted/30 py-10 md:grid-cols-[5fr_7fr] md:gap-10 md:py-14">
-                  <div className="flex items-baseline gap-4 md:block">
-                    <span
-                      aria-hidden="true"
-                      className="font-mono text-sm text-accent md:mb-3 md:block"
-                    >
-                      0{i + 1}
-                    </span>
-                    <h3 className="text-2xl leading-tight md:text-4xl">{problem.title}</h3>
-                  </div>
-                  <p className="text-muted md:text-lg md:leading-relaxed">{problem.body}</p>
+          <div className="grid gap-6 md:grid-cols-2 md:gap-8">
+            <Reveal from="left" className="h-full">
+              <div className="flex h-full flex-col rounded bg-primary p-6 md:p-8">
+                <p className="mb-4 font-mono text-xs uppercase tracking-widest text-accent">
+                  Espace entreprises — B2B
+                </p>
+                <h3 className="mb-4 font-display text-2xl leading-snug text-background md:text-3xl">
+                  « Des agents qualifiés au service de vos ambitions. »
+                </h3>
+                <p className="mb-8 text-sm leading-relaxed text-background/80 md:text-base">
+                  Fini les craintes liées aux infrastructures, au turnover et aux manques de
+                  qualification. Adieu les casse-têtes du recrutement et les coupures
+                  imprévues. Chez e-Staf, nous vous offrons une solution clé en main : un
+                  vivier de talents formés pour une maîtrise linguistique irréprochable, des
+                  locaux équipés et un encadrement managérial rigoureux. Un seul objectif :
+                  simplifier et sécuriser vos opérations d&apos;externalisation.
+                </p>
+                <div className="mt-auto">
+                  <Button href="#apporteurs-clients" variant="accent">
+                    Nous contacter pour un projet d&apos;externalisation
+                  </Button>
                 </div>
-              </Reveal>
-            ))}
+              </div>
+            </Reveal>
+            <Reveal from="right" delay={100} className="h-full">
+              <div className="flex h-full flex-col rounded border border-muted/30 bg-background p-6 md:p-8">
+                <p className="mb-4 font-mono text-xs uppercase tracking-widest text-success">
+                  Espace talents & candidats
+                </p>
+                <h3 className="mb-4 font-display text-2xl leading-snug text-ink md:text-3xl">
+                  « Votre carrière de rêve en quelques clics. »
+                </h3>
+                <p className="mb-4 text-sm leading-relaxed text-muted md:text-base">
+                  Vous êtes un(e) professionnel(le) conscient(e) que la seule barrière entre
+                  vous et votre carrière rêvée, c&apos;est la maîtrise de la langue ? Marre
+                  de suivre des cours théoriques de gauche à droite ? Vous savez pertinemment
+                  ce qu&apos;il vous faut : une réelle montée en compétences pour aligner vos
+                  diplômes et votre expertise aux besoins exigeants du marché du travail
+                  actuel.
+                </p>
+                <div className="mb-4 border-l-4 border-accent bg-white p-4">
+                  <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-muted">
+                    Condition d&apos;accès
+                  </p>
+                  <p className="font-mono text-xs leading-relaxed text-ink">
+                    L&apos;accès à nos missions et à nos grands comptes est réservé aux
+                    talents validant le niveau C1 après notre test de sélection. Ce niveau
+                    est certifié par la réussite réelle des examens officiels — jamais
+                    auto-déclaré.
+                  </p>
+                </div>
+                <p className="mb-8 text-sm leading-relaxed text-muted md:text-base">
+                  Passez le test, faites votre inscription, et nous, on se chargera de vous
+                  fournir votre courbe de progression en temps réel.
+                </p>
+                <div className="mt-auto">
+                  <Button href="/offres/carrieres" variant="primary">
+                    Passer le test & rejoindre e-Staf
+                  </Button>
+                </div>
+              </div>
+            </Reveal>
           </div>
         </div>
       </section>
 
       {/* ============================================================ */}
-      {/* ACTE 02 · B1 — La solution (alternating center timeline)     */}
+      {/* ACTE 02 · B1 — La méthode (alternating center timeline)      */}
       {/* ============================================================ */}
       <section id="solution" className="relative overflow-hidden bg-background">
         <ActWatermark level="B1" side="left" />
         <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
           <Reveal>
             <ActKicker>Acte 02 · Niveau B1 — La montée</ActKicker>
-            <h2 className="mb-4 text-3xl md:text-5xl">La solution</h2>
+            <h2 className="mb-4 text-3xl md:text-5xl">La méthode</h2>
+            <p className="max-w-2xl text-muted">
+              Profils sous-qualifiés, turnover massif, coupures en pleine mission : vous
+              connaissez les craintes. Voici, étape par étape, comment nous les neutralisons
+              avant le premier appel client.
+            </p>
           </Reveal>
           <div className="relative mt-10">
             {/* Central spine of the timeline */}
@@ -412,7 +594,13 @@ export default function HomePage() {
         <div className="relative mx-auto max-w-5xl px-4 py-28 md:py-36">
           <Reveal>
             <ActKicker>Acte 03 · Niveau B2 — Le mécanisme</ActKicker>
-            <h2 className="mb-10 text-3xl text-background md:text-5xl">Le double moteur</h2>
+            <h2 className="mb-4 text-3xl text-background md:text-5xl">Le double moteur</h2>
+            <p className="mb-10 max-w-2xl text-sm text-background/70 md:text-base">
+              Deux publics distincts, deux promesses distinctes : les élèves de
+              l&apos;académie ne sont pas de futurs agents — ils poursuivent leurs propres
+              objectifs. Le vivier destiné à la production suit un parcours séparé,
+              sanctionné par les examens officiels.
+            </p>
           </Reveal>
           <div className="mb-14 grid gap-10 md:grid-cols-2">
             <Reveal from="left">
@@ -424,16 +612,19 @@ export default function HomePage() {
                   <li className="flex gap-2">
                     <span className="shrink-0 text-accent">→</span>
                     <span>
-                      Préparation aux examens internationaux (DELF/DALF, TEF Canada, EAF, DFP)
+                      Préparation aux examens officiels : DELF/DALF, TEF Canada / TCF, DFP
                     </span>
                   </li>
                   <li className="flex gap-2">
                     <span className="shrink-0 text-accent">→</span>
-                    <span>Programme FOL pour professionnels et leaders</span>
+                    <span>Programme phare FOL pour professionnels et leaders</span>
                   </li>
                   <li className="flex gap-2">
                     <span className="shrink-0 text-accent">→</span>
-                    <span>Les apprenants paient directement leur formation</span>
+                    <span>
+                      Des apprenants qui visent leurs propres objectifs : immigration,
+                      carrière, diplôme
+                    </span>
                   </li>
                 </ul>
               </div>
@@ -446,17 +637,21 @@ export default function HomePage() {
                 <ul className="flex flex-col gap-3 text-sm text-background/80">
                   <li className="flex gap-2">
                     <span className="shrink-0 text-accent">→</span>
-                    <span>Agents placés par lots de dix chez des clients internationaux</span>
+                    <span>Des unités déployées par lots de dix chez des clients internationaux</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="shrink-0 text-accent">→</span>
+                    <span>
+                      Niveau C1 certifié par la réussite réelle des examens officiels, jamais
+                      auto-déclaré
+                    </span>
                   </li>
                   <li className="flex gap-2">
                     <span className="shrink-0 text-accent">→</span>
                     <span>
                       Infrastructure sécurisée fournie (onduleurs, secours, connexion stable)
+                      et encadrement managérial constant
                     </span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="shrink-0 text-accent">→</span>
-                    <span>Supervision continue une fois en poste</span>
                   </li>
                 </ul>
               </div>
@@ -487,31 +682,26 @@ export default function HomePage() {
       </section>
 
       {/* ============================================================ */}
-      {/* ACTE 04 · C1 — La preuve                                     */}
+      {/* ACTE 04 · C1 — Les promesses & standards                     */}
       {/* ============================================================ */}
-      <section id="confiance" className="relative overflow-hidden bg-white">
+      <section id="promesses" className="relative overflow-hidden bg-white">
         <ActWatermark level="C1" side="left" />
         <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
           <Reveal>
             <ActKicker>Acte 04 · Niveau C1 — La preuve</ActKicker>
-            <h2 className="mb-4 text-3xl md:text-5xl">Preuve de sérieux</h2>
+            <h2 className="mb-4 text-3xl md:text-5xl">
+              Les promesses d&apos;e-Staf & standards de performance
+            </h2>
             <p className="mb-10 max-w-2xl text-muted">
-              Chaque poste en production est supervisé et mesuré au quotidien avec une
-              méthode fixe, appliquée sur des critères écrits à l&apos;avance plutôt
-              qu&apos;un suivi ponctuel :
+              Ce que nous mettons en place pour sécuriser vos projets et exiger
+              l&apos;excellence au quotidien.
             </p>
           </Reveal>
 
           <div className="mb-14 grid gap-10 md:grid-cols-[7fr_5fr] md:gap-14">
             <div className="flex flex-col divide-y divide-muted/30">
-              {(
-                [
-                  ['01', 'Constat', 'Mesure quotidienne des indicateurs de performance de chaque agent en poste.'],
-                  ['02', 'Analyse', 'Identification des causes précises derrière chaque écart constaté.'],
-                  ['03', 'Amélioration', "Ajustement ciblé de la formation ou du process pour corriger l'écart."],
-                ] as const
-              ).map(([index, title, body], i) => (
-                <Reveal key={index} delay={i * 100}>
+              {PROMESSES.map(([index, title, body], i) => (
+                <Reveal key={index} delay={(i % 3) * 80}>
                   <LedgerRow index={index} title={title}>
                     <p>{body}</p>
                   </LedgerRow>
@@ -573,9 +763,41 @@ export default function HomePage() {
           </div>
 
           <Reveal>
+            <div className="mb-14">
+              <h3 className="mb-2 text-xl md:text-2xl">Ce que e-Staf attend de vous</h3>
+              <p className="mb-6 text-sm text-muted">
+                Deux engagements de votre côté, rien de plus :
+              </p>
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="border border-muted/30 bg-background p-6">
+                  <p className="mb-2 font-mono text-xs uppercase tracking-widest text-accent">
+                    Engagement 01
+                  </p>
+                  <h4 className="mb-2 text-lg">Vos outils & CRM</h4>
+                  <p className="text-sm text-muted">
+                    Vous mettez à notre disposition vos logiciels métiers et votre CRM pour
+                    que nos équipes s&apos;immergent directement dans votre écosystème.
+                  </p>
+                </div>
+                <div className="border border-muted/30 bg-background p-6">
+                  <p className="mb-2 font-mono text-xs uppercase tracking-widest text-accent">
+                    Engagement 02
+                  </p>
+                  <h4 className="mb-2 text-lg">Une formation métier (5 jours)</h4>
+                  <p className="text-sm text-muted">
+                    Vos équipes dispensent une formation initiale de 5 jours dédiée à vos
+                    spécificités, vos produits et vos process pour calibrer nos profils
+                    avant le premier appel.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Reveal>
+
+          <Reveal>
             <div className="mb-14 grid grid-cols-2 divide-x divide-y divide-muted/30 border-y border-muted/30 md:grid-cols-4 md:divide-y-0">
               <div className="p-4 md:p-6">
-                <StatChip label="Sélection" value="Test de niveau réel" />
+                <StatChip label="Sélection" value="Test + examens officiels" />
               </div>
               <div className="p-4 md:p-6">
                 <StatChip label="Formation" value="Continue en poste" />
@@ -584,7 +806,7 @@ export default function HomePage() {
                 <StatChip label="Infrastructure" value="Sécurisée 24/7" />
               </div>
               <div className="p-4 md:p-6">
-                <StatChip label="Suivi" value="Supervision quotidienne" />
+                <StatChip label="Pilotage" value="Reporting hebdomadaire" />
               </div>
             </div>
           </Reveal>
@@ -620,13 +842,13 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Marquee band 2 — the method, dark with outlined type */}
+      {/* Marquee band 2 — the standards, dark with outlined type */}
       <MarqueeBand
         items={[
           "Aucun candidat n'est perdu",
-          'Sélection sur test réel',
-          'Formation continue',
-          'Supervision quotidienne',
+          'Niveau C1 certifié par examens officiels',
+          'Reporting hebdomadaire',
+          'Zéro turnover',
           'Infrastructure sécurisée',
         ]}
         variant="dark"
@@ -634,12 +856,246 @@ export default function HomePage() {
       />
 
       {/* ============================================================ */}
-      {/* Suite de l'acte C1 — apporteurs, offres, FAQ, parcours       */}
+      {/* Options de collaboration — lots de 10 & missions ponctuelles */}
+      {/* ============================================================ */}
+      <section id="collaboration" className="relative overflow-hidden bg-background">
+        <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
+          <Reveal>
+            <ActKicker>Partenaires — Déploiement</ActKicker>
+            <h2 className="mb-4 text-3xl md:text-5xl">Vos options de collaboration</h2>
+            <p className="mb-12 max-w-2xl text-muted">
+              Le recrutement classique est un gouffre financier. L&apos;externalisation
+              d&apos;élite est votre seul levier de croissance réel. Chez e-Staf, nous ne
+              vous vendons pas des promesses sur un CV. Nous déployons des unités
+              d&apos;élite formées, affûtées sur la voix et sur l&apos;écrit, prêtes à
+              changer la donne.
+            </p>
+          </Reveal>
+
+          <Reveal>
+            <div className="mb-8">
+              <p className="mb-2 font-mono text-sm text-accent">Option 01</p>
+              <h3 className="mb-3 text-2xl md:text-3xl">La Squad Long Terme — lots de 10</h3>
+              <p className="max-w-2xl text-sm text-muted md:text-base">
+                Sécurisez votre structure. Intégrez instantanément 10 profils calibrés pour
+                encaisser la charge, tenir la cadence et transformer chaque fichier froid en
+                source de revenus durable.
+              </p>
+            </div>
+          </Reveal>
+          <div className="mb-16 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {LOTS.map((lot, i) => (
+              <Reveal key={lot.name} delay={(i % 3) * 80} className="h-full">
+                <div className="flex h-full flex-col border border-muted/30 bg-white p-5">
+                  <h4 className="mb-2 font-display text-lg leading-snug">{lot.name}</h4>
+                  <p className="mb-4 text-sm text-muted">{lot.mission}</p>
+                  <div className="mt-auto">
+                    <StatusBadge>
+                      {`En attente de déploiement — fin de formation : ${lot.date}`}
+                    </StatusBadge>
+                    <div className="mt-3 flex flex-col items-start gap-1.5">
+                      <CardAction href="#apporteurs-clients">
+                        Collaborer (dispo immédiate)
+                      </CardAction>
+                      <CardAction href="#apporteurs-clients">
+                        {`Réserver pour le ${lot.date}`}
+                      </CardAction>
+                    </div>
+                  </div>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+
+          <Reveal>
+            <div className="mb-8">
+              <p className="mb-2 font-mono text-sm text-accent">Option 02</p>
+              <h3 className="mb-3 text-2xl md:text-3xl">Missions & prestations ponctuelles</h3>
+              <p className="max-w-2xl text-sm text-muted md:text-base">
+                Un besoin précis, une exécution rapide, un résultat mesurable. Confiez vos
+                projets à haute exigence à des experts affûtés, sans équipe complète à
+                l&apos;année.
+              </p>
+            </div>
+          </Reveal>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {MISSIONS.map((mission, i) => (
+              <Reveal key={mission.name} delay={(i % 2) * 80} className="h-full">
+                <div className="flex h-full flex-col border border-muted/30 bg-white p-5">
+                  <h4 className="mb-2 font-display text-lg leading-snug">{mission.name}</h4>
+                  <p className="mb-4 text-sm text-muted">{mission.body}</p>
+                  <div className="mt-auto">
+                    <StatusBadge available={mission.available}>{mission.status}</StatusBadge>
+                    <div className="mt-3">
+                      <CardAction href="#apporteurs-clients">Lancer une mission</CardAction>
+                    </div>
+                  </div>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* Catalogue des programmes — compact summary                   */}
+      {/* ============================================================ */}
+      <section id="catalogue" className="relative overflow-hidden bg-white">
+        <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
+          <Reveal>
+            <ActKicker>Académie — Formations</ActKicker>
+            <h2 className="mb-4 text-3xl md:text-5xl">Catalogue des programmes</h2>
+            <p className="mb-8 max-w-2xl text-muted">
+              Des préparations pour celles et ceux qui poursuivent leurs propres objectifs —
+              immigration, carrière, diplôme — et un programme phare pour les leaders. Nos
+              futurs agents passent les mêmes examens officiels pour certifier leur niveau.
+            </p>
+          </Reveal>
+          <div className="flex flex-col divide-y divide-muted/30">
+            {(
+              [
+                {
+                  href: '/offres/examens',
+                  index: '01',
+                  title: 'DELF / DALF & TEF Canada / TCF',
+                  description:
+                    "Diplômes officiels de français (B1 à C2) et entraînement chirurgical aux épreuves chronométrées pour l'immigration (CLB 7, 8, 9+). Préparations ouvertes, sessions en continu.",
+                  cta: 'Voir les préparations',
+                },
+                {
+                  href: '/offres/examens#dfp',
+                  index: '02',
+                  title: 'DFP — Diplômes de Français Professionnel',
+                  description:
+                    'Affaires, Relations Internationales, Tourisme-Hôtellerie-Restauration, Santé : prouvez que vous dominez le jargon et les codes de votre secteur. Prochaines cohortes dès le 10 septembre 2026.',
+                  cta: 'Voir les cohortes DFP',
+                },
+                {
+                  href: '/offres/fol',
+                  index: '03',
+                  title: 'Programme phare FOL — Français Oratoire des Leaders',
+                  description:
+                    "Le Cursus d'Élite de 6 mois : négociation, objections, prestance. Un parcours du combattant sélectif — seulement 5 élus sur 15 décrochent leur place.",
+                  cta: 'Voir le programme FOL',
+                },
+                {
+                  href: '/offres/carrieres',
+                  index: '04',
+                  title: 'Candidater chez e-Staf',
+                  description:
+                    'Passez le test de sélection, certifiez votre niveau C1 par les examens officiels et accédez à nos missions et grands comptes.',
+                  cta: 'Passer le test',
+                },
+              ] as const
+            ).map((offre, i) => (
+              <Reveal key={offre.href} delay={i * 100}>
+                <OffreRow {...offre} />
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* Parcours candidat                                            */}
+      {/* ============================================================ */}
+      <section id="parcours" className="relative overflow-hidden bg-background">
+        <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
+          <Reveal>
+            <ActKicker>Votre ascension commence ici</ActKicker>
+            <h2 className="mb-8 text-3xl md:text-5xl">Parcours candidat</h2>
+          </Reveal>
+          <div className="mb-8 flex flex-col divide-y divide-muted/30">
+            {(
+              [
+                [
+                  '01',
+                  'Dépôt du CV, des coordonnées et d’une vidéo',
+                  'Vous déposez votre CV, vos coordonnées et un lien vidéo de présentation (Loom, YouTube non répertorié ou Google Drive). Cette première étape ne prend que quelques minutes.',
+                ],
+                [
+                  '02',
+                  'Évaluation : vidéo + test de grammaire en ligne',
+                  'Un formateur visionne votre vidéo et l’évalue sur une grille de critères précise. En parallèle, vous passez un test de grammaire en ligne. Les deux ensemble mesurent votre niveau réel.',
+                ],
+                [
+                  '03',
+                  'Orientation selon le niveau',
+                  'Entre B1 et B2, vous êtes orienté vers les offres de formation pour élever votre niveau — aucun candidat motivé n’est laissé sans option. À partir de C1, vous accédez aux cinq types de métiers recherchés par nos clients, puis à la formation intensive de 17 jours avant la prise de poste.',
+                ],
+              ] as const
+            ).map(([index, title, body], i) => (
+              <Reveal key={index} delay={i * 100}>
+                <LedgerRow index={index} title={title}>
+                  <p>{body}</p>
+                </LedgerRow>
+              </Reveal>
+            ))}
+          </div>
+          <Reveal>
+            <Button href="/offres/carrieres" variant="accent">
+              Passer le test & rejoindre e-Staf
+            </Button>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* FAQ                                                          */}
+      {/* ============================================================ */}
+      <section id="faq" className="relative overflow-hidden bg-white">
+        <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
+          <Reveal>
+            <ActKicker>Avant de vous lancer</ActKicker>
+            <h2 className="mb-4 text-3xl md:text-5xl">Questions fréquentes</h2>
+            <p className="mb-8 max-w-2xl text-muted">
+              Les questions qui reviennent le plus souvent, côté candidats, entreprises et
+              apporteurs d&apos;affaires.
+            </p>
+          </Reveal>
+          <div className="flex max-w-2xl flex-col gap-8">
+            {FAQ.map((item, i) => (
+              <Reveal key={item.q} delay={(i % 2) * 100}>
+                <div>
+                  <h3 className="mb-2 text-xl">
+                    <span className="mr-2 font-mono text-sm text-accent">Q0{i + 1}</span>
+                    {item.q}
+                  </h3>
+                  <p className="text-sm text-muted">{item.a}</p>
+                </div>
+              </Reveal>
+            ))}
+            <Reveal>
+              <div>
+                <h3 className="mb-2 text-xl">
+                  <span className="mr-2 font-mono text-sm text-accent">Q06</span>
+                  Combien de temps dure la formation avant un placement en production ?
+                </h3>
+                <p className="text-sm text-muted">
+                  Ça dépend du niveau de départ, mais ça peut aller vite : Fara, par
+                  exemple, a rejoint un poste de support client international après 17
+                  jours de formation intensive (
+                  <Link
+                    href="/publications/decroche-poste-apres-17-jours"
+                    className="relative text-ink after:absolute after:-bottom-0.5 after:left-0 after:h-px after:w-full after:origin-left after:scale-x-0 after:bg-ink after:content-[''] hover:after:scale-x-100 motion-safe:after:transition-transform motion-safe:after:duration-300 motion-reduce:underline"
+                  >
+                    son histoire
+                  </Link>
+                  ) — un exemple, pas une durée garantie pour tous les profils.
+                </p>
+              </div>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* Proposer un partenariat — apporteurs, entreprises, contact   */}
       {/* ============================================================ */}
       <section id="apporteurs-clients" className="relative overflow-hidden bg-background">
         <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
           <Reveal>
-            <ActKicker>Travailler avec nous</ActKicker>
+            <ActKicker>Proposer un partenariat</ActKicker>
             <h2 className="mb-8 text-3xl md:text-5xl">
               Apporteurs d&apos;affaires et entreprises
             </h2>
@@ -681,7 +1137,10 @@ export default function HomePage() {
                   <ul className="flex flex-col gap-2 text-sm text-muted">
                     <li className="flex gap-2">
                       <span className="shrink-0 text-success">→</span>
-                      <span>Des agents sélectionnés sur leur niveau réel, pas déclaré.</span>
+                      <span>
+                        Des agents au niveau C1 certifié par les examens officiels, pas
+                        déclaré sur CV.
+                      </span>
                     </li>
                     <li className="flex gap-2">
                       <span className="shrink-0 text-success">→</span>
@@ -689,7 +1148,10 @@ export default function HomePage() {
                     </li>
                     <li className="flex gap-2">
                       <span className="shrink-0 text-success">→</span>
-                      <span>Une supervision quotidienne des agents en poste.</span>
+                      <span>
+                        Un encadrement managérial constant et un point hebdomadaire
+                        d&apos;une heure avec reporting complet.
+                      </span>
                     </li>
                     <li className="flex gap-2">
                       <span className="shrink-0 text-success">→</span>
@@ -697,8 +1159,8 @@ export default function HomePage() {
                     </li>
                   </ul>
                   <p className="mt-3 text-sm text-muted">
-                    Le seul élément que vous fournissez : vos outils et logiciels métier
-                    (CRM, scripts, procédures internes).
+                    De votre côté : vos outils et logiciels métier (CRM, scripts,
+                    procédures internes) et une formation métier initiale de 5 jours.
                   </p>
                 </div>
               </div>
@@ -715,141 +1177,6 @@ export default function HomePage() {
               </div>
             </Reveal>
           </div>
-        </div>
-      </section>
-
-      <section id="offres" className="relative overflow-hidden bg-white">
-        <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
-          <Reveal>
-            <ActKicker>Trois points d&apos;entrée</ActKicker>
-            <h2 className="mb-4 text-3xl md:text-5xl">Offres phares</h2>
-            <p className="mb-8 max-w-2xl text-muted">
-              Trois points d&apos;entrée selon où vous en êtes : préparer un examen précis,
-              gagner en aisance à l&apos;oral pour votre poste, ou trouver un emploi en
-              production.
-            </p>
-          </Reveal>
-          <div className="flex flex-col divide-y divide-muted/30">
-            {(
-              [
-                {
-                  href: '/offres/examens',
-                  index: '01',
-                  title: 'Préparation aux examens internationaux',
-                  description:
-                    'DELF/DALF, TEF Canada, EAF, DFP — préparation ciblée par niveau, du A2 au C1, en groupes restreints avec tests blancs chronométrés.',
-                  cta: 'Voir la préparation aux examens',
-                },
-                {
-                  href: '/offres/fol',
-                  index: '02',
-                  title: 'Programme FOL',
-                  description:
-                    "Français oratoire pour professionnels et leaders qui parlent déjà bien mais ont besoin de plus d'impact à l'oral, en réunion ou face à un public.",
-                  cta: 'Voir le programme FOL',
-                },
-                {
-                  href: '/offres/carrieres',
-                  index: '03',
-                  title: 'Vous cherchez du travail ?',
-                  description:
-                    'Déposez votre CV et vos coordonnées, puis passez une évaluation en ligne : on vous recontacte avec la suite adaptée à votre niveau.',
-                  cta: 'Déposer ma candidature',
-                },
-              ] as const
-            ).map((offre, i) => (
-              <Reveal key={offre.href} delay={i * 100}>
-                <OffreRow {...offre} />
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="faq" className="relative overflow-hidden bg-background">
-        <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
-          <Reveal>
-            <ActKicker>Avant de vous lancer</ActKicker>
-            <h2 className="mb-4 text-3xl md:text-5xl">Questions fréquentes</h2>
-            <p className="mb-8 max-w-2xl text-muted">
-              Les questions qui reviennent le plus souvent, côté candidats, entreprises et
-              apporteurs d&apos;affaires.
-            </p>
-          </Reveal>
-          <div className="flex max-w-2xl flex-col gap-8">
-            {FAQ.map((item, i) => (
-              <Reveal key={item.q} delay={(i % 2) * 100}>
-                <div>
-                  <h3 className="mb-2 text-xl">
-                    <span className="mr-2 font-mono text-sm text-accent">Q0{i + 1}</span>
-                    {item.q}
-                  </h3>
-                  <p className="text-sm text-muted">{item.a}</p>
-                </div>
-              </Reveal>
-            ))}
-            <Reveal>
-              <div>
-                <h3 className="mb-2 text-xl">
-                  <span className="mr-2 font-mono text-sm text-accent">Q05</span>
-                  Combien de temps dure la formation avant un placement en production ?
-                </h3>
-                <p className="text-sm text-muted">
-                  Ça dépend du niveau de départ, mais ça peut aller vite : Fara, par
-                  exemple, a rejoint un poste de support client international après 17
-                  jours de formation intensive (
-                  <Link
-                    href="/publications/decroche-poste-apres-17-jours"
-                    className="relative text-ink after:absolute after:-bottom-0.5 after:left-0 after:h-px after:w-full after:origin-left after:scale-x-0 after:bg-ink after:content-[''] hover:after:scale-x-100 motion-safe:after:transition-transform motion-safe:after:duration-300 motion-reduce:underline"
-                  >
-                    son histoire
-                  </Link>
-                  ) — un exemple, pas une durée garantie pour tous les profils.
-                </p>
-              </div>
-            </Reveal>
-          </div>
-        </div>
-      </section>
-
-      <section id="parcours" className="relative overflow-hidden bg-white">
-        <div className="relative mx-auto max-w-5xl px-4 py-20 md:py-28">
-          <Reveal>
-            <ActKicker>Votre ascension commence ici</ActKicker>
-            <h2 className="mb-8 text-3xl md:text-5xl">Parcours candidat</h2>
-          </Reveal>
-          <div className="mb-8 flex flex-col divide-y divide-muted/30">
-            {(
-              [
-                [
-                  '01',
-                  'Dépôt du CV, des coordonnées et d’une vidéo',
-                  'Vous déposez votre CV, vos coordonnées et un lien vidéo de présentation (Loom, YouTube non répertorié ou Google Drive). Cette première étape ne prend que quelques minutes.',
-                ],
-                [
-                  '02',
-                  'Évaluation : vidéo + test de grammaire en ligne',
-                  'Un formateur visionne votre vidéo et l’évalue sur une grille de critères précise. En parallèle, vous passez un test de grammaire en ligne. Les deux ensemble mesurent votre niveau réel.',
-                ],
-                [
-                  '03',
-                  'Orientation selon le niveau',
-                  'Entre B1 et B2, vous êtes orienté vers les offres de formation pour élever votre niveau — aucun candidat motivé n’est laissé sans option. À partir de C1, vous accédez aux cinq types de métiers recherchés par nos clients, puis à la formation intensive de 17 jours avant la prise de poste.',
-                ],
-              ] as const
-            ).map(([index, title, body], i) => (
-              <Reveal key={index} delay={i * 100}>
-                <LedgerRow index={index} title={title}>
-                  <p>{body}</p>
-                </LedgerRow>
-              </Reveal>
-            ))}
-          </div>
-          <Reveal>
-            <Button href="/offres/carrieres" variant="accent">
-              Déposer ma candidature
-            </Button>
-          </Reveal>
         </div>
       </section>
     </main>
