@@ -1,8 +1,11 @@
+import Link from 'next/link'
 import { type CSSProperties } from 'react'
 import { Button } from '@/components/ui/Button'
+import { QuoteBlock } from '@/components/ui/QuoteBlock'
 import { Reveal } from '@/components/Reveal'
 import { HeroRibbon } from '@/components/HeroRibbon'
 import { HeroFX } from '@/components/HeroFX'
+import { MarqueeBand } from '@/components/MarqueeBand'
 import { NetworkSchema, StaircaseSchema } from '@/components/Schemas'
 import {
   ActKicker,
@@ -167,6 +170,9 @@ export default function HomePage() {
       {/* ============================================================ */}
       <TrustStrip items={TRUST_ITEMS} />
 
+      {/* Marquee — the site's signature moving band, exam names */}
+      <MarqueeBand items={['DELF / DALF', 'TEF Canada / TCF', 'DFP', 'Programme FOL']} variant="accent" />
+
       {/* ============================================================ */}
       {/* Deux espaces — the site's two tunnels                        */}
       {/* ============================================================ */}
@@ -279,6 +285,64 @@ export default function HomePage() {
               </div>
             </div>
           </Reveal>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* Ils en parlent — one light proof point per audience          */}
+      {/* ============================================================ */}
+      <section className="relative overflow-hidden bg-white">
+        <div className="mx-auto max-w-5xl px-4 py-16 md:py-24">
+          <Reveal>
+            <ActKicker>Deux voix, un même résultat</ActKicker>
+            <h2 className="mb-10 text-3xl md:text-5xl">
+              <SplitWords text="Ils en parlent" />
+            </h2>
+          </Reveal>
+          <div className="grid gap-10 md:grid-cols-2 md:gap-16">
+            <Reveal from="left">
+              <QuoteBlock
+                quote="On nous a apporté un profil qualifié en dix jours, formé et prêt à prendre des appels."
+                person={{ firstname: 'Nathalie' }}
+                result="apporteuse d'affaires"
+              />
+              <Link
+                href="/entreprises"
+                className="group mt-4 inline-flex items-center text-sm font-medium text-primary"
+              >
+                <span className="relative after:absolute after:-bottom-0.5 after:left-0 after:h-px after:w-full after:origin-left after:scale-x-0 after:bg-primary after:content-[''] group-hover:after:scale-x-100 motion-safe:after:transition-transform motion-safe:after:duration-300 motion-reduce:underline">
+                  Voir l&apos;espace entreprises
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="ml-1 inline-block motion-safe:transition-transform motion-safe:duration-200 group-hover:translate-x-1"
+                >
+                  →
+                </span>
+              </Link>
+            </Reveal>
+            <Reveal from="right" delay={100}>
+              <QuoteBlock
+                quote="J'ai raté le niveau pour la production, on m'a proposé l'académie au lieu de me dire non."
+                person={{ firstname: 'Tovo' }}
+                result="apprenant, préparation DELF B1"
+              />
+              <Link
+                href="/offres/carrieres"
+                className="group mt-4 inline-flex items-center text-sm font-medium text-primary"
+              >
+                <span className="relative after:absolute after:-bottom-0.5 after:left-0 after:h-px after:w-full after:origin-left after:scale-x-0 after:bg-primary after:content-[''] group-hover:after:scale-x-100 motion-safe:after:transition-transform motion-safe:after:duration-300 motion-reduce:underline">
+                  Voir l&apos;espace talents & candidats
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="ml-1 inline-block motion-safe:transition-transform motion-safe:duration-200 group-hover:translate-x-1"
+                >
+                  →
+                </span>
+              </Link>
+            </Reveal>
+          </div>
         </div>
       </section>
     </main>
