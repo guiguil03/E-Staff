@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { type CSSProperties } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Reveal } from '@/components/Reveal'
@@ -152,50 +151,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Message 2 — reassurance for talents */}
-          <Reveal>
-            <div className="mt-16 max-w-2xl border-t border-background/15 pt-10 md:mt-24">
-              <p className="mb-4 font-mono text-xs uppercase tracking-widest text-accent">Aux talents</p>
-              <p className="font-display text-xl leading-snug text-background md:text-2xl">
-                N&apos;ayez aucune crainte. Chez e-Staf, nous valorisons l&apos;humain avant
-                tout. Si vous craignez d&apos;échouer au test, nous sommes là pour vous
-                rattraper, vous former et vous hisser vers l&apos;excellence. Votre potentiel
-                mérite qu&apos;on l&apos;accompagne.
-              </p>
-              <Link
-                href="/offres/carrieres"
-                className="group mt-5 inline-flex items-center font-medium text-background"
-              >
-                <span className="relative after:absolute after:-bottom-0.5 after:left-0 after:h-px after:w-full after:origin-left after:scale-x-0 after:bg-background after:content-[''] group-hover:after:scale-x-100 motion-safe:after:transition-transform motion-safe:after:duration-300 motion-reduce:underline">
-                  Passer le test & rejoindre e-Staf
-                </span>
-                <span
-                  aria-hidden="true"
-                  className="ml-1 inline-block motion-safe:transition-transform motion-safe:duration-200 group-hover:translate-x-1"
-                >
-                  →
-                </span>
-              </Link>
-            </div>
-          </Reveal>
-
-          {/* Message 3 — reassurance for enterprises */}
-          <Reveal>
-            <div className="mt-14 max-w-2xl border-t border-background/15 pt-10">
-              <p className="mb-4 font-mono text-xs uppercase tracking-widest text-accent">Aux entreprises</p>
-              <p className="font-display text-xl leading-snug text-background md:text-2xl">
-                Confier vos activités n&apos;est pas un jeu. Pour vous offrir une tranquillité
-                totale, nous vous donnons accès, une semaine avant la signature du contrat, à
-                des capsules vidéo exclusives de présentation des profils sélectionnés pour
-                vous. Vous savez exactement qui vous intégrez.
-              </p>
-              <div className="mt-5">
-                <Button href="/entreprises" variant="accent">
-                  Nous contacter pour un projet d&apos;externalisation
-                </Button>
-              </div>
-            </div>
-          </Reveal>
         </div>
 
         {/* Scroll cue */}
@@ -259,6 +214,12 @@ export default function HomePage() {
                   locaux équipés et un encadrement managérial rigoureux. Un seul objectif :
                   simplifier et sécuriser vos opérations d&apos;externalisation.
                 </p>
+                <p className="mb-8 text-sm leading-relaxed text-background/80 md:text-base">
+                  Confier vos activités n&apos;est pas un jeu. Pour vous offrir une
+                  tranquillité totale, nous vous donnons accès, une semaine avant la signature
+                  du contrat, à des capsules vidéo exclusives de présentation des profils
+                  sélectionnés pour vous. Vous savez exactement qui vous intégrez.
+                </p>
                 <div className="mt-auto pt-2">
                   <Button href="/entreprises" variant="accent">
                     Nous contacter pour un projet d&apos;externalisation
@@ -300,6 +261,12 @@ export default function HomePage() {
                     auto-déclaré.
                   </p>
                 </div>
+                <p className="mb-4 text-sm leading-relaxed text-muted md:text-base">
+                  N&apos;ayez aucune crainte : chez e-Staf, nous valorisons l&apos;humain avant
+                  tout. Si vous craignez d&apos;échouer au test, nous sommes là pour vous
+                  rattraper, vous former et vous hisser vers l&apos;excellence — votre
+                  potentiel mérite qu&apos;on l&apos;accompagne.
+                </p>
                 <p className="mb-8 text-sm leading-relaxed text-muted md:text-base">
                   Passez le test, faites votre inscription, et nous, on se chargera de vous
                   fournir votre courbe de progression en temps réel.
