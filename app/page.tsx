@@ -430,7 +430,7 @@ export default function HomePage() {
                 className="hero-line-inner block text-3xl leading-[1.1] sm:text-4xl md:text-6xl md:leading-[1.05]"
                 style={{ '--d': '150ms' } as CSSProperties}
               >
-                Des talents freinés par la langue,
+                Le talent a une voix.
               </span>
             </span>
             <span className="block overflow-hidden pb-[0.12em] -mb-[0.12em]">
@@ -438,7 +438,7 @@ export default function HomePage() {
                 className="hero-line-inner block text-3xl leading-[1.1] sm:text-4xl md:text-6xl md:leading-[1.05]"
                 style={{ '--d': '300ms' } as CSSProperties}
               >
-                des partenaires freinés par le doute.
+                L&apos;entreprise a des exigences.
               </span>
             </span>
             <span className="block overflow-hidden pb-[0.12em] -mb-[0.12em]">
@@ -446,7 +446,7 @@ export default function HomePage() {
                 className="hero-line-inner block text-5xl leading-[1.05] sm:text-6xl md:text-8xl md:leading-none"
                 style={{ '--d': '450ms' } as CSSProperties}
               >
-                e-Staf est le <em className="text-shimmer italic text-accent">pont</em>.
+                e-Staf <em className="text-shimmer italic text-accent">aligne</em> les deux.
               </span>
             </span>
           </h1>
@@ -455,10 +455,8 @@ export default function HomePage() {
             className="hero-rise mt-6 max-w-xl text-background/70"
             style={{ '--d': '650ms' } as CSSProperties}
           >
-            D&apos;un côté, des professionnels dont la seule barrière est la maîtrise de la
-            langue. De l&apos;autre, des entreprises freinées par les risques de
-            l&apos;externalisation. Lever ces deux freins à la fois, c&apos;est la solution
-            qui fait notre identité.
+            Entre des talents prêts à performer et des entreprises prêtes à grandir, nous
+            formons, nous encadrons, nous sécurisons.
           </p>
 
           <div
