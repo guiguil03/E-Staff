@@ -4,7 +4,7 @@ const NAV = [
   { href: '/publications', label: 'Actualités' },
   { href: '/offres/examens', label: 'Se préparer aux examens' },
   { href: '/offres/carrieres', label: 'Candidater' },
-  { href: '/#apporteurs-clients', label: 'Proposer un partenariat' },
+  { href: '/entreprises', label: 'Proposer un partenariat' },
 ]
 
 export function Header() {
