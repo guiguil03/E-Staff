@@ -10,6 +10,7 @@ import { HeroRibbon } from '@/components/HeroRibbon'
 import { HeroFX } from '@/components/HeroFX'
 import { MarqueeBand } from '@/components/MarqueeBand'
 import { SpotlightCard } from '@/components/SpotlightCard'
+import { Carousel } from '@/components/Carousel'
 import {
   DoubleEngineSchema,
   EnvelopeSchema,
@@ -172,6 +173,18 @@ const MISSIONS = [
     status: 'Disponible',
     available: true,
   },
+] as const
+
+// Quiet trust strip right after the hero — honest capability tags already
+// established elsewhere on the page (StatChip values, promesse titles, the
+// method's step 1), not invented client logos.
+const TRUST_ITEMS = [
+  'Sélection sur test réel',
+  'Infrastructure sécurisée 24/7',
+  'Formation continue',
+  'Reporting hebdomadaire',
+  'Zéro turnover garanti',
+  'Niveau C1 certifié',
 ] as const
 
 const FAQ = [
@@ -376,6 +389,69 @@ function CardAction({ href, children }: { href: string; children: ReactNode }) {
   )
 }
 
+/** Small floating "preview" card over the hero (edX-style glance-proof
+ * device): a thin colored top bar stands in for the course-thumbnail zone
+ * we don't have photos for, then a mono kicker, a bold title and one mono
+ * metadata line. Static — a glance device, not the primary interactive
+ * element — but still wrapped in SpotlightCard for the same subtle
+ * cursor-glow treatment already used on the lot cards. */
+function HeroPreviewCard({
+  kicker,
+  bar = 'accent',
+  title,
+  meta,
+  badge,
+}: {
+  kicker: string
+  bar?: 'accent' | 'success'
+  title: string
+  meta: string
+  badge: ReactNode
+}) {
+  return (
+    <SpotlightCard className="overflow-hidden rounded bg-white shadow-lg shadow-primary/20">
+      <span
+        aria-hidden="true"
+        className={`block h-1.5 w-full ${bar === 'success' ? 'bg-success' : 'bg-accent'}`}
+      />
+      <div className="p-4">
+        <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-muted">
+          {kicker}
+        </p>
+        <p className="mb-2 font-display text-base leading-snug text-ink">{title}</p>
+        <p className="mb-3 font-mono text-xs text-muted">{meta}</p>
+        {badge}
+      </div>
+    </SpotlightCard>
+  )
+}
+
+/** One "Squad Long Terme" unit card — extracted so the same markup can be
+ * reused in the mobile stack and the desktop carousel (Option 01). */
+function LotCard({ lot, index }: { lot: (typeof LOTS)[number]; index: number }) {
+  return (
+    <SpotlightCard className="flex h-full flex-col border border-muted/30 bg-white p-5">
+      <span
+        aria-hidden="true"
+        className="mb-2 font-mono text-[10px] tracking-widest text-primary/50"
+      >
+        U-0{index + 1}
+      </span>
+      <h4 className="mb-2 font-display text-lg leading-snug">{lot.name}</h4>
+      <p className="mb-4 text-sm text-muted">{lot.mission}</p>
+      <div className="mt-auto">
+        <StatusBadge>
+          {`En attente de déploiement — fin de formation : ${lot.date}`}
+        </StatusBadge>
+        <div className="mt-3 flex flex-col items-start gap-1.5">
+          <CardAction href="#apporteurs-clients">Collaborer (dispo immédiate)</CardAction>
+          <CardAction href="#apporteurs-clients">{`Réserver pour le ${lot.date}`}</CardAction>
+        </div>
+      </div>
+    </SpotlightCard>
+  )
+}
+
 export default function HomePage() {
   return (
     <main>
@@ -416,7 +492,33 @@ export default function HomePage() {
         {/* Cursor spotlight overlay + custom-property writer (desktop only) */}
         <HeroFX />
 
-        <div className="relative mx-auto max-w-6xl px-4 pb-32 pt-14 md:pt-16">
+        <div className="relative mx-auto max-w-6xl px-4 pb-32 pt-14 md:pt-16 lg:pr-72 xl:pr-80">
+          {/* Floating preview cards (edX-style glance proof), lg and up only.
+              The lg:pr-72 / xl:pr-80 padding above reserves this gutter so
+              they never collide with the headline column. Hidden below lg
+              rather than stacked, per spec — at narrower widths there's no
+              safe empty space to float them in without covering text. */}
+          <div className="pointer-events-none absolute right-4 top-28 z-20 hidden w-64 flex-col gap-5 lg:flex xl:right-8 xl:top-32 xl:w-72">
+            <div className="pointer-events-auto">
+              <HeroPreviewCard
+                kicker="Prochaine cohorte"
+                bar="accent"
+                title="DFP Affaires"
+                meta="Rentrée : 10 septembre 2026"
+                badge={<StatusBadge available>Inscriptions ouvertes</StatusBadge>}
+              />
+            </div>
+            <div className="pointer-events-auto">
+              <HeroPreviewCard
+                kicker="Lot disponible"
+                bar="success"
+                title={LOTS[0].name}
+                meta={`Fin de formation : ${LOTS[0].date}`}
+                badge={<StatusBadge>En attente de déploiement</StatusBadge>}
+              />
+            </div>
+          </div>
+
           {/* Message 1 — the pitch */}
           <div className="flex min-h-[max(480px,calc(100svh-10rem))] flex-col justify-center">
             <p
@@ -533,6 +635,28 @@ export default function HomePage() {
           <span className="scroll-cue-line block h-10 w-px bg-accent/80" aria-hidden="true" />
         </div>
       </section>
+
+      {/* ============================================================ */}
+      {/* Trust strip — quiet capability tags at the hero-to-content seam */}
+      {/* ============================================================ */}
+      <div className="relative bg-white">
+        <div className="mx-auto max-w-5xl px-4 py-6 md:py-8">
+          <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-2 text-center">
+            {TRUST_ITEMS.map((item, i) => (
+              <span key={item} className="flex items-center gap-x-2">
+                <span className="font-mono text-[10px] uppercase tracking-wide text-muted md:text-xs">
+                  {item}
+                </span>
+                {i < TRUST_ITEMS.length - 1 && (
+                  <span aria-hidden="true" className="text-muted/40">
+                    ·
+                  </span>
+                )}
+              </span>
+            ))}
+          </p>
+        </div>
+      </div>
 
       {/* Marquee band 1 — the exams the académie prepares */}
       <MarqueeBand
@@ -1098,35 +1222,32 @@ export default function HomePage() {
               <span className="hidden sm:inline">Mission</span>
               <span>Déploiement</span>
             </div>
-            <div className="grid gap-4 p-4 sm:grid-cols-2 md:p-6 lg:grid-cols-3">
+            {/* Mobile / small tablet: a plain vertical stack. A horizontal
+                carousel of wide cards reads worse than a simple stack once
+                only one column fits, so we keep the grid below md. */}
+            <div className="grid gap-4 p-4 sm:grid-cols-2 md:hidden">
               {LOTS.map((lot, i) => (
-                <Reveal key={lot.name} delay={(i % 3) * 80} className="h-full">
-                  <SpotlightCard className="flex h-full flex-col border border-muted/30 bg-white p-5">
-                    <span
-                      aria-hidden="true"
-                      className="mb-2 font-mono text-[10px] tracking-widest text-primary/50"
-                    >
-                      U-0{i + 1}
-                    </span>
-                    <h4 className="mb-2 font-display text-lg leading-snug">{lot.name}</h4>
-                    <p className="mb-4 text-sm text-muted">{lot.mission}</p>
-                    <div className="mt-auto">
-                      <StatusBadge>
-                        {`En attente de déploiement — fin de formation : ${lot.date}`}
-                      </StatusBadge>
-                      <div className="mt-3 flex flex-col items-start gap-1.5">
-                        <CardAction href="#apporteurs-clients">
-                          Collaborer (dispo immédiate)
-                        </CardAction>
-                        <CardAction href="#apporteurs-clients">
-                          {`Réserver pour le ${lot.date}`}
-                        </CardAction>
-                      </div>
-                    </div>
-                  </SpotlightCard>
+                <Reveal key={lot.name} delay={(i % 2) * 80} className="h-full">
+                  <LotCard lot={lot} index={i} />
                 </Reveal>
               ))}
             </div>
+
+            {/* md and up: horizontal scroll-snap carousel, edX-style — the
+                last card is deliberately cut off ("peek") to signal there's
+                more to scroll. */}
+            <Reveal className="hidden p-4 md:block md:p-6">
+              <Carousel ariaLabel="Unités disponibles — lots de 10">
+                {LOTS.map((lot, i) => (
+                  <div
+                    key={lot.name}
+                    className="carousel-item w-[70%] shrink-0 sm:w-[46%] lg:w-[31%]"
+                  >
+                    <LotCard lot={lot} index={i} />
+                  </div>
+                ))}
+              </Carousel>
+            </Reveal>
           </div>
 
           <Reveal>
