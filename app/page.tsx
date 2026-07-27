@@ -416,72 +416,113 @@ export default function HomePage() {
         {/* Cursor spotlight overlay + custom-property writer (desktop only) */}
         <HeroFX />
 
-        <div className="relative mx-auto flex min-h-[max(560px,calc(100svh-4rem))] max-w-6xl flex-col justify-center px-4 pb-32 pt-14 md:pt-16">
-          <p
-            className="hero-rise font-mono text-xs uppercase tracking-widest text-background/60"
-            style={{ '--d': '0ms' } as CSSProperties}
-          >
-            e-Staf — Académie de langues & externalisation d&apos;élite — Madagascar
-          </p>
+        <div className="relative mx-auto max-w-6xl px-4 pb-32 pt-14 md:pt-16">
+          {/* Message 1 — the pitch */}
+          <div className="flex min-h-[max(480px,calc(100svh-10rem))] flex-col justify-center">
+            <p
+              className="hero-rise font-mono text-xs uppercase tracking-widest text-background/60"
+              style={{ '--d': '0ms' } as CSSProperties}
+            >
+              e-Staf — Académie de langues & externalisation d&apos;élite — Madagascar
+            </p>
 
-          <h1 className="mt-6 font-display tracking-tight text-background">
-            <span className="block overflow-hidden pb-[0.12em] -mb-[0.12em]">
-              <span
-                className="hero-line-inner block text-3xl leading-[1.1] sm:text-4xl md:text-6xl md:leading-[1.05]"
-                style={{ '--d': '150ms' } as CSSProperties}
-              >
-                Le talent a une voix.
+            <h1 className="mt-6 font-display tracking-tight text-background">
+              <span className="block overflow-hidden pb-[0.12em] -mb-[0.12em]">
+                <span
+                  className="hero-line-inner block text-3xl leading-[1.1] sm:text-4xl md:text-6xl md:leading-[1.05]"
+                  style={{ '--d': '150ms' } as CSSProperties}
+                >
+                  Le talent a une voix.
+                </span>
               </span>
-            </span>
-            <span className="block overflow-hidden pb-[0.12em] -mb-[0.12em]">
-              <span
-                className="hero-line-inner block text-3xl leading-[1.1] sm:text-4xl md:text-6xl md:leading-[1.05]"
-                style={{ '--d': '300ms' } as CSSProperties}
-              >
-                L&apos;entreprise a des exigences.
+              <span className="block overflow-hidden pb-[0.12em] -mb-[0.12em]">
+                <span
+                  className="hero-line-inner block text-3xl leading-[1.1] sm:text-4xl md:text-6xl md:leading-[1.05]"
+                  style={{ '--d': '300ms' } as CSSProperties}
+                >
+                  L&apos;entreprise a des exigences.
+                </span>
               </span>
-            </span>
-            <span className="block overflow-hidden pb-[0.12em] -mb-[0.12em]">
-              <span
-                className="hero-line-inner block text-5xl leading-[1.05] sm:text-6xl md:text-8xl md:leading-none"
-                style={{ '--d': '450ms' } as CSSProperties}
-              >
-                e-Staf <em className="text-shimmer italic text-accent">aligne</em> les deux.
+              <span className="block overflow-hidden pb-[0.12em] -mb-[0.12em]">
+                <span
+                  className="hero-line-inner block text-5xl leading-[1.05] sm:text-6xl md:text-8xl md:leading-none"
+                  style={{ '--d': '450ms' } as CSSProperties}
+                >
+                  e-Staf <em className="text-shimmer italic text-accent">aligne</em> les deux.
+                </span>
               </span>
-            </span>
-          </h1>
+            </h1>
 
-          <p
-            className="hero-rise mt-6 max-w-xl text-background/70"
-            style={{ '--d': '650ms' } as CSSProperties}
-          >
-            Entre des talents prêts à performer et des entreprises prêtes à grandir, nous
-            formons, nous encadrons, nous sécurisons.
-          </p>
+            <p
+              className="hero-rise mt-6 max-w-xl text-background/70"
+              style={{ '--d': '650ms' } as CSSProperties}
+            >
+              Entre des talents prêts à performer et des entreprises prêtes à grandir, nous
+              formons, nous encadrons, nous sécurisons.
+            </p>
 
-          <div
-            className="hero-rise mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-8"
-            style={{ '--d': '800ms' } as CSSProperties}
-          >
-            <Button href="/offres/carrieres" variant="accent">
-              Passer le test & rejoindre e-Staf
-            </Button>
-            <Link href="#apporteurs-clients" className="group font-medium text-background">
-              <span className="relative after:absolute after:-bottom-0.5 after:left-0 after:h-px after:w-full after:origin-left after:scale-x-0 after:bg-background after:content-[''] group-hover:after:scale-x-100 motion-safe:after:transition-transform motion-safe:after:duration-300 motion-reduce:underline">
-                Nous contacter pour un projet d&apos;externalisation
-              </span>{' '}
-              <span
-                aria-hidden="true"
-                className="inline-block motion-safe:transition-transform motion-safe:duration-200 group-hover:translate-x-1"
-              >
-                →
-              </span>
-            </Link>
+            <div
+              className="hero-rise mt-8"
+              style={{ '--d': '800ms' } as CSSProperties}
+            >
+              <Button href="/offres/carrieres" variant="accent">
+                Passer le test & rejoindre e-Staf
+              </Button>
+            </div>
+
+            <div className="mt-10 max-w-3xl md:mt-14">
+              <HeroRibbon />
+            </div>
           </div>
 
-          <div className="mt-10 max-w-3xl md:mt-14">
-            <HeroRibbon />
-          </div>
+          {/* Message 2 — reassurance for talents */}
+          <Reveal>
+            <div className="mt-16 max-w-2xl border-t border-background/15 pt-10 md:mt-24">
+              <p className="mb-4 font-mono text-xs uppercase tracking-widest text-accent">
+                Aux talents
+              </p>
+              <p className="font-display text-xl leading-snug text-background md:text-2xl">
+                N&apos;ayez aucune crainte. Chez e-Staf, nous valorisons l&apos;humain avant
+                tout. Si vous craignez d&apos;échouer au test, nous sommes là pour vous
+                rattraper, vous former et vous hisser vers l&apos;excellence. Votre potentiel
+                mérite qu&apos;on l&apos;accompagne.
+              </p>
+              <Link
+                href="/offres/carrieres"
+                className="group mt-5 inline-flex items-center font-medium text-background"
+              >
+                <span className="relative after:absolute after:-bottom-0.5 after:left-0 after:h-px after:w-full after:origin-left after:scale-x-0 after:bg-background after:content-[''] group-hover:after:scale-x-100 motion-safe:after:transition-transform motion-safe:after:duration-300 motion-reduce:underline">
+                  Passer le test & rejoindre e-Staf
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="ml-1 inline-block motion-safe:transition-transform motion-safe:duration-200 group-hover:translate-x-1"
+                >
+                  →
+                </span>
+              </Link>
+            </div>
+          </Reveal>
+
+          {/* Message 3 — reassurance for enterprises */}
+          <Reveal>
+            <div className="mt-14 max-w-2xl border-t border-background/15 pt-10">
+              <p className="mb-4 font-mono text-xs uppercase tracking-widest text-accent">
+                Aux entreprises
+              </p>
+              <p className="font-display text-xl leading-snug text-background md:text-2xl">
+                Confier vos activités n&apos;est pas un jeu. Pour vous offrir une tranquillité
+                totale, nous vous donnons accès, une semaine avant la signature du contrat, à
+                des capsules vidéo exclusives de présentation des profils sélectionnés pour
+                vous. Vous savez exactement qui vous intégrez.
+              </p>
+              <div className="mt-5">
+                <Button href="#apporteurs-clients" variant="accent">
+                  Nous contacter pour un projet d&apos;externalisation
+                </Button>
+              </div>
+            </div>
+          </Reveal>
         </div>
 
         {/* Scroll cue */}
