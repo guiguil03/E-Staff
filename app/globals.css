@@ -47,6 +47,25 @@
 }
 
 /* ------------------------------------------------------------------ */
+/* Carousels (components/Carousel.tsx). The native scrollbar is hidden —  */
+/* the arrow buttons and dot pagination communicate position instead —    */
+/* and each slide snaps into place. Smoothness of the scroll itself is    */
+/* gated by prefers-reduced-motion at the call site (both the JS behavior */
+/* option and the motion-safe: variant on .carousel-track).               */
+/* ------------------------------------------------------------------ */
+.carousel-track {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+.carousel-track::-webkit-scrollbar {
+  display: none;
+}
+.carousel-item {
+  scroll-snap-align: start;
+}
+
+/* ------------------------------------------------------------------ */
 /* FAQ hover underline. The gradient is twice the box width with a     */
 /* hard color stop at 50%: sliding background-position from 100% to 0% */
 /* wipes the accent underline in from the left (background-position is */
