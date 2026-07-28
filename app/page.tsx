@@ -13,6 +13,7 @@ import {
   GRAIN_URI,
   HeroPreviewCard,
   SplitWords,
+  StatChip,
   StatusBadge,
   TrustStrip,
 } from '@/components/PageBits'
@@ -283,6 +284,38 @@ export default function HomePage() {
                   </Button>
                 </div>
               </div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* Quelques repères — concrete facts, no invented numbers        */}
+      {/* ============================================================ */}
+      <section className="relative overflow-hidden bg-background">
+        <div className="mx-auto max-w-5xl px-4 py-16 md:py-24">
+          <Reveal>
+            <ActKicker>Concret, pas des promesses</ActKicker>
+            <h2 className="mb-10 text-3xl md:text-5xl">
+              <SplitWords text="Quelques repères" />
+            </h2>
+          </Reveal>
+          <Reveal>
+            <div className="grid grid-cols-2 divide-x divide-y divide-muted/30 border-y border-muted/30 md:grid-cols-4 md:divide-y-0">
+              {(
+                [
+                  ['Déploiement', 'Lots de 10 agents'],
+                  ['FOL', "Cursus d'élite, 6 mois"],
+                  ['Académie', '17 jours de formation intensive'],
+                  ['Garantie', 'Zéro turnover, remplacement immédiat'],
+                ] as const
+              ).map(([label, value], i) => (
+                <div key={label} className="p-4 md:p-6">
+                  <div className="stagger-rise" style={{ '--sd': `${i * 90}ms` } as CSSProperties}>
+                    <StatChip label={label} value={value} />
+                  </div>
+                </div>
+              ))}
             </div>
           </Reveal>
         </div>
