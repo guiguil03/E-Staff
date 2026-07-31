@@ -28,7 +28,7 @@ export function LanguageRibbon({
       <path
         ref={pathRef}
         d="M10 20 H390"
-        stroke="#1B3A4B"
+        stroke="#0F1E37"
         strokeWidth="2"
         fill="none"
       />
@@ -37,8 +37,8 @@ export function LanguageRibbon({
         const reached = reachedLevel && LEVELS.indexOf(reachedLevel) >= i
         return (
           <g key={level}>
-            <circle cx={x} cy={20} r={6} fill={reached ? '#2F6B4F' : '#F3F5F1'} stroke="#1B3A4B" strokeWidth="2" />
-            <text x={x} y={36} textAnchor="middle" fontFamily="var(--font-plex-mono)" fontSize="10" fill="#1A1D1B">
+            <circle cx={x} cy={20} r={6} fill={reached ? '#2F6B4F' : '#F4F3EF'} stroke="#0F1E37" strokeWidth="2" />
+            <text x={x} y={36} textAnchor="middle" fontFamily="var(--font-plex-mono)" fontSize="10" fill="#14161A">
               {level}
             </text>
           </g>

@@ -6,9 +6,9 @@
  * compositional anchors, not icons. All are decorative (aria-hidden): every
  * piece of information they carry also exists as real text in the section.
  *
- * Palette used: primary #1B3A4B (usually via currentColor so the parent
- * chooses light/dark ink), accent #D99A2B, success #2F6B4F,
- * background #F3F5F1, ink #1A1D1B.
+ * Palette used: primary #0F1E37 (usually via currentColor so the parent
+ * chooses light/dark ink), accent #B8973E, success #2F6B4F,
+ * background #F4F3EF, ink #14161A.
  */
 
 import type { ReactNode } from 'react'
@@ -75,12 +75,12 @@ export function NetworkSchema({ className = '' }: SchemaProps) {
           vectorEffect="non-scaling-stroke"
         />
       ))}
-      <circle cx={hub.x} cy={hub.y} r="8.5" fill="#D99A2B" />
+      <circle cx={hub.x} cy={hub.y} r="8.5" fill="#B8973E" />
       <circle
         cx={hub.x}
         cy={hub.y}
         r="14.5"
-        stroke="#D99A2B"
+        stroke="#B8973E"
         strokeOpacity="0.5"
         strokeWidth={SW}
         strokeDasharray="2.5 5"
@@ -100,7 +100,7 @@ export function StaircaseSchema({ className = '' }: SchemaProps) {
       {/* ascent guide */}
       <path
         d="M14 116 L118 52"
-        stroke="#D99A2B"
+        stroke="#B8973E"
         strokeOpacity="0.45"
         strokeWidth={SW}
         strokeDasharray="3 6"
@@ -133,8 +133,8 @@ export function StaircaseSchema({ className = '' }: SchemaProps) {
           {s.label}
         </text>
       ))}
-      <circle cx="127" cy="45.5" r="6" fill="#D99A2B" />
-      <text x="127" y="34" textAnchor="middle" fontFamily={MONO} fontSize="11" fill="#D99A2B">
+      <circle cx="127" cy="45.5" r="6" fill="#B8973E" />
+      <text x="127" y="34" textAnchor="middle" fontFamily={MONO} fontSize="11" fill="#B8973E">
         C1
       </text>
     </svg>
@@ -202,7 +202,7 @@ export function FunnelSchema({ className = '' }: SchemaProps) {
         vectorEffect="non-scaling-stroke"
       />
       <circle cx="110" cy="143" r="10.5" fill="#2F6B4F" />
-      <text x="110" y="147" textAnchor="middle" fontFamily={MONO} fontSize="9.5" fill="#F3F5F1">
+      <text x="110" y="147" textAnchor="middle" fontFamily={MONO} fontSize="9.5" fill="#F4F3EF">
         C1
       </text>
       <text
@@ -323,13 +323,13 @@ export function DoubleEngineSchema({ className = '' }: SchemaProps) {
       {/* top flow: académie → production, gated at C1 (curve deliberately uneven) */}
       <path
         d="M225 88 C270 36 365 44 415 88"
-        stroke="#D99A2B"
+        stroke="#B8973E"
         strokeWidth={SW}
         vectorEffect="non-scaling-stroke"
       />
       <path
         d="M411.3 79.8 L415 88 L406.3 85.5"
-        stroke="#D99A2B"
+        stroke="#B8973E"
         strokeWidth={SW}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -337,7 +337,7 @@ export function DoubleEngineSchema({ className = '' }: SchemaProps) {
       />
       <circle cx="276" cy="57" r="3.5" fill="currentColor" fillOpacity="0.7" />
       <circle cx="360" cy="59" r="3.5" fill="currentColor" fillOpacity="0.7" />
-      <circle cx="318" cy="52" r="15" fill="#D99A2B" />
+      <circle cx="318" cy="52" r="15" fill="#B8973E" />
       <text
         x="318"
         y="56.5"
@@ -345,7 +345,7 @@ export function DoubleEngineSchema({ className = '' }: SchemaProps) {
         fontFamily={MONO}
         fontSize="12.5"
         fontWeight="600"
-        fill="#1A1D1B"
+        fill="#14161A"
       >
         C1
       </text>
@@ -418,7 +418,7 @@ export function MarkPulse({ className = '' }: SchemaProps) {
   return markSvg(
     <>
       <path d="M3.5 17 H10 L13 9.5 L17.5 24 L20.5 17 H28.5" vectorEffect="non-scaling-stroke" />
-      <circle cx="28.5" cy="17" r="2.2" fill="#D99A2B" stroke="none" />
+      <circle cx="28.5" cy="17" r="2.2" fill="#B8973E" stroke="none" />
     </>,
     className
   )
@@ -442,7 +442,7 @@ export function MarkLock({ className = '' }: SchemaProps) {
     <>
       <rect x="8" y="14" width="16" height="12" rx="1.5" vectorEffect="non-scaling-stroke" />
       <path d="M11.7 14 V10.6 a4.4 4.6 0 0 1 8.8 -0.2 V14" vectorEffect="non-scaling-stroke" />
-      <circle cx="16" cy="20" r="1.8" fill="#D99A2B" stroke="none" />
+      <circle cx="16" cy="20" r="1.8" fill="#B8973E" stroke="none" />
     </>,
     className
   )
@@ -456,7 +456,7 @@ export function MarkBars({ className = '' }: SchemaProps) {
       <rect x="6.5" y="19.5" width="3.6" height="7.5" vectorEffect="non-scaling-stroke" />
       <rect x="12.3" y="14.6" width="4.2" height="12.4" vectorEffect="non-scaling-stroke" />
       <rect x="18.7" y="11.2" width="3.8" height="15.8" vectorEffect="non-scaling-stroke" />
-      <rect x="24.4" y="5.8" width="4.1" height="21.2" stroke="#D99A2B" vectorEffect="non-scaling-stroke" />
+      <rect x="24.4" y="5.8" width="4.1" height="21.2" stroke="#B8973E" vectorEffect="non-scaling-stroke" />
     </>,
     className
   )
@@ -495,7 +495,7 @@ export function SealSchema({ className = '' }: SchemaProps) {
       {/* ribbons first, tucked behind the medal */}
       <path
         d="M48 92 L40 128 L52 120 L58 134 L63 96"
-        stroke="#D99A2B"
+        stroke="#B8973E"
         strokeWidth={SW}
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
@@ -504,7 +504,7 @@ export function SealSchema({ className = '' }: SchemaProps) {
         cx="60"
         cy="56"
         r="41"
-        fill="#F3F5F1"
+        fill="#F4F3EF"
         stroke="currentColor"
         strokeWidth={SW}
         vectorEffect="non-scaling-stroke"
@@ -520,7 +520,7 @@ export function SealSchema({ className = '' }: SchemaProps) {
         cx="60"
         cy="56"
         r="31"
-        stroke="#D99A2B"
+        stroke="#B8973E"
         strokeWidth={SW}
         strokeDasharray="3 6"
         vectorEffect="non-scaling-stroke"
@@ -573,7 +573,7 @@ export function GateSchema({ className = '' }: SchemaProps) {
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
       />
-      <text x="38" y="11" textAnchor="middle" fontFamily={MONO} fontSize="9.5" fill="#D99A2B">
+      <text x="38" y="11" textAnchor="middle" fontFamily={MONO} fontSize="9.5" fill="#B8973E">
         C1
       </text>
       <path
@@ -625,14 +625,14 @@ export function EnvelopeSchema({ className = '' }: SchemaProps) {
       </g>
       <path
         d="M46 12 a7.5 7.5 0 0 1 7 7"
-        stroke="#D99A2B"
+        stroke="#B8973E"
         strokeWidth={SW}
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
       />
       <path
         d="M46.5 5.5 a14 14 0 0 1 13 13"
-        stroke="#D99A2B"
+        stroke="#B8973E"
         strokeOpacity="0.55"
         strokeWidth={SW}
         strokeLinecap="round"

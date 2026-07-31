@@ -6,12 +6,12 @@ const config: Config = {
     colors: {
       transparent: 'transparent',
       current: 'currentColor',
-      background: '#F3F5F1',
-      ink: '#1A1D1B',
-      primary: '#1B3A4B',
-      accent: '#D99A2B',
+      background: '#F4F3EF',
+      ink: '#14161A',
+      primary: '#0F1E37',
+      accent: '#B8973E',
       success: '#2F6B4F',
-      muted: '#8C8579',
+      muted: '#807A6E',
       white: '#FFFFFF',
     },
     fontFamily: {

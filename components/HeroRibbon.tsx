@@ -24,13 +24,13 @@ export function HeroRibbon() {
     <svg viewBox="0 0 900 250" className="w-full" aria-hidden="true" fill="none">
       <defs>
         <linearGradient id="hero-ribbon-grad" x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0" stopColor="#F3F5F1" stopOpacity="0.35" />
-          <stop offset="0.65" stopColor="#F3F5F1" stopOpacity="0.6" />
-          <stop offset="1" stopColor="#D99A2B" />
+          <stop offset="0" stopColor="#F4F3EF" stopOpacity="0.35" />
+          <stop offset="0.65" stopColor="#F4F3EF" stopOpacity="0.6" />
+          <stop offset="1" stopColor="#B8973E" />
         </linearGradient>
       </defs>
       {/* Ghost of the full journey, always visible behind the draw. */}
-      <path d={PATH} stroke="#F3F5F1" strokeOpacity="0.12" strokeWidth="2" />
+      <path d={PATH} stroke="#F4F3EF" strokeOpacity="0.12" strokeWidth="2" />
       <path
         d={PATH}
         className="ribbon-draw"
@@ -52,8 +52,8 @@ export function HeroRibbon() {
               cx={marker.x}
               cy={marker.y}
               r={7}
-              fill={isFinal ? '#D99A2B' : '#1B3A4B'}
-              stroke={isFinal ? '#D99A2B' : 'rgba(243, 245, 241, 0.7)'}
+              fill={isFinal ? '#B8973E' : '#0F1E37'}
+              stroke={isFinal ? '#B8973E' : 'rgba(244, 243, 239, 0.7)'}
               strokeWidth={2}
             />
             <text
@@ -62,7 +62,7 @@ export function HeroRibbon() {
               textAnchor="middle"
               fontFamily="var(--font-plex-mono)"
               fontSize={16}
-              fill={isFinal ? '#D99A2B' : 'rgba(243, 245, 241, 0.65)'}
+              fill={isFinal ? '#B8973E' : 'rgba(244, 243, 239, 0.65)'}
             >
               {marker.level}
             </text>

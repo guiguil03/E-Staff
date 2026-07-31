@@ -10,32 +10,32 @@
     @apply font-display;
   }
   ::selection {
-    background: #D99A2B;
-    color: #1A1D1B;
+    background: #B8973E;
+    color: #14161A;
   }
 
   /* Thin custom scrollbar in the site's own inks (Firefox + Chromium 121+,
      with the WebKit pseudos as the Safari fallback). */
   html {
     scrollbar-width: thin;
-    scrollbar-color: #1B3A4B #F3F5F1;
+    scrollbar-color: #0F1E37 #F4F3EF;
   }
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
   }
   ::-webkit-scrollbar-track {
-    background: #F3F5F1;
+    background: #F4F3EF;
   }
   ::-webkit-scrollbar-thumb {
-    background: #1B3A4B;
+    background: #0F1E37;
     border-radius: 9999px;
-    border: 2px solid #F3F5F1;
+    border: 2px solid #F4F3EF;
   }
 
   /* Visible custom focus ring on every interactive element. */
   :focus-visible {
-    outline: 2px solid #D99A2B;
+    outline: 2px solid #B8973E;
     outline-offset: 2px;
   }
 }
@@ -43,7 +43,7 @@
 /* Outlined display text used by the dark marquee band (token: background). */
 .text-stroke-light {
   color: transparent;
-  -webkit-text-stroke: 1.5px rgba(243, 245, 241, 0.55);
+  -webkit-text-stroke: 1.5px rgba(244, 243, 239, 0.55);
 }
 
 /* ------------------------------------------------------------------ */
@@ -73,7 +73,7 @@
 /* Works under reduced motion too, just without the slide.             */
 /* ------------------------------------------------------------------ */
 .faq-underline {
-  background-image: linear-gradient(90deg, rgba(217, 154, 43, 0.9) 50%, transparent 50%);
+  background-image: linear-gradient(90deg, rgba(184, 151, 62, 0.9) 50%, transparent 50%);
   background-size: 200% 1px;
   background-repeat: no-repeat;
   background-position: 100% 100%;
@@ -263,11 +263,11 @@
   .text-shimmer {
     background-image: linear-gradient(
       110deg,
-      #D99A2B 0%,
-      #D99A2B 40%,
-      #F3F5F1 50%,
-      #D99A2B 60%,
-      #D99A2B 100%
+      #B8973E 0%,
+      #B8973E 40%,
+      #F4F3EF 50%,
+      #B8973E 60%,
+      #B8973E 100%
     );
     background-size: 300% 100%;
     background-position: 100% 0;
@@ -290,7 +290,7 @@
       transition: opacity 0.6s ease;
       background: radial-gradient(
         640px circle at var(--mx, 60%) var(--my, 40%),
-        rgba(217, 154, 43, 0.12),
+        rgba(184, 151, 62, 0.12),
         transparent 70%
       );
     }
@@ -310,10 +310,10 @@
   @keyframes ribbon-glow {
     0%,
     100% {
-      filter: drop-shadow(0 0 2px rgba(217, 154, 43, 0.4));
+      filter: drop-shadow(0 0 2px rgba(184, 151, 62, 0.4));
     }
     50% {
-      filter: drop-shadow(0 0 9px rgba(217, 154, 43, 0.9));
+      filter: drop-shadow(0 0 9px rgba(184, 151, 62, 0.9));
     }
   }
 
@@ -439,19 +439,19 @@
     }
     .spot-card:hover {
       transform: translateY(-4px);
-      box-shadow: 0 18px 40px -18px rgba(27, 58, 75, 0.35);
+      box-shadow: 0 18px 40px -18px rgba(15, 30, 55, 0.35);
     }
     .spot-card:hover::before,
     .spot-card:hover::after {
       opacity: 1;
     }
     .spot-card-light {
-      --spot-border: rgba(217, 154, 43, 0.65);
-      --spot-fill: rgba(217, 154, 43, 0.07);
+      --spot-border: rgba(184, 151, 62, 0.65);
+      --spot-fill: rgba(184, 151, 62, 0.07);
     }
     .spot-card-dark {
-      --spot-border: rgba(217, 154, 43, 0.55);
-      --spot-fill: rgba(243, 245, 241, 0.05);
+      --spot-border: rgba(184, 151, 62, 0.55);
+      --spot-fill: rgba(244, 243, 239, 0.05);
     }
   }
 }
