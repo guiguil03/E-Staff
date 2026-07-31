@@ -1,6 +1,9 @@
+'use client'
 import Link from 'next/link'
+import { useRef, useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { RegistrationForm } from '@/components/RegistrationForm'
 
 /** Mono status badge — typographic stand-in for the client's emoji markers. */
 function StatutBadge({ children }: { children: string }) {
@@ -51,7 +54,26 @@ const DFP = [
   },
 ] as const
 
+const SEGMENTS = [
+  { value: 'delf-dalf', label: 'DELF / DALF' },
+  { value: 'tef-canada', label: 'TEF Canada / TCF' },
+  { value: 'dfp', label: 'DFP' },
+] as const
+
+type Segment = (typeof SEGMENTS)[number]['value']
+
 export default function ExamensPage() {
+  const [segment, setSegment] = useState<Segment>('delf-dalf')
+  const formRef = useRef<HTMLDivElement>(null)
+
+  function openTest(seg: Segment) {
+    setSegment(seg)
+    // rAF so the ref exists after any conditional render triggered by state.
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
   return (
     <main className="mx-auto max-w-2xl px-4 py-12">
       <p className="mb-3 font-mono text-xs uppercase tracking-widest text-accent">
@@ -89,8 +111,8 @@ export default function ExamensPage() {
           </StatutBadge>
         </p>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-          <Button href="/contact" variant="accent">
-            S&apos;inscrire à la préparation DELF/DALF
+          <Button variant="accent" onClick={() => openTest('delf-dalf')}>
+            Passer le test — DELF/DALF
           </Button>
           <Button href="/contact" variant="ghost">
             Réserver mon évaluation initiale
@@ -110,8 +132,8 @@ export default function ExamensPage() {
           <StatutBadge>Préparations ouvertes — boost spécial immigration</StatutBadge>
         </p>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-          <Button href="/contact" variant="accent">
-            Maximiser mon score TEF/TCF
+          <Button variant="accent" onClick={() => openTest('tef-canada')}>
+            Passer le test — TEF/TCF
           </Button>
           <Button href="/contact" variant="ghost">
             Réserver ma session d&apos;entraînement
@@ -144,10 +166,51 @@ export default function ExamensPage() {
           ))}
         </div>
         <div className="mt-6">
-          <Button href="/contact" variant="accent">
-            Rejoindre une cohorte DFP
+          <Button variant="accent" onClick={() => openTest('dfp')}>
+            Passer le test — Rejoindre une cohorte DFP
           </Button>
         </div>
+      </section>
+
+      {/* ------------------------------------------------------------ */}
+      {/* Coordonnées & test — one shared form, segmented by exam track */}
+      {/* ------------------------------------------------------------ */}
+      <section
+        ref={formRef}
+        id="inscription"
+        className="mb-12 rounded-2xl border border-primary/15 bg-white p-6 shadow-sm md:p-8"
+      >
+        <p className="mb-1 font-mono text-xs uppercase tracking-widest text-accent">
+          Avant de passer le test
+        </p>
+        <h2 className="text-xl mb-4">Vos coordonnées</h2>
+        <p className="mb-5 text-sm text-muted">
+          Le test est le même pour les trois types d&apos;examens : choisissez d&apos;abord
+          la préparation qui vous concerne, puis renseignez vos coordonnées pour commencer.
+        </p>
+        <div role="tablist" aria-label="Type d'examen" className="mb-6 flex flex-wrap gap-2">
+          {SEGMENTS.map((s) => (
+            <button
+              key={s.value}
+              type="button"
+              role="tab"
+              aria-selected={segment === s.value}
+              onClick={() => setSegment(s.value)}
+              className={`rounded-full border px-4 py-1.5 font-mono text-xs uppercase tracking-wide motion-safe:transition motion-safe:duration-200 ${
+                segment === s.value
+                  ? 'border-primary bg-primary text-white'
+                  : 'border-muted/40 text-muted hover:border-primary/40 hover:text-primary'
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <RegistrationForm
+          key={segment}
+          segment={segment}
+          ctaLabel={`Passer mon test — ${SEGMENTS.find((s) => s.value === segment)?.label}`}
+        />
       </section>
 
       {/* ------------------------------------------------------------ */}
