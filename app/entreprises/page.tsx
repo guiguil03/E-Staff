@@ -3,7 +3,6 @@ import type { CSSProperties } from 'react'
 import { Button } from '@/components/ui/Button'
 import { ContactForm } from '@/components/ContactForm'
 import { Reveal } from '@/components/Reveal'
-import { MarqueeBand } from '@/components/MarqueeBand'
 import { SpotlightCard } from '@/components/SpotlightCard'
 import { Carousel } from '@/components/Carousel'
 import {
@@ -513,21 +512,6 @@ export default function EntreprisesPage() {
           </Reveal>
         </div>
       </section>
-
-      {/* Marquee band — the standards, dark with outlined type */}
-      <MarqueeBand
-        items={[
-          'Niveau C1 certifié par examens officiels',
-          'Reporting hebdomadaire',
-          'Zéro turnover',
-          'Infrastructure sécurisée',
-          'Encadrement managérial constant',
-        ]}
-        variant="dark"
-        duration={44}
-        direction="right"
-        tilt
-      />
 
       {/* ============================================================ */}
       {/* Options de collaboration — lots de 10 & missions ponctuelles */}
