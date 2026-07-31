@@ -5,6 +5,7 @@ import { QuoteBlock } from '@/components/ui/QuoteBlock'
 import { LanguageRibbon } from '@/components/LanguageRibbon'
 import { ContactForm } from '@/components/ContactForm'
 import { Reveal } from '@/components/Reveal'
+import { StudioMetier } from '@/components/StudioMetier'
 import { GateSchema, SealSchema, EnvelopeSchema } from '@/components/Schemas'
 import {
   ActKicker,
@@ -275,6 +276,27 @@ export default function CarrieresPage() {
               </Reveal>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* Studio Métier — les 10 métiers accessibles à C1, groupés en   */}
+      {/* missions long terme / court terme, chacun menant au test      */}
+      {/* ============================================================ */}
+      <section id="studio-metier" className="relative overflow-hidden bg-background">
+        <ChapterBreak />
+        <div className="relative mx-auto max-w-5xl px-4 pb-16 pt-12 md:pb-20 md:pt-16">
+          <Reveal>
+            <p className="mb-3 font-display text-lg italic text-muted">Postuler à un métier</p>
+            <h2 className="mb-5 text-4xl md:text-6xl">Studio Métier</h2>
+            <p className="mb-10 max-w-2xl text-muted">
+              Une fois le niveau C1 en poche, dix métiers recherchés par nos clients
+              s&apos;ouvrent à vous — cinq engagements de long terme, cinq missions plus
+              courtes et créatives. Choisissez le vôtre pour découvrir la marche à suivre
+              et passer votre test.
+            </p>
+          </Reveal>
+          <StudioMetier />
         </div>
       </section>
 
