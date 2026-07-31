@@ -5,7 +5,6 @@ import { QuoteBlock } from '@/components/ui/QuoteBlock'
 import { Reveal } from '@/components/Reveal'
 import { HeroRibbon } from '@/components/HeroRibbon'
 import { HeroFX } from '@/components/HeroFX'
-import { MarqueeBand } from '@/components/MarqueeBand'
 import { NetworkSchema, StaircaseSchema } from '@/components/Schemas'
 import {
   ActKicker,
@@ -146,7 +145,7 @@ export default function HomePage() {
 
             <div className="hero-rise mt-8" style={{ '--d': '800ms' } as CSSProperties}>
               <Button href="/offres/carrieres" variant="accent">
-                Passer le test & rejoindre e-Staf
+                Créer un compte
               </Button>
             </div>
 
@@ -171,24 +170,25 @@ export default function HomePage() {
       {/* ============================================================ */}
       <TrustStrip items={TRUST_ITEMS} />
 
-      {/* Marquee — the site's signature moving band, exam names */}
-      <MarqueeBand items={['DELF / DALF', 'TEF Canada / TCF', 'DFP', 'Programme FOL']} variant="accent" />
-
       {/* ============================================================ */}
-      {/* Deux espaces — the site's two tunnels                        */}
+      {/* Notre vision — the site's two tunnels                        */}
       {/* ============================================================ */}
-      <section id="espaces" className="relative overflow-hidden bg-background">
+      <section id="vision" className="relative overflow-hidden bg-background">
         <ActWatermark level="01" side="right" />
         <div className="relative mx-auto max-w-5xl px-4 pb-12 pt-16 md:pb-16 md:pt-24">
           <Reveal>
-            <ActKicker>Deux portes d&apos;entrée</ActKicker>
+            <ActKicker>Un pont entre deux ambitions</ActKicker>
             <h2 className="mb-4 text-3xl md:text-5xl">
-              <SplitWords text="Deux espaces, une même identité" />
+              <SplitWords text="Notre vision" />
             </h2>
+            <p className="mb-3 max-w-2xl text-muted">
+              Notre seul et unique objectif, c&apos;est l&apos;impact : permettre à tout un
+              chacun de choisir sa trajectoire de vie et de concrétiser ses rêves.
+            </p>
             <p className="max-w-2xl text-muted">
-              Que vous soyez un talent freiné par vos compétences linguistiques ou une
-              entreprise freinée par les risques de l&apos;externalisation, votre porte
-              d&apos;entrée est ici.
+              C&apos;est pour cela qu&apos;e-Staf est avant tout un espace d&apos;émancipation
+              et de révélation du potentiel humain. Au-delà de l&apos;externalisation, nous
+              bâtissons un pont solide entre deux ambitions :
             </p>
           </Reveal>
         </div>
@@ -214,12 +214,11 @@ export default function HomePage() {
                   « Des agents qualifiés au service de vos ambitions. »
                 </h3>
                 <p className="mb-8 text-sm leading-relaxed text-background/80 md:text-base">
-                  Fini les craintes liées aux infrastructures, au turnover et aux manques de
-                  qualification. Adieu les casse-têtes du recrutement et les coupures
-                  imprévues. Chez e-Staf, nous vous offrons une solution clé en main : un
-                  vivier de talents formés pour une maîtrise linguistique irréprochable, des
-                  locaux équipés et un encadrement managérial rigoureux. Un seul objectif :
-                  simplifier et sécuriser vos opérations d&apos;externalisation.
+                  Nous offrons un prolongement naturel à cette exigence humaine. En vous
+                  garantissant des profils formés, et managés avec rigueur, des
+                  infrastructures sécurisées pour vous permettre de grandir en toute
+                  confiance, en sachant que chaque collaborateur qui vous rejoint est un
+                  talent pleinement épanoui et prêt à donner le meilleur de lui-même.
                 </p>
                 <p className="mb-8 text-sm leading-relaxed text-background/80 md:text-base">
                   Confier vos activités n&apos;est pas un jeu. Pour vous offrir une
@@ -250,12 +249,8 @@ export default function HomePage() {
                   « Votre carrière de rêve en quelques clics. »
                 </h3>
                 <p className="mb-4 text-sm leading-relaxed text-muted md:text-base">
-                  Vous êtes un(e) professionnel(le) conscient(e) que la seule barrière entre
-                  vous et votre carrière rêvée, c&apos;est la maîtrise de la langue ? Marre
-                  de suivre des cours théoriques de gauche à droite ? Vous savez pertinemment
-                  ce qu&apos;il vous faut : une réelle montée en compétences pour aligner vos
-                  diplômes et votre expertise aux besoins exigeants du marché du travail
-                  actuel.
+                  Nous portons des accompagnements sur-mesure pour révéler le meilleur de
+                  chacun, en toute autonomie :
                 </p>
                 <div className="mb-4 border-l-4 border-accent bg-background p-4">
                   <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-muted">
@@ -280,11 +275,23 @@ export default function HomePage() {
                 </p>
                 <div className="mt-auto pt-2">
                   <Button href="/offres/carrieres" variant="primary">
-                    Passer le test & rejoindre e-Staf
+                    Créer un compte
                   </Button>
                 </div>
               </div>
             </div>
+          </Reveal>
+        </div>
+
+        <div className="relative mx-auto max-w-2xl px-4 py-14 text-center md:py-20">
+          <Reveal>
+            <p className="font-display text-xl leading-snug text-ink md:text-2xl">
+              Ici, chaque parcours compte. Chaque ambition valorisée et chaque talent
+              accompagné.
+            </p>
+            <p className="mt-3 text-sm leading-relaxed text-muted md:text-base">
+              Nous sommes là pour grandir ensemble, sans compromis et avec le cœur.
+            </p>
           </Reveal>
         </div>
       </section>
