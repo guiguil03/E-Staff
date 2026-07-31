@@ -5,7 +5,6 @@ import { QuoteBlock } from '@/components/ui/QuoteBlock'
 import { LanguageRibbon } from '@/components/LanguageRibbon'
 import { ContactForm } from '@/components/ContactForm'
 import { Reveal } from '@/components/Reveal'
-import { MarqueeBand } from '@/components/MarqueeBand'
 import { GateSchema, SealSchema, EnvelopeSchema } from '@/components/Schemas'
 import {
   ActKicker,
@@ -167,7 +166,7 @@ export default function CarrieresPage() {
             </p>
           </div>
           <Button href="#contact" variant="accent">
-            Passer le test & rejoindre e-Staf
+            Créer un compte
           </Button>
         </div>
       </section>
@@ -278,9 +277,6 @@ export default function CarrieresPage() {
           </div>
         </div>
       </section>
-
-      {/* Marquee band — the exams the académie prepares */}
-      <MarqueeBand items={['DELF / DALF', 'TEF Canada / TCF', 'DFP', 'Programme FOL']} variant="accent" />
 
       {/* ============================================================ */}
       {/* Parcours vérifiés — Fara + avis candidats                    */}
