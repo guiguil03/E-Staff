@@ -21,6 +21,16 @@ export interface CommentDTO {
   createdAt: string
 }
 
+/** Site-wide testimonial (Communauté page) — same moderated, one-way shape
+ * as CommentDTO (submit → pending → shown only once approved), but not tied
+ * to an article slug. */
+export interface TestimonialDTO {
+  id: string
+  author: PublicPerson
+  body: string
+  createdAt: string
+}
+
 export interface ContactMessageDTO {
   id: string
   firstName: string

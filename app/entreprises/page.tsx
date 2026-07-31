@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import type { Metadata } from 'next'
 import type { CSSProperties } from 'react'
 import { Button } from '@/components/ui/Button'
@@ -644,7 +645,14 @@ export default function EntreprisesPage() {
         <div className="relative mx-auto max-w-5xl px-4 pb-16 pt-10 md:pb-20 md:pt-14">
           <Reveal>
             <p className="mb-2 font-display text-lg italic text-muted">Ce qu&apos;ils en disent</p>
-            <h2 className="mb-10 text-3xl md:text-5xl">Avis partenaires</h2>
+            <h2 className="mb-4 text-3xl md:text-5xl">Avis partenaires</h2>
+            <p className="mb-10 text-sm text-muted">
+              Envie de voir nos talents en action avant de vous engager ?{' '}
+              <Link href="/communaute" className="text-primary underline">
+                Découvrir nos meilleurs talents
+              </Link>{' '}
+              sur la vitrine communauté e-Staf.
+            </p>
           </Reveal>
           <div className="flex flex-col">
             {TESTIMONIALS.map((t, i) => {

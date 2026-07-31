@@ -6,6 +6,7 @@ const NAV = [
   { href: '/offres/examens', label: 'Se préparer aux examens' },
   { href: '/offres/carrieres', label: 'Candidater' },
   { href: '/entreprises', label: 'Proposer un partenariat' },
+  { href: '/communaute', label: 'Communauté' },
 ]
 
 export function Header() {
