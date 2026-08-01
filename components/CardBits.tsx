@@ -33,6 +33,7 @@ export function FoldCard({
   actionLabel,
   active = false,
   onClick,
+  compact = false,
   className = '',
 }: {
   tone?: Tone
@@ -42,12 +43,16 @@ export function FoldCard({
   actionLabel?: string
   active?: boolean
   onClick?: () => void
+  /** Smaller icon badge + body text, for narrow grids (3-4 per row) where the
+   * default text-lg title has little room to breathe — see the "Notre
+   * vision" talent/entreprise cards on the home page. */
+  compact?: boolean
   className?: string
 }) {
   const t = TONE[tone]
-  const shared = `group relative flex h-full w-full flex-col overflow-hidden rounded-2xl border bg-white p-5 text-left shadow-sm motion-safe:transition motion-safe:duration-200 motion-safe:hover:-translate-y-0.5 ${
-    active ? `border-transparent ring-2 ${t.ring} shadow-md` : 'border-muted/15 hover:shadow-md'
-  } ${className}`
+  const shared = `group relative flex h-full w-full flex-col overflow-hidden rounded-2xl border bg-white text-left shadow-sm motion-safe:transition motion-safe:duration-200 motion-safe:hover:-translate-y-0.5 ${
+    compact ? 'p-4' : 'p-5'
+  } ${active ? `border-transparent ring-2 ${t.ring} shadow-md` : 'border-muted/15 hover:shadow-md'} ${className}`
 
   const inner = (
     <>
@@ -59,13 +64,23 @@ export function FoldCard({
       {icon && (
         <span
           aria-hidden="true"
-          className={`relative mb-4 mt-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-2.5 ${t.soft} ${t.text}`}
+          className={`relative mt-1 inline-flex shrink-0 items-center justify-center rounded-full ${
+            compact ? 'mb-3 h-9 w-9 p-2' : 'mb-4 h-11 w-11 p-2.5'
+          } ${t.soft} ${t.text}`}
         >
           {icon}
         </span>
       )}
-      <h3 className="relative mb-1.5 font-display text-lg leading-snug text-ink">{title}</h3>
-      <p className="relative text-sm text-muted">{description}</p>
+      <h3
+        className={`relative mb-1.5 break-words font-display leading-snug text-ink ${
+          compact ? 'text-base' : 'text-lg'
+        }`}
+        style={{ hyphens: 'auto' }}
+        lang="fr"
+      >
+        {title}
+      </h3>
+      {description && <p className="relative text-sm text-muted">{description}</p>}
       {actionLabel && (
         <span className={`relative mt-4 inline-flex items-center gap-1.5 text-sm font-medium ${t.text}`}>
           {actionLabel}

@@ -233,3 +233,106 @@ export function IconUpload({ className = '' }: IconProps) {
     className
   )
 }
+
+/* ------------------------------------------------------------------ */
+/* Added for the "Notre vision" columns and the "Notre parcours"       */
+/* roadmap (01-reference.png / 02-reference.png): abstract, sober       */
+/* marks in the same single-stroke language as the icons above — never  */
+/* literal clip-art.                                                    */
+/* ------------------------------------------------------------------ */
+
+/** Du côté des Talents — an abstract dove: two wing sweeps meeting at a
+ * body point, a small head dot. Elegant stand-in for "potential in flight". */
+export function IconDove({ className = '' }: IconProps) {
+  return icon(
+    <>
+      <path d="M2.5 14 C6 9 9.5 9 12 12.5 C14.5 9 18 9 21.5 14" />
+      <path d="M12 12.5 V17.5" />
+      <circle cx="12" cy="8.6" r="1.1" fill="currentColor" stroke="none" />
+    </>,
+    className
+  )
+}
+
+/** Du côté des Entreprises — two overlapping abstract gears (radiating
+ * spokes on a ring, same idiom as IconSpotlight), for "structure". */
+export function IconGearDuo({ className = '' }: IconProps) {
+  return icon(
+    <>
+      <circle cx="9.3" cy="10" r="4.6" />
+      <path d="M9.3 3.6 V5.4 M9.3 14.6 V16.4 M2.7 10 H4.5 M14.1 10 H15.9 M4.9 5.6 L6.2 6.9 M12.4 13.1 L13.7 14.4 M13.7 5.6 L12.4 6.9 M6.2 13.1 L4.9 14.4" />
+      <circle cx="16.8" cy="16.5" r="3" />
+      <path d="M16.8 11.9 V13.1 M16.8 19.9 V21.1 M12.2 16.5 H13.4 M20.2 16.5 H21.4" />
+    </>,
+    className
+  )
+}
+
+/** Se préparer aux examens — a certificate: document with a hanging
+ * ribbon seal. */
+export function IconCertificate({ className = '' }: IconProps) {
+  return icon(
+    <>
+      <rect x="3" y="4" width="18" height="12" rx="1.5" />
+      <path d="M6.5 8 H17.5 M6.5 11 H13.5" />
+      <path d="M9.5 16 L9 21 L12 19.2 L15 21 L14.5 16" strokeLinejoin="round" />
+    </>,
+    className
+  )
+}
+
+/** Découvrir nos meilleurs talents — a person silhouette with a star,
+ * for excellence rather than a literal trophy. */
+export function IconPersonStar({ className = '' }: IconProps) {
+  return icon(
+    <>
+      <circle cx="12" cy="8" r="3.2" />
+      <path d="M5.5 20 C6.3 15.8 8.8 13.6 12 13.6 C15.2 13.6 17.7 15.8 18.5 20" />
+      <path d="M12 1.9 L12.7 3.5 L14.4 3.7 L13.1 4.8 L13.5 6.5 L12 5.6 L10.5 6.5 L10.9 4.8 L9.6 3.7 L11.3 3.5 Z" strokeLinejoin="round" />
+    </>,
+    className
+  )
+}
+
+/** Roadmap 01 — évaluation initiale: a clipboard with a check. */
+export function IconClipboardCheck({ className = '' }: IconProps) {
+  return icon(
+    <>
+      <rect x="5" y="4.5" width="14" height="17" rx="1.5" />
+      <path d="M9 4.5 V3.3 a1.2 1.2 0 0 1 1.2 -1.2 h3.6 a1.2 1.2 0 0 1 1.2 1.2 V4.5" />
+      <path d="M8.5 13 L11 15.5 L15.7 10" />
+    </>,
+    className
+  )
+}
+
+/** Roadmap 02 — montée en compétence: a brain lobe paired with a small
+ * gear, for "trained skill + mechanism". */
+export function IconBrainGear({ className = '' }: IconProps) {
+  return icon(
+    <>
+      <path d="M9 4.6 C6.4 4.6 4.6 6.6 4.9 9 C3.4 9.9 3.2 12.3 4.7 13.4 C4.3 15.6 6 17.4 8.2 17 C8.7 18.5 11.3 18.6 11.9 17 V6 C11.5 5.1 10.2 4.6 9 4.6 Z" strokeLinejoin="round" />
+      <path d="M9 8 V14 M6.6 9.4 H9 M9 11.6 H6.9" />
+      <circle cx="18" cy="17" r="2.6" />
+      <path d="M18 12.4 V13.6 M18 20.4 V21.6 M13.4 17 H14.6 M21.4 17 H22.6 M14.9 13.9 L15.7 14.7 M20.3 19.3 L21.1 20.1 M20.3 14.7 L21.1 13.9 M14.9 20.1 L15.7 19.3" />
+    </>,
+    className
+  )
+}
+
+/** Roadmap 03 — certification & placement: a graduation cap. */
+export function IconGraduationCap({ className = '' }: IconProps) {
+  return icon(
+    <>
+      <path d="M2.5 9.5 L12 5 L21.5 9.5 L12 14 Z" strokeLinejoin="round" />
+      <path d="M6.5 11.4 V16 C6.5 17.7 9 19 12 19 C15 19 17.5 17.7 17.5 16 V11.4" />
+      <path d="M21.5 9.5 V15" />
+    </>,
+    className
+  )
+}
+
+/** Small connector chevron between roadmap steps. */
+export function IconChevron({ className = '' }: IconProps) {
+  return icon(<path d="M9 5 L16 12 L9 19" />, className)
+}
