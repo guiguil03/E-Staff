@@ -1,5 +1,18 @@
-import type { ReactNode } from 'react'
+import type { HTMLAttributes, ReactNode } from "react";
 
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`border border-muted/40 rounded p-5 bg-white ${className}`.trim()}>{children}</div>
+interface CardProps extends HTMLAttributes<HTMLDivElement> {
+  children: ReactNode;
+  className?: string;
+}
+
+// Simple bordered white card — generic container for the light universe.
+export default function Card({ children, className = "", ...rest }: CardProps) {
+  return (
+    <div
+      className={`rounded border border-primary/10 bg-white p-6 ${className}`.trim()}
+      {...rest}
+    >
+      {children}
+    </div>
+  );
 }
