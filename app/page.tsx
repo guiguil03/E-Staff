@@ -1,11 +1,24 @@
 import Link from 'next/link'
-import { type CSSProperties } from 'react'
+import { type CSSProperties, type ReactNode } from 'react'
 import { Button } from '@/components/ui/Button'
 import { QuoteBlock } from '@/components/ui/QuoteBlock'
 import { Reveal } from '@/components/Reveal'
 import { HeroRibbon } from '@/components/HeroRibbon'
 import { HeroFX } from '@/components/HeroFX'
-import { NetworkSchema, StaircaseSchema } from '@/components/Schemas'
+import { FoldCard, type Tone } from '@/components/CardBits'
+import {
+  IconBrainGear,
+  IconBriefcase,
+  IconCertificate,
+  IconChevron,
+  IconClipboardCheck,
+  IconDove,
+  IconGearDuo,
+  IconGraduationCap,
+  IconHandshake,
+  IconMic,
+  IconPersonStar,
+} from '@/components/Icons'
 import {
   ActKicker,
   ActWatermark,
@@ -36,6 +49,29 @@ const TRUST_ITEMS = [
   'Zéro turnover garanti',
   'Niveau C1 certifié',
 ] as const
+
+// "Du côté des Talents" / "Du côté des Entreprises" — the short card-format
+// items from 01-reference.png. Real, existing site sections, not invented
+// facts: each title mirrors an actual nav/CTA label already used elsewhere
+// (Header's "Se préparer aux examens", the FOL programme, /offres/carrieres,
+// the Vitrine des Talents, /entreprises) — see CAHIER-DES-CHARGES-eSTAF.md.
+const TALENT_CARDS: { title: string; icon: ReactNode }[] = [
+  { title: 'Se préparer aux examens internationaux', icon: <IconCertificate /> },
+  { title: 'Se former aux FOL — Français : Oratoire des Leaders', icon: <IconMic /> },
+  { title: 'Postuler à un métier', icon: <IconBriefcase /> },
+]
+const ENTREPRISE_CARDS: { title: string; icon: ReactNode }[] = [
+  { title: 'Découvrir nos meilleurs talents', icon: <IconPersonStar /> },
+  { title: 'Découvrir nos offres B2B', icon: <IconHandshake /> },
+]
+
+// Roadmap panel tones — brand tokens only, per 02-reference.png's three
+// saturated color panels (navy → green → gold instead of white cards).
+const ROADMAP_TONE: Record<Tone, { bg: string; text: string; sub: string; badge: string }> = {
+  primary: { bg: 'bg-primary', text: 'text-background', sub: 'text-background/75', badge: 'bg-background/10 text-background' },
+  success: { bg: 'bg-success', text: 'text-background', sub: 'text-background/80', badge: 'bg-background/15 text-background' },
+  accent: { bg: 'bg-accent', text: 'text-ink', sub: 'text-ink/75', badge: 'bg-ink/10 text-ink' },
+}
 
 export default function HomePage() {
   return (
@@ -171,21 +207,181 @@ export default function HomePage() {
       <TrustStrip items={TRUST_ITEMS} />
 
       {/* ============================================================ */}
-      {/* Notre vision — the site's two tunnels                        */}
+      {/* Notre Parcours d'Équivalences & d'Intégration — 3-step roadmap */}
+      {/* (02-reference.png): replaces the old "stock chart" curve as    */}
+      {/* the homepage's literal glance-proof device. HeroRibbon stays   */}
+      {/* small and decorative inside the hero itself.                  */}
+      {/* ============================================================ */}
+      <section id="parcours" className="relative overflow-hidden bg-background">
+        <ActWatermark level="01" side="right" />
+        <div className="relative mx-auto max-w-6xl px-4 py-16 md:py-24">
+          <Reveal>
+            <ActKicker>La preuve en un coup d&apos;œil</ActKicker>
+            <h2 className="mb-3 text-3xl md:text-5xl">
+              <SplitWords text="Notre Parcours d'Équivalences & d'Intégration" />
+            </h2>
+            <p className="mb-10 max-w-2xl text-muted md:mb-14">
+              Un filtre exigeant pour les entreprises, un tremplin garanti pour les
+              candidats.
+            </p>
+          </Reveal>
+
+          <div className="grid gap-6 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:items-stretch md:gap-3">
+            {/* Step 01 — primary (navy) */}
+            <Reveal from="up">
+              <div className={`flex h-full flex-col rounded-2xl p-6 shadow-md md:p-7 ${ROADMAP_TONE.primary.bg}`}>
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <h3 className={`font-display text-lg leading-snug md:text-xl ${ROADMAP_TONE.primary.text}`}>
+                    <span className="font-mono text-sm tracking-widest">01.</span> Évaluation
+                    initiale &amp; diagnostic
+                  </h3>
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${ROADMAP_TONE.primary.badge}`}
+                  >
+                    <IconClipboardCheck className="h-6 w-6" />
+                  </span>
+                </div>
+                <p className={`mb-4 text-sm leading-relaxed ${ROADMAP_TONE.primary.sub}`}>
+                  Niveau d&apos;entrée : B1 à B2 (Bases solides mais non prêt pour la prod)
+                </p>
+                <ul className={`space-y-3 text-sm leading-relaxed ${ROADMAP_TONE.primary.sub}`}>
+                  <li>
+                    <strong className={ROADMAP_TONE.primary.text}>Action :</strong> Test
+                    linguistique et comportemental ciblé par métier.
+                  </li>
+                  <li>
+                    <strong className={ROADMAP_TONE.primary.text}>Résultat :</strong>{' '}
+                    Identification précise des lacunes (élocution, fluidité, gestion du
+                    stress, posture professionnelle).
+                  </li>
+                </ul>
+              </div>
+            </Reveal>
+
+            <span aria-hidden="true" className="hidden items-center justify-center text-muted/60 md:flex md:self-center">
+              <IconChevron className="h-6 w-6" />
+            </span>
+
+            {/* Step 02 — success (green) */}
+            <Reveal from="up" delay={100}>
+              <div className={`flex h-full flex-col rounded-2xl p-6 shadow-md md:p-7 ${ROADMAP_TONE.success.bg}`}>
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <h3 className={`font-display text-lg leading-snug md:text-xl ${ROADMAP_TONE.success.text}`}>
+                    <span className="font-mono text-sm tracking-widest">02.</span> Montée en
+                    compétence &amp; bootcamp de posture
+                  </h3>
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${ROADMAP_TONE.success.badge}`}
+                  >
+                    <IconBrainGear className="h-6 w-6" />
+                  </span>
+                </div>
+                <ul className={`space-y-3 text-sm leading-relaxed ${ROADMAP_TONE.success.sub}`}>
+                  <li>
+                    <strong className={ROADMAP_TONE.success.text}>Action :</strong>{' '}
+                    Orientation vers le Programme FOL ou nos modules intensifs
+                    d&apos;académie.
+                  </li>
+                  <li>
+                    <strong className={ROADMAP_TONE.success.text}>Focus :</strong>
+                    <ul className="mt-2 space-y-2 pl-4">
+                      <li className="list-disc marker:text-background/50">
+                        <strong className={ROADMAP_TONE.success.text}>
+                          Excellence Linguistique :
+                        </strong>{' '}
+                        Maîtrise des nuances, correction phonétique et syntaxique.
+                      </li>
+                      <li className="list-disc marker:text-background/50">
+                        <strong className={ROADMAP_TONE.success.text}>
+                          Posture Professionnelle &amp; Soft Skills :
+                        </strong>{' '}
+                        Assurance à l&apos;oral, gestion des objections client, rigueur
+                        B2B et culture d&apos;entreprise.
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
+              </div>
+            </Reveal>
+
+            <span aria-hidden="true" className="hidden items-center justify-center text-muted/60 md:flex md:self-center">
+              <IconChevron className="h-6 w-6" />
+            </span>
+
+            {/* Step 03 — accent (gold) */}
+            <Reveal from="up" delay={200}>
+              <div className={`flex h-full flex-col rounded-2xl p-6 shadow-md md:p-7 ${ROADMAP_TONE.accent.bg}`}>
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <h3 className={`font-display text-lg leading-snug md:text-xl ${ROADMAP_TONE.accent.text}`}>
+                    <span className="font-mono text-sm tracking-widest">03.</span>{' '}
+                    Certification C1/C2 &amp; placement en production
+                  </h3>
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${ROADMAP_TONE.accent.badge}`}
+                  >
+                    <IconGraduationCap className="h-6 w-6" />
+                  </span>
+                </div>
+                <p className={`mb-4 text-sm leading-relaxed ${ROADMAP_TONE.accent.sub}`}>
+                  Niveau visé : C1 à C2 Certifié (Validation par examens officiels)
+                </p>
+                <ul className={`space-y-3 text-sm leading-relaxed ${ROADMAP_TONE.accent.sub}`}>
+                  <li>
+                    <strong className={ROADMAP_TONE.accent.text}>Déploiement :</strong>{' '}
+                    Intégration immédiate dans des lots d&apos;agents dédiés.
+                  </li>
+                  <li>
+                    <strong className={ROADMAP_TONE.accent.text}>Garantie B2B :</strong>{' '}
+                    Talents immédiatement opérationnels, zéro temps de rodage perdu pour
+                    le client.
+                  </li>
+                </ul>
+              </div>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* Notre vision — the site's two tunnels (01-reference.png):     */}
+      {/* dark banner, iconed column headers, a dashed connector down   */}
+      {/* to a central handshake badge, folded-corner cards per column, */}
+      {/* closing statement.                                            */}
       {/* ============================================================ */}
       <section id="vision" className="relative overflow-hidden bg-background">
-        <ActWatermark level="01" side="right" />
-        <div className="relative mx-auto max-w-5xl px-4 pb-12 pt-16 md:pb-16 md:pt-24">
+        <ActWatermark level="02" side="right" />
+
+        {/* Dark navy banner/seal — adapted from the reference's scalloped */}
+        {/* dome as a rounded-bottom panel, since a clean semicircle clip- */}
+        {/* path would clip the heading's descenders at small widths.      */}
+        <div className="relative z-10 flex justify-center px-4 pt-14 md:pt-20">
+          <div className="relative w-full max-w-xl overflow-hidden rounded-b-[2.5rem] bg-primary px-8 py-8 text-center shadow-lg shadow-primary/25 md:rounded-b-[4rem] md:px-16 md:py-10">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 opacity-[0.06]"
+              style={{ backgroundImage: GRAIN_URI }}
+            />
+            <Reveal>
+              <p className="relative font-display text-2xl font-semibold uppercase tracking-wide text-background md:text-4xl">
+                Notre vision
+              </p>
+              <p className="relative mt-2 font-mono text-[11px] uppercase tracking-widest text-accent md:text-sm">
+                Un pont entre deux ambitions
+              </p>
+            </Reveal>
+          </div>
+        </div>
+
+        <div className="relative mx-auto max-w-3xl px-4 pb-12 pt-8 text-center md:pb-16 md:pt-10">
           <Reveal>
-            <ActKicker>Un pont entre deux ambitions</ActKicker>
-            <h2 className="mb-4 text-3xl md:text-5xl">
-              <SplitWords text="Notre vision" />
-            </h2>
-            <p className="mb-3 max-w-2xl text-muted">
+            <p className="mb-3 text-muted">
               Notre seul et unique objectif, c&apos;est l&apos;impact : permettre à tout un
               chacun de choisir sa trajectoire de vie et de concrétiser ses rêves.
             </p>
-            <p className="max-w-2xl text-muted">
+            <p className="text-muted">
               C&apos;est pour cela qu&apos;e-Staf est avant tout un espace d&apos;émancipation
               et de révélation du potentiel humain. Au-delà de l&apos;externalisation, nous
               bâtissons un pont solide entre deux ambitions :
@@ -193,66 +389,33 @@ export default function HomePage() {
           </Reveal>
         </div>
 
-        {/* Full-bleed split-screen diptych: two doors meeting at a sharp seam. */}
-        <div className="relative grid md:grid-cols-2">
-          <span
+        <div className="relative mx-auto max-w-5xl px-4 pb-16 md:pb-20">
+          {/* Center connector — dashed cross with a handshake badge at the */}
+          {/* intersection, echoing the reference's crosshair. Desktop only. */}
+          <div
             aria-hidden="true"
-            className="absolute inset-y-0 left-1/2 z-10 hidden w-px bg-accent/70 md:block"
-          />
+            className="pointer-events-none absolute left-1/2 top-6 z-0 hidden -translate-x-1/2 md:block"
+          >
+            <span className="absolute left-1/2 top-0 h-24 -translate-x-1/2 border-l-2 border-dashed border-muted/30" />
+            <span className="absolute left-1/2 top-12 w-40 -translate-x-1/2 border-t-2 border-dashed border-muted/30" />
+            <span className="absolute left-1/2 top-12 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-primary shadow-md ring-1 ring-accent/40">
+              <IconHandshake className="h-6 w-6" />
+            </span>
+          </div>
 
-          {/* Door 1 — Entreprises (dark) */}
-          <Reveal from="left" className="h-full">
-            <div className="flex h-full flex-col bg-primary px-4 py-12 md:px-10 md:py-16">
-              <div className="mx-auto flex w-full max-w-lg flex-1 flex-col">
-                <div className="mb-8 flex items-start justify-between gap-6">
-                  <p className="pt-1 font-mono text-xs uppercase tracking-widest text-accent">
-                    Espace entreprises — B2B
-                  </p>
-                  <NetworkSchema className="w-24 shrink-0 text-background md:w-32" />
-                </div>
-                <h3 className="mb-4 font-display text-2xl leading-snug text-background md:text-3xl">
-                  « Des agents qualifiés au service de vos ambitions. »
+          <div className="relative z-10 grid gap-14 md:grid-cols-2 md:gap-16">
+            {/* Talents column */}
+            <Reveal from="left">
+              <div className="flex flex-col items-center text-center md:items-start md:text-left">
+                <IconDove className="h-9 w-9 text-success" />
+                <h3 className="mt-3 font-display text-2xl leading-snug text-ink md:text-3xl">
+                  Du côté des <span className="text-success">Talents</span>
                 </h3>
-                <p className="mb-8 text-sm leading-relaxed text-background/80 md:text-base">
-                  Nous offrons un prolongement naturel à cette exigence humaine. En vous
-                  garantissant des profils formés, et managés avec rigueur, des
-                  infrastructures sécurisées pour vous permettre de grandir en toute
-                  confiance, en sachant que chaque collaborateur qui vous rejoint est un
-                  talent pleinement épanoui et prêt à donner le meilleur de lui-même.
-                </p>
-                <p className="mb-8 text-sm leading-relaxed text-background/80 md:text-base">
-                  Confier vos activités n&apos;est pas un jeu. Pour vous offrir une
-                  tranquillité totale, nous vous donnons accès, une semaine avant la signature
-                  du contrat, à des capsules vidéo exclusives de présentation des profils
-                  sélectionnés pour vous. Vous savez exactement qui vous intégrez.
-                </p>
-                <div className="mt-auto pt-2">
-                  <Button href="/entreprises" variant="accent">
-                    Nous contacter pour un projet d&apos;externalisation
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </Reveal>
-
-          {/* Door 2 — Talents (light) */}
-          <Reveal from="right" delay={100} className="h-full">
-            <div className="flex h-full flex-col bg-white px-4 py-12 md:px-10 md:py-16">
-              <div className="mx-auto flex w-full max-w-lg flex-1 flex-col">
-                <div className="mb-8 flex items-start justify-between gap-6">
-                  <p className="pt-1 font-mono text-xs uppercase tracking-widest text-success">
-                    Espace talents & candidats
-                  </p>
-                  <StaircaseSchema className="w-24 shrink-0 text-primary md:w-32" />
-                </div>
-                <h3 className="mb-4 font-display text-2xl leading-snug text-ink md:text-3xl">
-                  « Votre carrière de rêve en quelques clics. »
-                </h3>
-                <p className="mb-4 text-sm leading-relaxed text-muted md:text-base">
+                <p className="mt-4 text-sm leading-relaxed text-muted md:text-base">
                   Nous portons des accompagnements sur-mesure pour révéler le meilleur de
                   chacun, en toute autonomie :
                 </p>
-                <div className="mb-4 border-l-4 border-accent bg-background p-4">
+                <div className="mt-4 w-full max-w-md border-l-4 border-accent bg-white p-4 text-left">
                   <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-muted">
                     Condition d&apos;accès
                   </p>
@@ -263,27 +426,65 @@ export default function HomePage() {
                     auto-déclaré.
                   </p>
                 </div>
-                <p className="mb-4 text-sm leading-relaxed text-muted md:text-base">
-                  N&apos;ayez aucune crainte : chez e-Staf, nous valorisons l&apos;humain avant
-                  tout. Si vous craignez d&apos;échouer au test, nous sommes là pour vous
-                  rattraper, vous former et vous hisser vers l&apos;excellence — votre
+                <p className="mt-4 text-sm leading-relaxed text-muted md:text-base">
+                  N&apos;ayez aucune crainte : chez e-Staf, nous valorisons l&apos;humain
+                  avant tout. Si vous craignez d&apos;échouer au test, nous sommes là pour
+                  vous rattraper, vous former et vous hisser vers l&apos;excellence — votre
                   potentiel mérite qu&apos;on l&apos;accompagne.
                 </p>
-                <p className="mb-8 text-sm leading-relaxed text-muted md:text-base">
-                  Passez le test, faites votre inscription, et nous, on se chargera de vous
-                  fournir votre courbe de progression en temps réel.
-                </p>
-                <div className="mt-auto pt-2">
+
+                <div className="mt-8 grid w-full grid-cols-1 gap-4 sm:grid-cols-3">
+                  {TALENT_CARDS.map((card) => (
+                    <FoldCard key={card.title} tone="success" icon={card.icon} title={card.title} description="" compact />
+                  ))}
+                </div>
+
+                <div className="mt-8">
                   <Button href="/offres/carrieres" variant="primary">
                     Créer un compte
                   </Button>
                 </div>
               </div>
-            </div>
-          </Reveal>
+            </Reveal>
+
+            {/* Entreprises column */}
+            <Reveal from="right" delay={100}>
+              <div className="flex flex-col items-center text-center md:items-start md:text-left">
+                <IconGearDuo className="h-9 w-9 text-primary" />
+                <h3 className="mt-3 font-display text-2xl leading-snug text-ink md:text-3xl">
+                  Du côté des <span className="text-primary">Entreprises</span>
+                </h3>
+                <p className="mt-4 text-sm leading-relaxed text-muted md:text-base">
+                  Nous offrons un prolongement naturel à cette exigence humaine. En vous
+                  garantissant des profils formés, et managés avec rigueur, des
+                  infrastructures sécurisées pour vous permettre de grandir en toute
+                  confiance, en sachant que chaque collaborateur qui vous rejoint est un
+                  talent pleinement épanoui et prêt à donner le meilleur de lui-même.
+                </p>
+                <p className="mt-4 text-sm leading-relaxed text-muted md:text-base">
+                  Confier vos activités n&apos;est pas un jeu. Pour vous offrir une
+                  tranquillité totale, nous vous donnons accès, une semaine avant la
+                  signature du contrat, à des capsules vidéo exclusives de présentation des
+                  profils sélectionnés pour vous. Vous savez exactement qui vous intégrez.
+                </p>
+
+                <div className="mt-8 grid w-full max-w-sm grid-cols-1 gap-4 sm:grid-cols-2">
+                  {ENTREPRISE_CARDS.map((card) => (
+                    <FoldCard key={card.title} tone="primary" icon={card.icon} title={card.title} description="" compact />
+                  ))}
+                </div>
+
+                <div className="mt-8">
+                  <Button href="/entreprises" variant="accent">
+                    Nous contacter pour un projet d&apos;externalisation
+                  </Button>
+                </div>
+              </div>
+            </Reveal>
+          </div>
         </div>
 
-        <div className="relative mx-auto max-w-2xl px-4 py-14 text-center md:py-20">
+        <div className="relative mx-auto max-w-2xl px-4 pb-14 text-center md:pb-20">
           <Reveal>
             <p className="font-display text-xl leading-snug text-ink md:text-2xl">
               Ici, chaque parcours compte. Chaque ambition valorisée et chaque talent
