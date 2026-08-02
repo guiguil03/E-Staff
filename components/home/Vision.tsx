@@ -39,8 +39,11 @@ function VisionCard({ href, accent, icon, children }: VisionCardProps) {
 
 function CenterConnector() {
   return (
-    <div aria-hidden="true" className="hidden md:flex md:items-center md:justify-center">
-      <div className="relative flex h-40 w-40 items-center justify-center">
+    <div
+      aria-hidden="true"
+      className="hidden md:col-start-2 md:row-start-2 md:flex md:items-center md:justify-center md:self-center md:justify-self-center"
+    >
+      <div className="relative flex h-36 w-36 items-center justify-center">
         <span className="absolute inset-x-0 top-1/2 border-t-2 border-dotted border-primary/20" />
         <span className="absolute inset-y-0 left-1/2 border-l-2 border-dotted border-primary/20" />
         <span className="relative z-10 flex h-14 w-14 items-center justify-center rounded-full border border-primary/20 bg-white shadow-sm">
@@ -67,7 +70,7 @@ export default function Vision() {
         </Reveal>
 
         <Reveal delay={100}>
-          <div className="mx-auto mt-10 max-w-3xl space-y-4 text-center font-sans text-ink">
+          <div className="mx-auto mt-14 max-w-3xl space-y-4 text-center font-sans text-ink sm:mt-16">
             <p>
               Notre seul et unique objectif, c&apos;est l&apos;impact : permettre à tout un
               chacun de choisir sa trajectoire de vie et de concrétiser ses rêves.
@@ -80,8 +83,8 @@ export default function Vision() {
           </div>
         </Reveal>
 
-        <div className="mt-16 grid grid-cols-1 gap-12 md:grid-cols-[1fr_auto_1fr] md:gap-6">
-          <Reveal>
+        <div className="mt-14 grid grid-cols-1 gap-y-10 sm:mt-16 md:grid-cols-[1fr_auto_1fr] md:grid-rows-[auto_auto] md:items-start md:gap-x-6 md:gap-y-10">
+          <Reveal className="md:col-start-1 md:row-start-1">
             <div className="flex flex-col items-center text-center md:items-start md:text-left">
               <DoveIcon className="h-10 w-10 text-success" />
               <h3 className="mt-3 font-display text-2xl font-bold text-primary">
@@ -91,36 +94,38 @@ export default function Vision() {
                 Nous portons des accompagnements sur-mesure pour révéler le meilleur de chacun, en
                 toute autonomie :
               </p>
+            </div>
+          </Reveal>
 
-              <div className="mt-8 grid w-full grid-cols-1 gap-6 sm:grid-cols-3 md:grid-cols-1 lg:grid-cols-3">
-                <VisionCard
-                  href="/offres/examens"
-                  accent="success"
-                  icon={<BadgeDiplomaIcon className="h-full w-full" />}
-                >
-                  Se préparer aux examens internationaux
-                </VisionCard>
-                <VisionCard
-                  href="/offres/fol"
-                  accent="success"
-                  icon={<MicrophoneIcon className="h-full w-full" />}
-                >
-                  Se former aux FOL - Français : Oratoire des Leaders
-                </VisionCard>
-                <VisionCard
-                  href="/offres/carrieres"
-                  accent="success"
-                  icon={<BriefcaseIcon className="h-full w-full" />}
-                >
-                  Postuler à un métier
-                </VisionCard>
-              </div>
+          <Reveal className="md:col-start-1 md:row-start-2">
+            <div className="grid w-full grid-cols-1 gap-6 sm:grid-cols-3 md:grid-cols-1 lg:grid-cols-3">
+              <VisionCard
+                href="/offres/examens"
+                accent="success"
+                icon={<BadgeDiplomaIcon className="h-full w-full" />}
+              >
+                Se préparer aux examens internationaux
+              </VisionCard>
+              <VisionCard
+                href="/offres/fol"
+                accent="success"
+                icon={<MicrophoneIcon className="h-full w-full" />}
+              >
+                Se former aux FOL - Français : Oratoire des Leaders
+              </VisionCard>
+              <VisionCard
+                href="/offres/carrieres"
+                accent="success"
+                icon={<BriefcaseIcon className="h-full w-full" />}
+              >
+                Postuler à un métier
+              </VisionCard>
             </div>
           </Reveal>
 
           <CenterConnector />
 
-          <Reveal delay={100}>
+          <Reveal delay={100} className="md:col-start-3 md:row-start-1">
             <div className="flex flex-col items-center text-center md:items-start md:text-left">
               <GearPairIcon className="h-10 w-10 text-teal" />
               <h3 className="mt-3 font-display text-2xl font-bold text-primary">
@@ -133,29 +138,31 @@ export default function Vision() {
                 qui vous rejoint est un talent pleinement épanoui et prêt à donner le meilleur de
                 lui-même.
               </p>
+            </div>
+          </Reveal>
 
-              <div className="mt-8 grid w-full grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
-                <VisionCard
-                  href="/communaute"
-                  accent="teal"
-                  icon={<StarPersonIcon className="h-full w-full" />}
-                >
-                  Découvrir nos meilleurs talents
-                </VisionCard>
-                <VisionCard
-                  href="/entreprises"
-                  accent="teal"
-                  icon={<HandshakeIcon className="h-full w-full" />}
-                >
-                  Découvrir nos offres B2B
-                </VisionCard>
-              </div>
+          <Reveal delay={100} className="md:col-start-3 md:row-start-2">
+            <div className="grid w-full grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
+              <VisionCard
+                href="/communaute"
+                accent="teal"
+                icon={<StarPersonIcon className="h-full w-full" />}
+              >
+                Découvrir nos meilleurs talents
+              </VisionCard>
+              <VisionCard
+                href="/entreprises"
+                accent="teal"
+                icon={<HandshakeIcon className="h-full w-full" />}
+              >
+                Découvrir nos offres B2B
+              </VisionCard>
             </div>
           </Reveal>
         </div>
 
         <Reveal delay={150}>
-          <div className="mx-auto mt-16 max-w-2xl text-center font-sans font-semibold text-primary">
+          <div className="mx-auto mt-14 max-w-2xl text-center font-sans font-semibold text-primary sm:mt-16">
             <p>Ici, chaque parcours compte. Chaque ambition valorisée et chaque talent accompagné.</p>
             <p className="mt-2">
               Nous sommes là pour grandir ensemble, sans compromis et avec le cœur.

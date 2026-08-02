@@ -2,11 +2,10 @@ import Image from "next/image";
 import Link from "next/link";
 
 const NAV_ITEMS = [
-  { label: "Actualités", href: "/publications" },
-  { label: "Se préparer aux examens", href: "/offres/examens" },
-  { label: "Candidater", href: "/offres/carrieres" },
-  { label: "Proposer un partenariat", href: "/entreprises" },
   { label: "Communauté", href: "/communaute" },
+  { label: "Se préparer aux examens", href: "/offres/examens" },
+  { label: "Proposer un partenariat", href: "/entreprises" },
+  { label: "Se connecter", href: "/connexion" },
 ];
 
 export default function Header() {

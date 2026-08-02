@@ -44,7 +44,7 @@ function Connector() {
 
 export default function Roadmap() {
   return (
-    <section className="bg-background px-4 py-16 sm:px-6 sm:py-20">
+    <section className="bg-background px-4 pb-16 pt-12 sm:px-6 sm:pb-20 sm:pt-16">
       <div className="mx-auto max-w-6xl">
         <Reveal>
           <div className="mx-auto max-w-2xl text-center">
