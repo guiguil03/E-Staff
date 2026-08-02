@@ -1,0 +1,146 @@
+"use client";
+
+import { useState } from "react";
+import Button from "@/components/ui/Button";
+
+interface RegistrationFormProps {
+  /** Identifies which funnel submitted this — e.g. "delf-dalf", "tef-canada",
+   * "dfp", "fol", or a métier slug like "teleconseiller". No database exists
+   * yet; this is included in the (currently-failing) POST payload so the
+   * shape is ready for when a backend exists later. */
+  segment: string;
+  ctaLabel?: string;
+  /** Pass "dark" to render on an obsidian background (FOL / Studio Métier). */
+  tone?: "light" | "dark";
+  className?: string;
+}
+
+export default function RegistrationForm({
+  segment,
+  ctaLabel = "Passer le test",
+  tone = "light",
+  className = "",
+}: RegistrationFormProps) {
+  const [firstName, setFirstName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
+    "idle"
+  );
+
+  const isDark = tone === "dark";
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setStatus("sending");
+    try {
+      const res = await fetch("/api/registrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ segment, firstName, email, phone }),
+      });
+      if (!res.ok) throw new Error("failed");
+      setStatus("sent");
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  if (status === "sent") {
+    return (
+      <div
+        className={`rounded border p-6 ${
+          isDark
+            ? "border-accent/40 bg-obsidianCard text-white"
+            : "border-success/30 bg-success/5 text-ink"
+        } ${className}`.trim()}
+      >
+        <p className="font-display text-lg mb-2">Merci, {firstName || "votre inscription"} est enregistrée.</p>
+        <p className={`text-sm ${isDark ? "text-white/70" : "text-muted"}`}>
+          Le test va commencer. Le résultat ne vous sera pas communiqué
+          immédiatement — vous serez recontacté(e) une fois l&apos;évaluation
+          traitée.
+        </p>
+      </div>
+    );
+  }
+
+  const labelClass = `block text-sm font-medium mb-1 ${
+    isDark ? "text-white/80" : "text-ink"
+  }`;
+  const inputClass = `w-full rounded border px-4 py-2 font-sans text-sm ${
+    isDark
+      ? "border-white/20 bg-obsidian text-white placeholder:text-white/30 focus:border-accent"
+      : "border-muted/30 bg-white text-ink placeholder:text-muted/60 focus:border-primary"
+  } outline-none transition-colors`;
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className={`rounded border p-6 ${
+        isDark ? "border-white/10 bg-obsidianCard" : "border-muted/20 bg-white"
+      } ${className}`.trim()}
+    >
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div>
+          <label className={labelClass} htmlFor={`${segment}-firstname`}>
+            Prénom
+          </label>
+          <input
+            id={`${segment}-firstname`}
+            required
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <label className={labelClass} htmlFor={`${segment}-email`}>
+            Email
+          </label>
+          <input
+            id={`${segment}-email`}
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <label className={labelClass} htmlFor={`${segment}-phone`}>
+            Téléphone
+          </label>
+          <input
+            id={`${segment}-phone`}
+            type="tel"
+            required
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+      </div>
+
+      {status === "error" && (
+        <p className={`mt-3 text-sm ${isDark ? "text-accent" : "text-primary"}`}>
+          Une erreur est survenue. Merci de réessayer plus tard.
+        </p>
+      )}
+
+      <p className={`mt-4 text-xs ${isDark ? "text-white/50" : "text-muted"}`}>
+        Le résultat de ce test ne vous sera pas communiqué immédiatement.
+      </p>
+
+      <div className="mt-4">
+        <Button
+          type="submit"
+          variant={isDark ? "dark" : "primary"}
+          disabled={status === "sending"}
+        >
+          {status === "sending" ? "Envoi..." : ctaLabel}
+        </Button>
+      </div>
+    </form>
+  );
+}
