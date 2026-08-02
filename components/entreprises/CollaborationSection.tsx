@@ -95,14 +95,14 @@ const MISSIONS = [
 export default function CollaborationSection() {
   return (
     <>
-      <section className="bg-background px-4 py-16 sm:px-6 sm:py-20">
+      <section className="bg-obsidian px-4 py-16 sm:px-6 sm:py-20">
         <div className="mx-auto max-w-6xl">
           <Reveal>
             <div className="mx-auto max-w-3xl text-center">
-              <h2 className="font-display text-2xl font-bold text-primary sm:text-3xl md:text-4xl">
+              <h2 className="font-display text-2xl font-bold text-accent sm:text-3xl md:text-4xl">
                 Vos Options de Collaboration
               </h2>
-              <p className="mt-4 font-sans text-base text-ink sm:text-lg">
+              <p className="mt-4 font-sans text-base text-white/70 sm:text-lg">
                 Le recrutement classique est un gouffre financier.
                 L&apos;externalisation d&apos;élite est votre seul levier de
                 croissance réel. Vos chiffres stagnent&nbsp;? On sait tous que
@@ -118,13 +118,13 @@ export default function CollaborationSection() {
 
           <Reveal delay={100}>
             <div className="mt-14">
-              <p className="font-mono text-xs uppercase tracking-widest text-teal">
+              <p className="font-mono text-xs uppercase tracking-widest text-accent">
                 Option 1
               </p>
-              <h3 className="mt-2 font-display text-xl font-bold text-primary sm:text-2xl">
+              <h3 className="mt-2 font-display text-xl font-bold text-white sm:text-2xl">
                 La Squad Long Terme (Lots de 10)
               </h3>
-              <p className="mt-3 max-w-3xl font-sans text-sm text-muted sm:text-base">
+              <p className="mt-3 max-w-3xl font-sans text-sm text-white/60 sm:text-base">
                 Sécurisez votre structure. Intégrez instantanément 10 Setters
                 ou Closers calibrés pour encaisser la charge, tenir la cadence
                 et transformer chaque fichier froid en source de revenus
@@ -143,16 +143,16 @@ export default function CollaborationSection() {
         </div>
       </section>
 
-      <section className="border-t border-primary/10 bg-white px-4 py-16 sm:px-6 sm:py-20">
+      <section className="border-t border-white/10 bg-obsidian px-4 py-16 sm:px-6 sm:py-20">
         <div className="mx-auto max-w-6xl">
           <Reveal>
-            <p className="font-mono text-xs uppercase tracking-widest text-teal">
+            <p className="font-mono text-xs uppercase tracking-widest text-accent">
               Option 2
             </p>
-            <h3 className="mt-2 font-display text-xl font-bold text-primary sm:text-2xl">
+            <h3 className="mt-2 font-display text-xl font-bold text-white sm:text-2xl">
               Missions &amp; Prestations Ponctuelles
             </h3>
-            <p className="mt-3 max-w-3xl font-sans text-sm text-muted sm:text-base">
+            <p className="mt-3 max-w-3xl font-sans text-sm text-white/60 sm:text-base">
               Pas de temps à perdre avec des intermédiaires mous ni
               d&apos;équipe complète à l&apos;année. Confiez vos projets à
               haute exigence à des experts affûtés. Un besoin précis, une

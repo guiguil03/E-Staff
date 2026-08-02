@@ -12,10 +12,10 @@ import { ACCOUNT_ROLES } from "./roles";
 // test / convention / entretien RH → attribution du matricule → accès).
 
 const inputClass =
-  "w-full rounded border border-muted/30 bg-white px-4 py-2 font-sans text-sm text-ink placeholder:text-muted/60 outline-none transition-colors focus:border-primary";
-const labelClass = "block text-sm font-medium mb-1 text-ink";
+  "w-full rounded border border-white/20 bg-obsidian px-4 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none transition-colors focus:border-accent";
+const labelClass = "block text-sm font-medium mb-1 text-white/80";
 const stepBadgeClass =
-  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary font-display text-sm font-semibold text-white";
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent font-display text-sm font-semibold text-obsidian";
 
 export default function AccountCreationForm() {
   const [roleId, setRoleId] = useState("");
@@ -46,12 +46,12 @@ export default function AccountCreationForm() {
 
   if (status === "sent") {
     return (
-      <div className="rounded border border-success/30 bg-success/5 p-6 sm:p-8">
-        <p className="font-display text-lg text-ink">
+      <div className="rounded border border-accent/40 bg-obsidianCard p-6 sm:p-8">
+        <p className="font-display text-lg text-white">
           Merci{firstName ? `, ${firstName}` : ""}. Votre demande est
           enregistrée.
         </p>
-        <p className="mt-2 text-sm text-muted">
+        <p className="mt-2 text-sm text-white/70">
           Un membre de l&apos;équipe RH vous contactera pour la suite du
           processus (test, entretien ou signature selon votre profil).
           Aucun compte n&apos;est actif tant que le numéro matricule ne vous
@@ -64,14 +64,14 @@ export default function AccountCreationForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
       {/* Étape 1 — Profil */}
-      <div className="rounded border border-muted/20 bg-white p-6 sm:p-8">
+      <div className="rounded border border-accent/20 bg-obsidianCard p-6 sm:p-8">
         <div className="flex items-start gap-4">
           <span className={stepBadgeClass}>1</span>
           <div className="min-w-0 flex-1">
-            <h2 className="font-display text-xl font-semibold text-primary">
+            <h2 className="font-display text-xl font-semibold text-accent">
               Choisissez votre profil
             </h2>
-            <p className="mt-1 text-sm text-muted">
+            <p className="mt-1 text-sm text-white/60">
               Sélectionnez le rôle qui correspond à votre situation. Certains
               profils sont réservés et attribués directement par e-Staf.
             </p>
@@ -85,7 +85,7 @@ export default function AccountCreationForm() {
                 required
                 value={roleId}
                 onChange={(e) => setRoleId(e.target.value)}
-                className={`${inputClass} bg-white`}
+                className={inputClass}
               >
                 <option value="" disabled>
                   Sélectionnez un profil
@@ -99,11 +99,11 @@ export default function AccountCreationForm() {
             </div>
 
             {selectedRole && (
-              <div className="mt-4 rounded border border-accent/30 bg-accent/5 px-4 py-3">
-                <p className="font-sans text-sm font-medium text-primary">
+              <div className="mt-4 rounded border border-accent/30 bg-accent/10 px-4 py-3">
+                <p className="font-sans text-sm font-medium text-accent">
                   {selectedRole.label}
                 </p>
-                <p className="mt-1 text-sm text-muted">
+                <p className="mt-1 text-sm text-white/70">
                   {selectedRole.description}
                 </p>
               </div>
@@ -113,14 +113,14 @@ export default function AccountCreationForm() {
       </div>
 
       {/* Étape 2 — Coordonnées */}
-      <div className="rounded border border-muted/20 bg-white p-6 sm:p-8">
+      <div className="rounded border border-accent/20 bg-obsidianCard p-6 sm:p-8">
         <div className="flex items-start gap-4">
           <span className={stepBadgeClass}>2</span>
           <div className="min-w-0 flex-1">
-            <h2 className="font-display text-xl font-semibold text-primary">
+            <h2 className="font-display text-xl font-semibold text-accent">
               Vos coordonnées
             </h2>
-            <p className="mt-1 text-sm text-muted">
+            <p className="mt-1 text-sm text-white/60">
               Ces informations permettent à l&apos;équipe RH de vous
               recontacter pour la suite du processus.
             </p>
@@ -170,19 +170,19 @@ export default function AccountCreationForm() {
       </div>
 
       {/* Étape 3 — Validation & matricule */}
-      <div className="rounded border border-muted/20 bg-white p-6 sm:p-8">
+      <div className="rounded border border-accent/20 bg-obsidianCard p-6 sm:p-8">
         <div className="flex items-start gap-4">
           <span className={stepBadgeClass}>3</span>
           <div className="min-w-0 flex-1">
-            <h2 className="font-display text-xl font-semibold text-primary">
+            <h2 className="font-display text-xl font-semibold text-accent">
               Validation &amp; matricule
             </h2>
-            <p className="mt-2 text-sm leading-relaxed text-ink">
+            <p className="mt-2 text-sm leading-relaxed text-white/80">
               Votre compte n&apos;est pas activé immédiatement. L&apos;accès
               à votre espace personnel nécessite au préalable l&apos;une des
               conditions suivantes :
             </p>
-            <ul className="mt-3 space-y-1.5 text-sm text-ink">
+            <ul className="mt-3 space-y-1.5 text-sm text-white/80">
               <li className="flex gap-2">
                 <span className="text-accent">—</span>
                 <span>
@@ -204,7 +204,7 @@ export default function AccountCreationForm() {
                 </span>
               </li>
             </ul>
-            <p className="mt-3 text-sm leading-relaxed text-muted">
+            <p className="mt-3 text-sm leading-relaxed text-white/60">
               Une fois l&apos;une de ces conditions remplie, l&apos;équipe RH
               vous attribue un numéro matricule unique. Ce matricule active
               l&apos;accès à votre tableau de bord personnel.
@@ -219,9 +219,9 @@ export default function AccountCreationForm() {
                 disabled
                 readOnly
                 value="En attente d'attribution par la RH"
-                className={`${inputClass} cursor-not-allowed bg-background text-muted opacity-80`}
+                className={`${inputClass} cursor-not-allowed border-white/10 text-white/40 opacity-80`}
               />
-              <p className="mt-1 text-xs text-muted">
+              <p className="mt-1 text-xs text-white/50">
                 Ce champ est renseigné par la RH, pas par vous — il ne se
                 remplit pas au moment de l&apos;inscription.
               </p>
@@ -231,13 +231,13 @@ export default function AccountCreationForm() {
       </div>
 
       {status === "error" && (
-        <p className="text-sm text-primary">
+        <p className="text-sm text-accent">
           Une erreur est survenue. Merci de réessayer plus tard.
         </p>
       )}
 
       <div>
-        <Button type="submit" variant="primary" disabled={status === "sending"}>
+        <Button type="submit" variant="dark" disabled={status === "sending"}>
           {status === "sending" ? "Envoi..." : "Envoyer ma demande"}
         </Button>
       </div>

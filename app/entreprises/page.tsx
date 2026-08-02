@@ -13,12 +13,12 @@ export const metadata: Metadata = {
 
 export default function EntreprisesPage() {
   return (
-    <>
+    <div className="min-h-screen bg-obsidian">
       <Hero />
       <PromisesSection />
       <ExpectationsBand />
       <CollaborationSection />
       <ContactSection />
-    </>
+    </div>
   );
 }

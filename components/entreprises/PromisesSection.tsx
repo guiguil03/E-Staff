@@ -48,11 +48,10 @@ const PROMISES = [
   },
 ];
 
-// The one navy full-bleed band on this otherwise light-universe page — used
-// here for rhythm/contrast around the six core B2B promises.
+// The six core B2B promises, on the dark/elite obsidian page.
 export default function PromisesSection() {
   return (
-    <section className="bg-primary px-4 py-16 sm:px-6 sm:py-20">
+    <section className="bg-obsidian px-4 py-16 sm:px-6 sm:py-20">
       <div className="mx-auto max-w-6xl">
         <Reveal>
           <div className="mx-auto max-w-2xl text-center">

@@ -1,25 +1,26 @@
 import Reveal from "@/components/Reveal";
 
-// Opening pitch for the B2B deep-dive page — light universe, reached from the
-// "Découvrir nos offres B2B" homepage link.
+// Opening pitch for the B2B deep-dive page — dark/elite universe, matching
+// the convention established on /offres/fol.
 export default function Hero() {
   return (
-    <section className="bg-background px-4 py-20 sm:px-6 sm:py-28">
+    <section className="bg-obsidian px-4 py-20 sm:px-6 sm:py-28">
       <div className="mx-auto max-w-3xl text-center">
         <Reveal>
-          <p className="font-mono text-xs uppercase tracking-widest text-teal">
+          <p className="font-mono text-xs uppercase tracking-widest text-accent">
             Espace Entreprises (B2B)
           </p>
         </Reveal>
 
         <Reveal delay={100}>
-          <h1 className="mt-6 font-display text-3xl font-semibold italic leading-tight text-primary sm:text-4xl md:text-5xl">
-            « Des agents qualifiés au service de vos ambitions. »
+          <h1 className="mt-6 font-display text-3xl font-semibold italic leading-tight text-white sm:text-4xl md:text-5xl">
+            « Des agents qualifiés au service de vos{" "}
+            <span className="text-accent">ambitions</span>. »
           </h1>
         </Reveal>
 
         <Reveal delay={200}>
-          <p className="mx-auto mt-6 max-w-2xl font-sans text-base text-ink sm:text-lg">
+          <p className="mx-auto mt-6 max-w-2xl font-sans text-base text-white/80 sm:text-lg">
             Fini les craintes liées aux infrastructures, au turnover et aux
             manques de qualification. Adieu les casse-tête du recrutement et
             les coupures imprécises. Chez e-Staf, nous vous offrons une

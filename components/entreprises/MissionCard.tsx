@@ -38,27 +38,27 @@ export default function MissionCard({
   }
 
   return (
-    <div className="flex flex-col rounded border border-primary/10 bg-white p-6 shadow-sm">
-      <h3 className="font-display text-lg font-bold text-primary">{title}</h3>
-      <p className="mt-1 font-sans text-sm italic text-muted">{subtitle}</p>
-      <p className="mt-4 font-sans text-sm text-ink">{description}</p>
+    <div className="flex flex-col rounded border border-white/10 bg-obsidianCard p-6">
+      <h3 className="font-display text-lg font-bold text-white">{title}</h3>
+      <p className="mt-1 font-sans text-sm italic text-white/50">{subtitle}</p>
+      <p className="mt-4 font-sans text-sm text-white/70">{description}</p>
 
       <div className="mt-5">
         <Badge tone={available ? "success" : "accent"}>
           {available ? "Disponible pour commencer" : "En attente de disponibilité"}
         </Badge>
-        <p className="mt-2 font-mono text-xs text-muted">{statusDetail}</p>
+        <p className="mt-2 font-mono text-xs text-white/50">{statusDetail}</p>
       </div>
 
       <div className="mt-6">
-        <Button variant="primary" onClick={openForm}>
+        <Button variant="dark" onClick={openForm}>
           {ctaLabel}
         </Button>
       </div>
 
       {formOpen && (
         <div ref={formRef} className="mt-6">
-          <RegistrationForm segment={segment} ctaLabel={ctaLabel} tone="light" />
+          <RegistrationForm segment={segment} ctaLabel={ctaLabel} tone="dark" />
         </div>
       )}
     </div>

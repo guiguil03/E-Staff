@@ -7,10 +7,11 @@ interface PromiseCardProps {
 }
 
 // A single card in the "Promesses d'e-Staf" panel — gold-circled icon on the
-// navy full-bleed band, white title, muted white body.
+// obsidian page, white title, muted white body. Matches the card treatment
+// established by components/fol/PillarCard.tsx.
 export default function PromiseCard({ icon, title, description }: PromiseCardProps) {
   return (
-    <div className="flex flex-col gap-4 rounded border border-white/10 bg-white/5 p-6">
+    <div className="flex flex-col gap-4 rounded border border-white/5 bg-obsidianCard p-6">
       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-accent text-accent">
         <div className="h-6 w-6">{icon}</div>
       </div>

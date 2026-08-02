@@ -30,29 +30,29 @@ export default function LotCard({ name, mission, trainingEndDate, segment }: Lot
   }
 
   return (
-    <div className="flex flex-col rounded border border-primary/10 bg-white p-6 shadow-sm">
-      <h3 className="font-display text-lg font-bold text-primary">{name}</h3>
-      <p className="mt-3 font-sans text-sm text-ink">{mission}</p>
+    <div className="flex flex-col rounded border border-white/10 bg-obsidianCard p-6">
+      <h3 className="font-display text-lg font-bold text-white">{name}</h3>
+      <p className="mt-3 font-sans text-sm text-white/70">{mission}</p>
 
       <div className="mt-5">
         <Badge tone="accent">En attente de déploiement</Badge>
-        <p className="mt-2 font-mono text-xs text-muted">
+        <p className="mt-2 font-mono text-xs text-white/50">
           Fin de formation : {trainingEndDate}
         </p>
       </div>
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-        <Button variant="primary" onClick={() => openForm("Collaborer (Dispo Immédiate)")}>
+        <Button variant="dark" onClick={() => openForm("Collaborer (Dispo Immédiate)")}>
           Collaborer (Dispo Immédiate)
         </Button>
-        <Button variant="ghost" onClick={() => openForm(`Réserver pour le ${trainingEndDate}`)}>
+        <Button variant="ghostDark" onClick={() => openForm(`Réserver pour le ${trainingEndDate}`)}>
           Réserver pour le {trainingEndDate}
         </Button>
       </div>
 
       {formOpen && (
         <div ref={formRef} className="mt-6">
-          <RegistrationForm segment={segment} ctaLabel={activeCtaLabel} tone="light" />
+          <RegistrationForm segment={segment} ctaLabel={activeCtaLabel} tone="dark" />
         </div>
       )}
     </div>

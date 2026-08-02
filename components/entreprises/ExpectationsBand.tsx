@@ -18,13 +18,13 @@ const EXPECTATIONS = [
 // options.
 export default function ExpectationsBand() {
   return (
-    <section className="border-y border-accent/20 bg-accent/10 px-4 py-14 sm:px-6">
+    <section className="border-y border-accent/30 bg-accent/10 px-4 py-14 sm:px-6">
       <div className="mx-auto max-w-6xl">
         <Reveal>
-          <p className="font-mono text-xs uppercase tracking-widest text-primary/60">
+          <p className="font-mono text-xs uppercase tracking-widest text-white/50">
             Réciprocité
           </p>
-          <h2 className="mt-2 font-display text-2xl font-bold text-primary sm:text-3xl">
+          <h2 className="mt-2 font-display text-2xl font-bold text-white sm:text-3xl">
             Ce que e-Staf attend de vous
           </h2>
         </Reveal>
@@ -34,12 +34,12 @@ export default function ExpectationsBand() {
             {EXPECTATIONS.map((item) => (
               <div
                 key={item.title}
-                className="rounded border border-accent/30 bg-white p-6"
+                className="rounded border border-accent/30 bg-obsidianCard p-6"
               >
-                <h3 className="font-display text-lg font-bold text-primary">
+                <h3 className="font-display text-lg font-bold text-accent">
                   {item.title}
                 </h3>
-                <p className="mt-2 font-sans text-sm text-ink">
+                <p className="mt-2 font-sans text-sm text-white/70">
                   {item.description}
                 </p>
               </div>

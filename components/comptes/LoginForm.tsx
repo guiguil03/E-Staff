@@ -7,8 +7,8 @@ import Button from "@/components/ui/Button";
 // failure is expected and permanent for now, so the message says so plainly
 // instead of suggesting "try again later".
 const inputClass =
-  "w-full rounded border border-muted/30 bg-white px-4 py-2 font-sans text-sm text-ink placeholder:text-muted/60 outline-none transition-colors focus:border-primary";
-const labelClass = "block text-sm font-medium mb-1 text-ink";
+  "w-full rounded border border-white/20 bg-obsidian px-4 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none transition-colors focus:border-accent";
+const labelClass = "block text-sm font-medium mb-1 text-white/80";
 
 export default function LoginForm() {
   const [matricule, setMatricule] = useState("");
@@ -35,7 +35,7 @@ export default function LoginForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded border border-muted/20 bg-white p-6 sm:p-8"
+      className="rounded border border-accent/20 bg-obsidianCard p-6 sm:p-8"
     >
       <div className="space-y-4">
         <div>
@@ -67,14 +67,14 @@ export default function LoginForm() {
       </div>
 
       {status === "error" && (
-        <p className="mt-4 text-sm text-primary">
+        <p className="mt-4 text-sm text-accent">
           La connexion n&apos;est pas encore disponible. Cette fonctionnalité
           arrive prochainement.
         </p>
       )}
 
       <div className="mt-6">
-        <Button type="submit" variant="primary" disabled={status === "sending"}>
+        <Button type="submit" variant="dark" disabled={status === "sending"}>
           {status === "sending" ? "Connexion..." : "Se connecter"}
         </Button>
       </div>
