@@ -79,11 +79,11 @@ const DFP_PROGRAMS = [
 
 export default function ExamensPage() {
   return (
-    <div className="px-4 py-16 sm:px-6 sm:py-20">
+    <div className="bg-obsidian px-4 py-16 sm:px-6 sm:py-20">
       <div className="mx-auto max-w-6xl">
         {/* Intro */}
         <Reveal>
-          <p className="mx-auto max-w-3xl text-center font-sans text-base leading-relaxed text-ink sm:text-lg">
+          <p className="mx-auto max-w-3xl text-center font-sans text-base leading-relaxed text-white/85 sm:text-lg">
             Un diplôme officiel ne se contente pas de valider des compétences :
             il ouvre des frontières, crédibilise un parcours et propulse une
             carrière. Chez e-Staf, nous ne vous préparons pas seulement à
@@ -95,7 +95,7 @@ export default function ExamensPage() {
 
         {/* Section title */}
         <Reveal delay={80}>
-          <h2 className="mt-14 text-center font-display text-3xl font-bold text-primary sm:text-4xl">
+          <h2 className="mt-14 text-center font-display text-3xl font-bold text-accent sm:text-4xl">
             Nos Parcours de Préparation Officiels
           </h2>
         </Reveal>
@@ -155,10 +155,10 @@ export default function ExamensPage() {
         {/* DFP subsection — 4 distinct dated cohorts, detailed below the overview card */}
         <div id="dfp-programmes" className="mt-20 scroll-mt-6">
           <Reveal>
-            <h2 className="text-center font-display text-2xl font-bold text-primary sm:text-3xl">
+            <h2 className="text-center font-display text-2xl font-bold text-accent sm:text-3xl">
               Préparations aux DFP (Diplômes de Français Professionnel)
             </h2>
-            <p className="mx-auto mt-4 max-w-3xl text-center font-sans text-sm text-muted sm:text-base">
+            <p className="mx-auto mt-4 max-w-3xl text-center font-sans text-sm text-white/70 sm:text-base">
               Ne dites plus simplement que vous parlez français : prouvez que
               vous dominez les rouages, le jargon et les codes de votre
               secteur d&apos;activité au niveau international.
