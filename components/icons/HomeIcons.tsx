@@ -61,12 +61,41 @@ export function DoveIcon({ className }: IconProps) {
 }
 
 export function GearPairIcon({ className }: IconProps) {
+  // Filled gear-flower silhouettes (solid, not stroked) — matches DoveIcon's
+  // solid-shape convention and reads as a clearer "gears" mark at a glance
+  // than a thin-stroke outline does.
+  const bigTeeth = 8;
+  const smallTeeth = 6;
   return (
-    <svg {...BASE_PROPS} className={className} aria-hidden="true">
-      <circle cx="9" cy="9" r="4" />
-      <path d="M9 3v2M9 13v2M3 9h2M13 9h2M4.8 4.8l1.4 1.4M11.8 11.8l1.4 1.4M4.8 13.2l1.4-1.4M11.8 6.2l1.4-1.4" />
-      <circle cx="16.5" cy="16.5" r="3.2" />
-      <path d="M16.5 12v1.6M16.5 19.4V21M12.9 16.5h1.6M19.4 16.5H21" />
+    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" className={className} aria-hidden="true">
+      <g>
+        <circle cx="9" cy="9" r="4.1" />
+        {Array.from({ length: bigTeeth }).map((_, i) => (
+          <rect
+            key={i}
+            x="7.7"
+            y="2.7"
+            width="2.6"
+            height="2.3"
+            rx="0.7"
+            transform={`rotate(${(360 / bigTeeth) * i} 9 9)`}
+          />
+        ))}
+      </g>
+      <g opacity="0.92">
+        <circle cx="16.5" cy="16.5" r="3" />
+        {Array.from({ length: smallTeeth }).map((_, i) => (
+          <rect
+            key={i}
+            x="15.5"
+            y="12"
+            width="2"
+            height="1.8"
+            rx="0.5"
+            transform={`rotate(${(360 / smallTeeth) * i} 16.5 16.5)`}
+          />
+        ))}
+      </g>
     </svg>
   );
 }
@@ -113,13 +142,26 @@ export function StarPersonIcon({ className }: IconProps) {
 }
 
 export function HandshakeIcon({ className }: IconProps) {
-  // Two interlocking rings — a simple, legible "union of two parties" mark.
-  // (A literal clasped-hands line drawing reads as noise at icon scale; this
-  // abstraction keeps the handshake/partnership idea readable at 24px.)
+  // Two forearms meeting in a grip — a simplified but legible handshake mark
+  // (a fully literal clasped-hands drawing reads as noise at small icon
+  // scale, so this keeps the "two sides meeting in the middle" gesture
+  // recognizable without over-detailing).
   return (
-    <svg {...BASE_PROPS} className={className} aria-hidden="true">
-      <circle cx="9.3" cy="12" r="6" />
-      <circle cx="14.7" cy="12" r="6" />
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M2.5 8.3l4.6 3.3a1.9 1.9 0 002.6-.3l1-1.2" />
+      <path d="M21.5 8.3L16.9 11.6a1.9 1.9 0 01-2.6-.3l-1-1.2" />
+      <path d="M7.1 11.6l2.9 3.5a1.5 1.5 0 002.2.2l.4-.4" />
+      <path d="M16.9 11.6l-2.9 3.5a1.5 1.5 0 01-2.2.2" />
+      <circle cx="12" cy="12.4" r="1" fill="currentColor" stroke="none" />
     </svg>
   );
 }

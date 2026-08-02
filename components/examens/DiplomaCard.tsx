@@ -79,17 +79,23 @@ export default function DiplomaCard({
         </div>
       </div>
 
-      <div className="mt-5 space-y-3 font-sans text-sm text-ink">
+      <div className="mt-5 space-y-2.5 font-sans text-sm text-ink">
         {cibles && (
-          <p>
-            <span className="font-semibold text-primary">Cibles : </span>
-            {cibles}
-          </p>
+          <div className="flex gap-2">
+            <span aria-hidden="true" className="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary/40" />
+            <p>
+              <span className="font-semibold text-primary">Cibles : </span>
+              {cibles}
+            </p>
+          </div>
         )}
-        <p>
-          <span className="font-semibold text-primary">Mission : </span>
-          {mission}
-        </p>
+        <div className="flex gap-2">
+          <span aria-hidden="true" className="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary/40" />
+          <p>
+            <span className="font-semibold text-primary">Mission : </span>
+            {mission}
+          </p>
+        </div>
       </div>
 
       <div className="mt-5">

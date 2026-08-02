@@ -30,7 +30,7 @@ export default function CtaBlock() {
       </p>
 
       <div className="mt-6 flex justify-center">
-        <Button variant="primary" onClick={openForm}>
+        <Button variant="teal" onClick={openForm} className="rounded-full px-8">
           Passer mon test de niveau initial →
         </Button>
       </div>

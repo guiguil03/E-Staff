@@ -13,6 +13,7 @@ interface ReactionButtonProps {
 // Local-state-only "like" button — open to every visitor, no account
 // required. There is no backend yet, so the count only lives in this
 // component and resets on reload; that is expected for this phase.
+// Styled for the dark/elite (obsidian) universe: gold accent on dark cards.
 export default function ReactionButton({ initialCount = 0, label }: ReactionButtonProps) {
   const [active, setActive] = useState(false);
   const [count, setCount] = useState(initialCount);
@@ -33,8 +34,8 @@ export default function ReactionButton({ initialCount = 0, label }: ReactionButt
       aria-label={label}
       className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-sans text-xs font-medium transition-colors duration-150 ${
         active
-          ? "border-accent bg-accent/10 text-accent"
-          : "border-primary/20 bg-white text-muted hover:border-accent hover:text-accent"
+          ? "border-accent bg-accent/15 text-accent"
+          : "border-accent/30 bg-obsidian/60 text-white/70 hover:border-accent hover:text-accent"
       }`}
     >
       <HeartIcon className="h-4 w-4" filled={active} />

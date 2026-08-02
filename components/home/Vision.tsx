@@ -18,22 +18,37 @@ interface VisionCardProps {
   children: ReactNode;
 }
 
+// A thin vertical "hanging wire" above an icon or card — the same gallery
+// motif used for the media wall on /communaute, applied here so the two
+// columns read as hanging from the banner above, per the reference mockup.
+function HangingWire() {
+  return (
+    <div aria-hidden="true" className="flex w-px flex-col items-center">
+      <span className="h-6 w-px bg-primary/25 sm:h-8" />
+      <span className="-mt-0.5 h-1.5 w-1.5 rounded-full bg-primary/35" />
+    </div>
+  );
+}
+
 function VisionCard({ href, accent, icon, children }: VisionCardProps) {
   const accentBg = accent === "success" ? "bg-success" : "bg-teal";
   const accentText = accent === "success" ? "text-success" : "text-teal";
 
   return (
-    <Link
-      href={href}
-      className="group relative flex flex-col items-center gap-4 overflow-hidden rounded border border-primary/10 bg-white p-6 text-center shadow-sm transition-shadow hover:shadow-md"
-    >
-      <span
-        aria-hidden="true"
-        className={`absolute -left-8 -top-8 h-16 w-16 rotate-45 ${accentBg} opacity-90`}
-      />
-      <span className={`relative z-10 mt-2 h-9 w-9 ${accentText}`}>{icon}</span>
-      <p className="relative z-10 font-sans text-sm font-medium text-primary">{children}</p>
-    </Link>
+    <div className="flex flex-col items-center">
+      <HangingWire />
+      <Link
+        href={href}
+        className="group relative mt-1 flex w-full flex-col items-center gap-4 overflow-hidden rounded border border-primary/10 bg-white p-6 text-center shadow-sm transition-shadow hover:shadow-md"
+      >
+        <span
+          aria-hidden="true"
+          className={`absolute -left-8 -top-8 h-16 w-16 rotate-45 ${accentBg} opacity-90`}
+        />
+        <span className={`relative z-10 mt-2 h-9 w-9 ${accentText}`}>{icon}</span>
+        <p className="relative z-10 font-sans text-sm font-medium text-primary">{children}</p>
+      </Link>
+    </div>
   );
 }
 
@@ -43,11 +58,12 @@ function CenterConnector() {
       aria-hidden="true"
       className="hidden md:col-start-2 md:row-start-2 md:flex md:items-center md:justify-center md:self-center md:justify-self-center"
     >
-      <div className="relative flex h-36 w-36 items-center justify-center">
-        <span className="absolute inset-x-0 top-1/2 border-t-2 border-dotted border-primary/20" />
-        <span className="absolute inset-y-0 left-1/2 border-l-2 border-dotted border-primary/20" />
-        <span className="relative z-10 flex h-14 w-14 items-center justify-center rounded-full border border-primary/20 bg-white shadow-sm">
-          <HandshakeIcon className="h-6 w-6 text-primary" />
+      <div className="relative flex h-40 w-40 items-center justify-center">
+        <span className="absolute inset-x-0 top-1/2 border-t-2 border-dotted border-teal/35" />
+        <span className="absolute inset-y-0 left-1/2 border-l-2 border-dotted border-teal/35" />
+        <span className="absolute h-20 w-20 rounded-full bg-teal/20 blur-xl" />
+        <span className="relative z-10 flex h-12 w-12 items-center justify-center">
+          <HandshakeIcon className="h-10 w-10 text-primary drop-shadow-[0_0_5px_rgba(27,138,154,0.55)]" />
         </span>
       </div>
     </div>
@@ -86,7 +102,8 @@ export default function Vision() {
         <div className="mt-14 grid grid-cols-1 gap-y-10 sm:mt-16 md:grid-cols-[1fr_auto_1fr] md:grid-rows-[auto_auto] md:items-start md:gap-x-6 md:gap-y-10">
           <Reveal className="md:col-start-1 md:row-start-1">
             <div className="flex flex-col items-center text-center md:items-start md:text-left">
-              <DoveIcon className="h-10 w-10 text-success" />
+              <HangingWire />
+              <DoveIcon className="mt-1 h-12 w-12 text-success sm:h-14 sm:w-14" />
               <h3 className="mt-3 font-display text-2xl font-bold text-primary">
                 Du côté des <span className="text-success">Talents</span>
               </h3>
@@ -127,7 +144,8 @@ export default function Vision() {
 
           <Reveal delay={100} className="md:col-start-3 md:row-start-1">
             <div className="flex flex-col items-center text-center md:items-start md:text-left">
-              <GearPairIcon className="h-10 w-10 text-teal" />
+              <HangingWire />
+              <GearPairIcon className="mt-1 h-12 w-12 text-teal sm:h-14 sm:w-14" />
               <h3 className="mt-3 font-display text-2xl font-bold text-primary">
                 Du côté des <span className="text-teal">Entreprises</span>
               </h3>

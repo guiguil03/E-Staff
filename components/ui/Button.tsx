@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
 
-type Variant = "primary" | "accent" | "ghost" | "dark";
+type Variant = "primary" | "accent" | "ghost" | "dark" | "teal" | "ghostDark";
 
 const VARIANT_CLASSES: Record<Variant, string> = {
   // Light universe — solid navy.
@@ -16,6 +16,14 @@ const VARIANT_CLASSES: Record<Variant, string> = {
   // Dark/elite universe (obsidian pages) — solid gold on navy text, high contrast.
   dark:
     "bg-accent text-obsidian hover:bg-accent/90 border border-accent",
+  // Light universe — solid teal, the "Entreprises"-side accent (used for
+  // the examens page's primary CTA, matching the client's reference).
+  teal:
+    "bg-teal text-white hover:bg-teal/90 border border-teal",
+  // Dark/elite universe — outlined gold, secondary action on obsidian pages
+  // (the dark-universe counterpart to `ghost`).
+  ghostDark:
+    "bg-transparent text-accent border border-accent hover:bg-accent hover:text-obsidian",
 };
 
 const BASE_CLASSES =
