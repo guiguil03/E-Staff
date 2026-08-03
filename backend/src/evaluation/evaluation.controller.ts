@@ -92,7 +92,8 @@ export class EvaluationController {
   @UseGuards(TrainerGuard)
   @Get("situation-responses/:id/audio")
   async streamAudio(@Param("id") id: string, @Res() res: Response) {
-    const fullPath = await this.service.getSituationAudioPath(id);
-    res.sendFile(fullPath);
+    const { stream, contentType } = await this.service.getSituationAudioStream(id);
+    if (contentType) res.set("Content-Type", contentType);
+    stream.pipe(res);
   }
 }

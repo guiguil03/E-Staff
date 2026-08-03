@@ -3,10 +3,10 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import * as fs from "fs";
 import * as path from "path";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../common/email.service";
+import { StorageService } from "../common/storage.service";
 import { CreateCandidatDto } from "./dto/create-candidat.dto";
 import { SubmitAnswersDto } from "./dto/submit-answers.dto";
 import { computeTier, computeTotalScore } from "./scoring";
@@ -20,14 +20,14 @@ import {
   SITUATIONS,
 } from "./situations";
 
-const UPLOAD_ROOT = path.join(process.cwd(), "uploads", "evaluations");
 const REQUIRED_SITUATION_COUNT = 5;
 
 @Injectable()
 export class EvaluationService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly email: EmailService
+    private readonly email: EmailService,
+    private readonly storage: StorageService
   ) {}
 
   getSituations() {
@@ -111,11 +111,13 @@ export class EvaluationService {
       );
     }
 
-    const dir = path.join(UPLOAD_ROOT, attemptId);
-    fs.mkdirSync(dir, { recursive: true });
-    const filename = `situation-${situationIndex}${path.extname(file.originalname) || ".webm"}`;
-    const fullPath = path.join(dir, filename);
-    fs.writeFileSync(fullPath, file.buffer);
+    const extension = path.extname(file.originalname) || ".webm";
+    const key = `evaluations/${attemptId}/situation-${situationIndex}${extension}`;
+    await this.storage.uploadBuffer(
+      key,
+      file.buffer,
+      file.mimetype || "audio/webm"
+    );
 
     return this.prisma.situationResponse.upsert({
       where: {
@@ -124,10 +126,10 @@ export class EvaluationService {
       create: {
         attemptId,
         situationIndex,
-        audioUrl: path.join(attemptId, filename),
+        audioUrl: key,
       },
       update: {
-        audioUrl: path.join(attemptId, filename),
+        audioUrl: key,
         score: null,
         gradedCriteria: null,
         gradedAt: null,
@@ -135,20 +137,17 @@ export class EvaluationService {
     });
   }
 
-  async getSituationAudioPath(situationResponseId: string) {
+  async getSituationAudioStream(situationResponseId: string) {
     const response = await this.prisma.situationResponse.findUnique({
       where: { id: situationResponseId },
     });
     if (!response) throw new NotFoundException("Réponse introuvable.");
 
-    const fullPath = path.join(UPLOAD_ROOT, response.audioUrl);
-    if (!fullPath.startsWith(UPLOAD_ROOT)) {
-      throw new BadRequestException("Chemin invalide.");
-    }
-    if (!fs.existsSync(fullPath)) {
+    try {
+      return await this.storage.getObjectStream(response.audioUrl);
+    } catch {
       throw new NotFoundException("Fichier audio introuvable.");
     }
-    return fullPath;
   }
 
   // ---- Formateur --------------------------------------------------------
