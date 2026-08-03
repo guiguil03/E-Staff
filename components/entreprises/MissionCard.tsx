@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 import Button from "@/components/ui/Button";
-import Badge from "@/components/ui/Badge";
 import RegistrationForm from "@/components/RegistrationForm";
 
 interface MissionCardProps {
@@ -44,9 +43,20 @@ export default function MissionCard({
       <p className="mt-4 font-sans text-sm text-white/70">{description}</p>
 
       <div className="mt-5">
-        <Badge tone={available ? "success" : "accent"}>
+        {/* The shared Badge component's "success" (emerald) tone loses too
+         * much contrast on the obsidian background, so status pills are
+         * rendered as plain styled spans here instead — gold for "waiting",
+         * neutral white for "available now" — matching the pattern already
+         * used in components/examens/DiplomaCard.tsx. */}
+        <span
+          className={`inline-flex items-center rounded-full border px-3 py-1 font-mono text-xs font-medium uppercase tracking-wider ${
+            available
+              ? "border-white/25 bg-white/10 text-white"
+              : "border-accent/40 bg-accent/10 text-accent"
+          }`}
+        >
           {available ? "Disponible pour commencer" : "En attente de disponibilité"}
-        </Badge>
+        </span>
         <p className="mt-2 font-mono text-xs text-white/50">{statusDetail}</p>
       </div>
 
