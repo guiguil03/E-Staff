@@ -16,7 +16,7 @@ interface RoadmapCardProps {
 
 function RoadmapCard({ number, title, gradient, icon, children }: RoadmapCardProps) {
   return (
-    <div className={`flex flex-1 flex-col rounded p-6 text-white shadow-sm sm:p-7 ${gradient}`}>
+    <div className={`flex flex-1 flex-col rounded p-6 text-white shadow-lg shadow-black/40 sm:p-7 ${gradient}`}>
       <div className="flex items-start justify-between gap-3">
         <h3 className="font-display text-lg font-bold uppercase leading-snug sm:text-xl">
           <span>{number}. </span>
@@ -35,7 +35,7 @@ function Connector() {
   return (
     <div
       aria-hidden="true"
-      className="hidden shrink-0 items-center justify-center px-2 font-display text-2xl font-bold text-primary/25 md:flex"
+      className="hidden shrink-0 items-center justify-center px-2 font-display text-2xl font-bold text-accent/40 md:flex"
     >
       ›
     </div>
@@ -44,14 +44,14 @@ function Connector() {
 
 export default function Roadmap() {
   return (
-    <section className="bg-background px-4 pb-16 pt-12 sm:px-6 sm:pb-20 sm:pt-16">
+    <section className="bg-obsidian px-4 pb-16 pt-12 sm:px-6 sm:pb-20 sm:pt-16">
       <div className="mx-auto max-w-6xl">
         <Reveal>
           <div className="mx-auto max-w-2xl text-center">
-            <h2 className="font-display text-2xl font-bold text-primary sm:text-3xl md:text-4xl">
+            <h2 className="font-display text-2xl font-bold text-white sm:text-3xl md:text-4xl">
               Notre Parcours d&apos;Équivalences &amp; d&apos;Intégration
             </h2>
-            <p className="mt-3 font-sans text-base text-muted sm:text-lg">
+            <p className="mt-3 font-sans text-base text-white/70 sm:text-lg">
               Un filtre exigeant pour les entreprises, un tremplin garanti pour les candidats.
             </p>
           </div>

@@ -5,11 +5,11 @@ import TrustStrip from "@/components/home/TrustStrip";
 
 export default function Home() {
   return (
-    <>
+    <div className="min-h-screen bg-obsidian">
       <Hero />
       <Roadmap />
       <Vision />
       <TrustStrip />
-    </>
+    </div>
   );
 }

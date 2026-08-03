@@ -3,7 +3,6 @@ import Hero from "@/components/entreprises/Hero";
 import PromisesSection from "@/components/entreprises/PromisesSection";
 import ExpectationsBand from "@/components/entreprises/ExpectationsBand";
 import CollaborationSection from "@/components/entreprises/CollaborationSection";
-import ContactSection from "@/components/entreprises/ContactSection";
 
 export const metadata: Metadata = {
   title: "Entreprises (B2B) — e-Staf",
@@ -18,7 +17,6 @@ export default function EntreprisesPage() {
       <PromisesSection />
       <ExpectationsBand />
       <CollaborationSection />
-      <ContactSection />
     </div>
   );
 }

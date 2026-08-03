@@ -1,0 +1,148 @@
+// e-Staf — schéma de données du backend NestJS.
+//
+// Provider PostgreSQL (Railway) — DATABASE_URL fourni par le service
+// Postgres Railway en production, ou par le tunnel/URL publique Railway en
+// dev local. Les statuts restent des String plutôt que des enums Prisma
+// (choix fait à l'époque du SQLite local, qui ne supportait pas les enums) ;
+// peuvent être convertis en vrais enums Prisma dans une migration séparée.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Bouton 1 — "Proposer un projet d'externalisation"
+// ---------------------------------------------------------------------------
+
+model EntrepriseProjet {
+  id String @id @default(cuid())
+
+  // 1. Informations sur l'entreprise
+  companyName String
+  taxId       String // SIRET / NIF / STAT
+  sector      String
+  address     String
+  country     String
+
+  // 2. Contact & décisionnaire
+  contactName String
+  contactRole String
+  email       String
+  phone       String
+
+  // 3. Cahier des charges & attentes
+  serviceType  String // Squad commerciale, Support client, Collecte de dons, Saisie/Back-office, Voix off, Montage, Copywriting
+  teamSize     String
+  startDate    String
+  needsDetails String
+
+  // 4. Consentement RGPD (obligatoire)
+  consentAt DateTime
+
+  // "nouveau" | "contacte" | "qualifie" | "converti"
+  status    String   @default("nouveau")
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Bouton 2 — "Devenir Connecteur e-Staf"
+// ---------------------------------------------------------------------------
+
+model Connecteur {
+  id String @id @default(cuid())
+
+  // Étape 1 — coordonnées
+  firstName String
+  lastName  String
+  email     String
+  phone     String
+
+  // Étape 3 — questionnaire de pré-qualification
+  activityType      String // Cabinet recrutement / Consultant RH-BizDev / Agence / Autre réseau B2B
+  clientCount       String // 1-5 / 5-15 / +15
+  soughtRoles       String // JSON-encoded array of checked roles
+  cvVolume          String // <50 / 50-200 / >200
+  budgetPerAgent    String // <500€ / 500-1000€ / >1000€
+  presentationMode  String // Recommandation directe / RDV à trois / Marque blanche
+  paymentChannel    String // Virement / Mobile Money / Stripe-PayPal-Wise
+  opportunityTiming String // Oui immédiat / Oui 1-3 mois / Non
+
+  // "nouveau" | "contacte" | "actif"
+  status    String   @default("nouveau")
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Module d'évaluation des candidats
+// ---------------------------------------------------------------------------
+
+model Candidat {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String
+  phone     String
+  createdAt DateTime @default(now())
+
+  attempts EvaluationAttempt[]
+}
+
+model EvaluationAttempt {
+  id         String   @id @default(cuid())
+  candidatId String
+  candidat   Candidat @relation(fields: [candidatId], references: [id])
+
+  // "en_cours" | "soumis" | "en_correction" | "corrige" | "resultat_envoye"
+  status String @default("en_cours")
+
+  // Réponses brutes (auto-corrigées) — JSON { questionId: réponse }
+  lexiqueAnswers String?
+  oralAnswers    String?
+
+  // Scores /20 par épreuve. lexiqueScore et oralScore calculés
+  // automatiquement à la soumission ; situationsScore alimenté par le
+  // formateur au fur et à mesure de la correction des mises en situation.
+  lexiqueScore    Float?
+  oralScore       Float?
+  situationsScore Float?
+
+  // Score global /100 et palier — calculés une fois toutes les épreuves
+  // notées (voir src/evaluation/scoring.ts). Tant que seules 3 des 5
+  // épreuves prévues par le cahier des charges sont implémentées, le calcul
+  // se fait au prorata des épreuves définies (voir README du module).
+  totalScore Float?
+  // "refuse" | "formation_b1" | "niveau_b2" | "niveau_c1" | "placement_direct"
+  tier String?
+
+  submittedAt       DateTime?
+  gradedAt          DateTime?
+  resultEmailSentAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  situationResponses SituationResponse[]
+}
+
+// Une réponse audio à une des 10 situations professionnelles (le candidat
+// en choisit 5). Notée sur 4 points par le formateur via une grille de
+// critères à cocher.
+model SituationResponse {
+  id        String            @id @default(cuid())
+  attemptId String
+  attempt   EvaluationAttempt @relation(fields: [attemptId], references: [id])
+
+  situationIndex Int // 1 à 10, voir src/evaluation/situations.ts
+  audioUrl       String
+
+  score          Float? // 0 à 4
+  gradedCriteria String? // JSON des critères cochés par le formateur
+  gradedAt       DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([attemptId, situationIndex])
+}

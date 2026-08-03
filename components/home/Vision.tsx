@@ -24,8 +24,8 @@ interface VisionCardProps {
 function HangingWire() {
   return (
     <div aria-hidden="true" className="flex w-px flex-col items-center">
-      <span className="h-6 w-px bg-primary/25 sm:h-8" />
-      <span className="-mt-0.5 h-1.5 w-1.5 rounded-full bg-primary/35" />
+      <span className="h-6 w-px bg-accent/40 sm:h-8" />
+      <span className="-mt-0.5 h-1.5 w-1.5 rounded-full bg-accent/60" />
     </div>
   );
 }
@@ -39,14 +39,14 @@ function VisionCard({ href, accent, icon, children }: VisionCardProps) {
       <HangingWire />
       <Link
         href={href}
-        className="group relative mt-1 flex w-full flex-col items-center gap-4 overflow-hidden rounded border border-primary/10 bg-white p-6 text-center shadow-sm transition-shadow hover:shadow-md"
+        className="group relative mt-1 flex w-full flex-col items-center gap-4 overflow-hidden rounded border border-accent/20 bg-obsidianCard p-6 text-center shadow-lg shadow-black/30 transition-colors hover:border-accent/50"
       >
         <span
           aria-hidden="true"
           className={`absolute -left-8 -top-8 h-16 w-16 rotate-45 ${accentBg} opacity-90`}
         />
         <span className={`relative z-10 mt-2 h-9 w-9 ${accentText}`}>{icon}</span>
-        <p className="relative z-10 font-sans text-sm font-medium text-primary">{children}</p>
+        <p className="relative z-10 font-sans text-sm font-medium text-white">{children}</p>
       </Link>
     </div>
   );
@@ -59,11 +59,11 @@ function CenterConnector() {
       className="hidden md:col-start-2 md:row-start-2 md:flex md:items-center md:justify-center md:self-center md:justify-self-center"
     >
       <div className="relative flex h-40 w-40 items-center justify-center">
-        <span className="absolute inset-x-0 top-1/2 border-t-2 border-dotted border-teal/35" />
-        <span className="absolute inset-y-0 left-1/2 border-l-2 border-dotted border-teal/35" />
-        <span className="absolute h-20 w-20 rounded-full bg-teal/20 blur-xl" />
+        <span className="absolute inset-x-0 top-1/2 border-t-2 border-dotted border-teal/50" />
+        <span className="absolute inset-y-0 left-1/2 border-l-2 border-dotted border-teal/50" />
+        <span className="absolute h-20 w-20 rounded-full bg-teal/25 blur-xl" />
         <span className="relative z-10 flex h-12 w-12 items-center justify-center">
-          <HandshakeIcon className="h-10 w-10 text-primary drop-shadow-[0_0_5px_rgba(27,138,154,0.55)]" />
+          <HandshakeIcon className="h-10 w-10 text-white drop-shadow-[0_0_6px_rgba(27,138,154,0.75)]" />
         </span>
       </div>
     </div>
@@ -72,21 +72,21 @@ function CenterConnector() {
 
 export default function Vision() {
   return (
-    <section className="bg-background px-4 py-16 sm:px-6 sm:py-20">
+    <section className="bg-obsidian px-4 py-16 sm:px-6 sm:py-20">
       <div className="mx-auto max-w-6xl">
         <Reveal>
-          <div className="mx-auto flex w-full max-w-md flex-col items-center rounded-b-[120px] bg-primary px-6 pb-12 pt-8 text-center sm:max-w-lg sm:rounded-b-[160px] sm:pb-16">
+          <div className="mx-auto flex w-full max-w-md flex-col items-center rounded-b-[120px] border border-t-0 border-accent/25 bg-obsidianCard px-6 pb-12 pt-8 text-center shadow-lg shadow-black/40 sm:max-w-lg sm:rounded-b-[160px] sm:pb-16">
             <h2 className="bg-gradient-to-b from-accent to-accent/60 bg-clip-text font-display text-3xl font-bold uppercase tracking-wide text-transparent sm:text-4xl">
               Notre vision
             </h2>
-            <p className="mt-3 font-sans text-sm text-white/90 sm:text-base">
+            <p className="mt-3 font-sans text-sm text-white/80 sm:text-base">
               Le Cœur de Notre Engagement
             </p>
           </div>
         </Reveal>
 
         <Reveal delay={100}>
-          <div className="mx-auto mt-14 max-w-3xl space-y-4 text-center font-sans text-ink sm:mt-16">
+          <div className="mx-auto mt-14 max-w-3xl space-y-4 text-center font-sans text-white/80 sm:mt-16">
             <p>
               Notre seul et unique objectif, c&apos;est l&apos;impact : permettre à tout un
               chacun de choisir sa trajectoire de vie et de concrétiser ses rêves.
@@ -104,10 +104,10 @@ export default function Vision() {
             <div className="flex flex-col items-center text-center md:items-start md:text-left">
               <HangingWire />
               <DoveIcon className="mt-1 h-12 w-12 text-success sm:h-14 sm:w-14" />
-              <h3 className="mt-3 font-display text-2xl font-bold text-primary">
+              <h3 className="mt-3 font-display text-2xl font-bold text-white">
                 Du côté des <span className="text-success">Talents</span>
               </h3>
-              <p className="mt-3 max-w-sm font-sans text-sm text-muted">
+              <p className="mt-3 max-w-sm font-sans text-sm text-white/60">
                 Nous portons des accompagnements sur-mesure pour révéler le meilleur de chacun, en
                 toute autonomie :
               </p>
@@ -146,10 +146,10 @@ export default function Vision() {
             <div className="flex flex-col items-center text-center md:items-start md:text-left">
               <HangingWire />
               <GearPairIcon className="mt-1 h-12 w-12 text-teal sm:h-14 sm:w-14" />
-              <h3 className="mt-3 font-display text-2xl font-bold text-primary">
+              <h3 className="mt-3 font-display text-2xl font-bold text-white">
                 Du côté des <span className="text-teal">Entreprises</span>
               </h3>
-              <p className="mt-3 max-w-sm font-sans text-sm text-muted">
+              <p className="mt-3 max-w-sm font-sans text-sm text-white/60">
                 Nous offrons un prolongement naturel à cette exigence humaine. En vous garantissant
                 des profils formés, et managés avec rigueur, des infrastructures sécurisées pour
                 vous permettre de grandir en toute confiance, en sachant que chaque collaborateur
@@ -180,7 +180,7 @@ export default function Vision() {
         </div>
 
         <Reveal delay={150}>
-          <div className="mx-auto mt-14 max-w-2xl text-center font-sans font-semibold text-primary sm:mt-16">
+          <div className="mx-auto mt-14 max-w-2xl text-center font-sans font-semibold text-white sm:mt-16">
             <p>Ici, chaque parcours compte. Chaque ambition valorisée et chaque talent accompagné.</p>
             <p className="mt-2">
               Nous sommes là pour grandir ensemble, sans compromis et avec le cœur.

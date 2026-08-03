@@ -9,13 +9,13 @@ const TAGS = [
 
 export default function TrustStrip() {
   return (
-    <section className="border-t border-primary/10 bg-white px-4 py-10 sm:px-6">
+    <section className="border-t border-accent/20 bg-obsidian px-4 py-10 sm:px-6">
       <Reveal>
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-8 gap-y-3">
           {TAGS.map((tag) => (
             <span
               key={tag}
-              className="font-mono text-xs uppercase tracking-widest text-muted"
+              className="font-mono text-xs uppercase tracking-widest text-white/50"
             >
               {tag}
             </span>
