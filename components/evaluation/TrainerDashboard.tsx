@@ -35,13 +35,25 @@ interface Attempt {
 interface Situation {
   index: number;
   domain: string;
-  prompt: string;
+  context: string;
+  mission: string;
 }
 
 interface GradingCriterion {
   key: string;
   label: string;
+  description: string;
+  descriptors: Record<string, string>;
 }
+
+// Échelons du barème officiel (4 niveaux par critère, voir
+// backend/src/evaluation/situations.ts pour la source de vérité).
+const GRADING_LEVELS = [
+  { key: "0.25", value: 0.25, label: "Insuffisant" },
+  { key: "0.5", value: 0.5, label: "Passable" },
+  { key: "0.75", value: 0.75, label: "Bon" },
+  { key: "1", value: 1, label: "Excellent" },
+] as const;
 
 const SESSION_KEY = "estaf-trainer-code";
 
@@ -253,9 +265,12 @@ function SituationGrader({
   onGraded: () => void;
 }) {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [levels, setLevels] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const allSelected = criteria.every((c) => levels[c.key] !== undefined);
+  const previewScore = criteria.reduce((sum, c) => sum + (levels[c.key] ?? 0), 0);
 
   useEffect(() => {
     let objectUrl: string | null = null;
@@ -278,7 +293,7 @@ function SituationGrader({
     try {
       await apiPostAuthed(
         `/evaluation/situation-responses/${response.id}/grade`,
-        { criteria: checked },
+        { criteria: levels },
         { "x-trainer-code": code }
       );
       onGraded();
@@ -296,11 +311,19 @@ function SituationGrader({
         {response.gradedAt && ` — notée (${response.score}/4)`}
       </p>
       {situation && (
-        <p className="mt-1 font-sans text-sm text-white/80">
-          <span className="font-semibold text-white">{situation.domain}</span>
-          {" — "}
-          {situation.prompt}
-        </p>
+        <>
+          <p className="mt-1 font-sans text-sm font-semibold text-white">
+            Cas {situation.index} — {situation.domain}
+          </p>
+          <p className="mt-2 font-sans text-xs text-white/70">
+            <span className="font-semibold text-white/90">Contexte&nbsp;: </span>
+            {situation.context}
+          </p>
+          <p className="mt-1 font-sans text-xs text-white/70">
+            <span className="font-semibold text-white/90">Mission&nbsp;: </span>
+            {situation.mission}
+          </p>
+        </>
       )}
 
       {audioUrl ? (
@@ -309,29 +332,60 @@ function SituationGrader({
         <p className="mt-3 text-xs text-white/50">Chargement de l&apos;audio...</p>
       )}
 
-      <div className="mt-4 space-y-2">
-        {criteria.map((c) => (
-          <label
-            key={c.key}
-            className="flex cursor-pointer items-center gap-2 text-sm text-white/80"
-          >
-            <input
-              type="checkbox"
-              className="h-4 w-4 accent-accent"
-              checked={!!checked[c.key]}
-              onChange={(e) =>
-                setChecked((prev) => ({ ...prev, [c.key]: e.target.checked }))
-              }
-            />
-            {c.label} (1 pt)
-          </label>
-        ))}
+      <div className="mt-5 space-y-5">
+        {criteria.map((c) => {
+          const selectedKey =
+            levels[c.key] !== undefined
+              ? GRADING_LEVELS.find((l) => l.value === levels[c.key])?.key
+              : undefined;
+          return (
+            <div key={c.key}>
+              <p className="font-sans text-sm font-semibold text-white">{c.label}</p>
+              <p className="text-xs text-white/50">{c.description}</p>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {GRADING_LEVELS.map((level) => (
+                  <label
+                    key={level.key}
+                    className={`cursor-pointer rounded border px-2 py-1.5 text-center text-xs transition-colors ${
+                      selectedKey === level.key
+                        ? "border-accent bg-accent/10 text-accent"
+                        : "border-white/15 text-white/70 hover:border-white/30"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name={`${response.id}-${c.key}`}
+                      className="sr-only"
+                      checked={selectedKey === level.key}
+                      onChange={() =>
+                        setLevels((prev) => ({ ...prev, [c.key]: level.value }))
+                      }
+                    />
+                    {level.label}
+                    <span className="block font-mono text-[10px] text-white/50">
+                      {level.value.toFixed(2)} pt
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {selectedKey && (
+                <p className="mt-2 font-sans text-xs italic text-white/60">
+                  {c.descriptors[selectedKey]}
+                </p>
+              )}
+            </div>
+          );
+        })}
       </div>
+
+      <p className="mt-4 font-mono text-xs uppercase tracking-widest text-white/50">
+        Score prévisionnel : {previewScore.toFixed(2)} / 4.00
+      </p>
 
       {error && <p className="mt-2 text-xs text-accent">{error}</p>}
 
       <div className="mt-4">
-        <Button variant="ghostDark" onClick={save} disabled={saving}>
+        <Button variant="ghostDark" onClick={save} disabled={saving || !allSelected}>
           {saving ? "Enregistrement..." : "Enregistrer la note"}
         </Button>
       </div>

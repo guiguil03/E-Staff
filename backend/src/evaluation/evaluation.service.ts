@@ -16,9 +16,12 @@ import {
   scoreQcm,
 } from "./questions";
 import {
+  GRADING_LEVELS,
   SITUATION_GRADING_CRITERIA,
   SITUATIONS,
 } from "./situations";
+
+const ALLOWED_LEVEL_VALUES: number[] = GRADING_LEVELS.map((l) => l.value);
 
 const REQUIRED_SITUATION_COUNT = 5;
 
@@ -166,15 +169,24 @@ export class EvaluationService {
 
   async gradeSituationResponse(
     situationResponseId: string,
-    criteria: Record<string, boolean>
+    criteria: Record<string, number>
   ) {
     const response = await this.prisma.situationResponse.findUnique({
       where: { id: situationResponseId },
     });
     if (!response) throw new NotFoundException("Réponse introuvable.");
 
+    for (const c of SITUATION_GRADING_CRITERIA) {
+      const value = criteria[c.key];
+      if (typeof value !== "number" || !ALLOWED_LEVEL_VALUES.includes(value)) {
+        throw new BadRequestException(
+          `Critère "${c.label}" : merci de sélectionner un échelon valide (0.25 / 0.5 / 0.75 / 1).`
+        );
+      }
+    }
+
     const score = SITUATION_GRADING_CRITERIA.reduce(
-      (total, c) => total + (criteria[c.key] ? 1 : 0),
+      (total, c) => total + criteria[c.key],
       0
     );
 
