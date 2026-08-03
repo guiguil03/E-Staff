@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import Button from "@/components/ui/Button";
-import CalendarEmbed from "@/components/ui/CalendarEmbed";
+import CalendarEmbed, { isCalendarConfigured } from "@/components/ui/CalendarEmbed";
 import { apiPost, ApiError } from "@/lib/api";
 import {
   ACTIVITY_TYPES,
@@ -278,6 +278,10 @@ export default function ConnecteurFlow() {
   }
 
   if (step === "calendrier") {
+    const calLink =
+      process.env.NEXT_PUBLIC_CAL_LINK_CONNECTEUR ?? "e-staf/cadrage-connecteur";
+    const calendarReady = isCalendarConfigured(calLink);
+
     return (
       <div className="rounded border border-white/10 bg-obsidianCard p-6">
         <p className="font-mono text-xs uppercase tracking-widest text-accent">
@@ -287,20 +291,18 @@ export default function ConnecteurFlow() {
           Réservez un créneau de cadrage
         </h3>
         <p className="mt-2 font-sans text-sm text-white/70">
-          Choisissez un créneau d&apos;échange privé avec un membre de
-          l&apos;équipe e-Staf.
+          {calendarReady
+            ? "Choisissez un créneau d'échange privé avec un membre de l'équipe e-Staf."
+            : "Un membre de l'équipe e-Staf vous recontactera très prochainement pour fixer votre créneau d'échange privé."}
         </p>
         <CalendarEmbed
           className="mt-6"
-          link={
-            process.env.NEXT_PUBLIC_CAL_LINK_CONNECTEUR ??
-            "e-staf/cadrage-connecteur"
-          }
+          link={calLink}
           title="Réserver un créneau de cadrage Connecteur"
         />
         <div className="mt-6 text-center">
           <Button variant="dark" onClick={() => setStep("questionnaire")}>
-            J&apos;ai réservé mon créneau
+            {calendarReady ? "J'ai réservé mon créneau" : "Continuer"}
           </Button>
         </div>
       </div>

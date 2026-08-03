@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import Button from "@/components/ui/Button";
-import CalendarEmbed from "@/components/ui/CalendarEmbed";
+import CalendarEmbed, { isCalendarConfigured } from "@/components/ui/CalendarEmbed";
 import { apiPost, ApiError } from "@/lib/api";
 import { SERVICE_TYPES } from "@/lib/types";
 import {
@@ -64,26 +64,28 @@ export default function ProjetExternalisationFlow() {
   }
 
   if (step === "calendar") {
+    const calLink =
+      process.env.NEXT_PUBLIC_CAL_LINK_COMMERCIAL ?? "e-staf/cadrage-commercial";
+    const calendarReady = isCalendarConfigured(calLink);
+
     return (
       <div className="rounded border border-white/10 bg-obsidianCard p-6">
         <p className="font-display text-lg text-white">
           Vos informations ont bien été enregistrées.
         </p>
         <p className="mt-2 font-sans text-sm text-white/70">
-          Réservez dès maintenant votre créneau de cadrage commercial (30
-          min).
+          {calendarReady
+            ? "Réservez dès maintenant votre créneau de cadrage commercial (30 min)."
+            : "Un membre de l'équipe e-Staf vous recontactera très prochainement pour fixer votre créneau de cadrage commercial."}
         </p>
         <CalendarEmbed
           className="mt-6"
-          link={
-            process.env.NEXT_PUBLIC_CAL_LINK_COMMERCIAL ??
-            "e-staf/cadrage-commercial"
-          }
+          link={calLink}
           title="Réserver un créneau de cadrage commercial"
         />
         <div className="mt-6 text-center">
           <Button variant="dark" onClick={() => setStep("final")}>
-            J&apos;ai réservé mon créneau
+            {calendarReady ? "J'ai réservé mon créneau" : "Continuer"}
           </Button>
         </div>
       </div>
@@ -111,8 +113,8 @@ export default function ProjetExternalisationFlow() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <fieldset className={fieldsetClass}>
-        <legend className={legendClass}>1. Informations sur l&apos;entreprise</legend>
+      <div className={fieldsetClass}>
+        <h2 className={legendClass}>1. Informations sur l&apos;entreprise</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className={labelClass} htmlFor="companyName">
@@ -176,10 +178,10 @@ export default function ProjetExternalisationFlow() {
             />
           </div>
         </div>
-      </fieldset>
+      </div>
 
-      <fieldset className={fieldsetClass}>
-        <legend className={legendClass}>2. Contact & décisionnaire</legend>
+      <div className={fieldsetClass}>
+        <h2 className={legendClass}>2. Contact & décisionnaire</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className={labelClass} htmlFor="contactName">
@@ -233,10 +235,10 @@ export default function ProjetExternalisationFlow() {
             />
           </div>
         </div>
-      </fieldset>
+      </div>
 
-      <fieldset className={fieldsetClass}>
-        <legend className={legendClass}>3. Cahier des charges & attentes</legend>
+      <div className={fieldsetClass}>
+        <h2 className={legendClass}>3. Cahier des charges & attentes</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className={labelClass} htmlFor="serviceType">
@@ -294,7 +296,7 @@ export default function ProjetExternalisationFlow() {
             />
           </div>
         </div>
-      </fieldset>
+      </div>
 
       <label className="flex items-start gap-3 text-sm text-white/80">
         <input
