@@ -3,11 +3,9 @@ import Link from "next/link";
 
 const NAV_ITEMS = [
   { label: "Communauté", href: "/communaute" },
+  { label: "Forum", href: "/forum" },
   { label: "Se préparer aux examens", href: "/offres/examens" },
   { label: "Proposer un partenariat", href: "/entreprises" },
-  // Outil interne (protégé par un code) — dans la nav pour être découvrable
-  // par les formateurs, malgré l'absence d'un vrai système de comptes.
-  { label: "Espace formateur", href: "/evaluation/formateur" },
   { label: "Se connecter", href: "/connexion" },
 ];
 
