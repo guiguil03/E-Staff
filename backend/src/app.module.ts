@@ -6,6 +6,7 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { EntreprisesProjetsModule } from "./entreprises-projets/entreprises-projets.module";
 import { ConnecteursModule } from "./connecteurs/connecteurs.module";
 import { EvaluationModule } from "./evaluation/evaluation.module";
+import { AuthModule } from "./auth/auth.module";
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { EvaluationModule } from "./evaluation/evaluation.module";
     EntreprisesProjetsModule,
     ConnecteursModule,
     EvaluationModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

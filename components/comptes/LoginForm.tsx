@@ -1,35 +1,47 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
+import { apiPost, ApiError } from "@/lib/api";
+import { ACCOUNT_ROLE_KEY, ROLE_ROUTES } from "@/lib/accountSession";
 
-// No auth/backend exists yet. Unlike a generic broken-fetch error, this
-// failure is expected and permanent for now, so the message says so plainly
-// instead of suggesting "try again later".
+// Login générique — un seul endpoint pour tous les rôles, en attendant le
+// vrai système de comptes/matricules RH (module 7 de la roadmap). Le rôle
+// renvoyé par le backend détermine où rediriger. Un simple flag
+// sessionStorage protège les tableaux de bord côté client ; ce n'est pas
+// une vraie session, juste assez pour démontrer le design.
+
 const inputClass =
   "w-full rounded border border-white/20 bg-obsidian px-4 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none transition-colors focus:border-accent";
 const labelClass = "block text-sm font-medium mb-1 text-white/80";
 
 export default function LoginForm() {
+  const router = useRouter();
   const [matricule, setMatricule] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setStatus("sending");
+    setError(null);
     try {
-      const res = await fetch("/api/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matricule, password }),
+      const res = await apiPost<{ ok: boolean; role: string }>("/auth/login", {
+        matricule,
+        password,
       });
-      if (!res.ok) throw new Error("failed");
-    } catch {
+      sessionStorage.setItem(ACCOUNT_ROLE_KEY, res.role);
+      router.push(ROLE_ROUTES[res.role] ?? "/");
+    } catch (err) {
       setStatus("error");
-      return;
+      setError(
+        err instanceof ApiError
+          ? "Matricule ou mot de passe invalide."
+          : "Une erreur est survenue. Merci de réessayer plus tard."
+      );
     }
-    setStatus("error");
   }
 
   return (
@@ -66,11 +78,8 @@ export default function LoginForm() {
         </div>
       </div>
 
-      {status === "error" && (
-        <p className="mt-4 text-sm text-accent">
-          La connexion n&apos;est pas encore disponible. Cette fonctionnalité
-          arrive prochainement.
-        </p>
+      {status === "error" && error && (
+        <p className="mt-4 text-sm text-accent">{error}</p>
       )}
 
       <div className="mt-6">
