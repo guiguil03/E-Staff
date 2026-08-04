@@ -7,7 +7,7 @@ import CollaborationSection from "@/components/entreprises/CollaborationSection"
 export const metadata: Metadata = {
   title: "Entreprises (B2B) — e-Staf",
   description:
-    "e-Staf externalise vos opérations avec des agents qualifiés : locaux équipés, encadrement managérial rigoureux, reporting hebdomadaire et zéro turnover. Squads long terme ou missions ponctuelles.",
+    "e-Staf externalise vos opérations avec des agents qualifiés : locaux équipés, encadrement managérial rigoureux, reporting hebdomadaire et zéro turnover. Squads long terme ou missions ponctuelles",
 };
 
 export default function EntreprisesPage() {
