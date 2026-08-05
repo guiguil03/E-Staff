@@ -6,4 +6,5 @@ export const ACCOUNT_ROLE_KEY = "estaf-account-role";
 
 export const ROLE_ROUTES: Record<string, string> = {
   apprenant: "/compte/apprenant",
+  formateur: "/compte/formateur",
 };

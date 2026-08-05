@@ -2,6 +2,10 @@ import Reveal from "@/components/Reveal";
 
 interface CecrGaugeProps {
   value: number; // 0-100
+  title?: string;
+  subtitle?: string;
+  /** Remplace "Palier atteint : X" par un libellé personnalisé (ex. "% de la cohorte au niveau C1"). */
+  valueLabel?: (paliers: string) => string;
 }
 
 // Paliers CECR fournis par la cliente (jauge de cumul du mois).
@@ -32,7 +36,12 @@ function describeArc(cx: number, cy: number, r: number, fromPct: number, toPct: 
 
 // Jauge en demi-cercle faite main (pas de dépendance externe) — segments
 // colorés par palier CECR + aiguille pointant la valeur cumulée du mois.
-export default function CecrGauge({ value }: CecrGaugeProps) {
+export default function CecrGauge({
+  value,
+  title = "Jauge de cumul du mois",
+  subtitle = "Paliers CECR",
+  valueLabel,
+}: CecrGaugeProps) {
   const cx = 120;
   const cy = 130;
   const r = 96;
@@ -50,10 +59,8 @@ export default function CecrGauge({ value }: CecrGaugeProps) {
   return (
     <Reveal>
       <div className="rounded border border-white/10 bg-obsidianCard p-6 text-center">
-        <h3 className="font-display text-lg font-semibold text-white">
-          Jauge de cumul du mois
-        </h3>
-        <p className="mt-1 font-sans text-xs text-white/50">Paliers CECR</p>
+        <h3 className="font-display text-lg font-semibold text-white">{title}</h3>
+        <p className="mt-1 font-sans text-xs text-white/50">{subtitle}</p>
 
         <svg viewBox="0 0 240 150" className="mx-auto mt-2 w-full max-w-[280px]" role="img" aria-label={`Progression CECR : ${clamped}%, palier atteint ${palierAtteint(clamped)}`}>
           {segments.map((seg) => (
@@ -99,7 +106,9 @@ export default function CecrGauge({ value }: CecrGaugeProps) {
 
         <p className="-mt-2 font-display text-3xl font-bold text-accent">{clamped}%</p>
         <p className="mt-1 font-mono text-xs uppercase tracking-widest text-white/50">
-          Palier atteint : {palierAtteint(clamped)}
+          {valueLabel
+            ? valueLabel(palierAtteint(clamped))
+            : `Palier atteint : ${palierAtteint(clamped)}`}
         </p>
       </div>
     </Reveal>

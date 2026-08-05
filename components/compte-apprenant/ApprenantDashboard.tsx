@@ -1,7 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import ProfileHeader from "./ProfileHeader";
 import CompetencyBars from "./CompetencyBars";
 import ComparativeChart from "./ComparativeChart";
@@ -19,23 +17,14 @@ import {
   TAUX_REUSSITE_GLOBAL,
   WEEKLY_AVERAGES,
 } from "./exampleData";
-import { ACCOUNT_ROLE_KEY } from "@/lib/accountSession";
+import { useRequireRole } from "@/lib/useRequireRole";
 
 // Garde d'accès + assemblage du tableau de bord. Pas de vrai système de
 // comptes/matricules individuels pour l'instant (module 7 de la roadmap) —
 // le rôle posé en sessionStorage par LoginForm (endpoint /auth/login
 // générique) protège cette page.
 export default function ApprenantDashboard() {
-  const router = useRouter();
-  const [checked, setChecked] = useState(false);
-
-  useEffect(() => {
-    if (sessionStorage.getItem(ACCOUNT_ROLE_KEY) === "apprenant") {
-      setChecked(true);
-    } else {
-      router.replace("/connexion");
-    }
-  }, [router]);
+  const checked = useRequireRole("apprenant");
 
   if (!checked) {
     return (

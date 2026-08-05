@@ -15,7 +15,7 @@ interface ComparativeChartProps {
 export default function ComparativeChart({ points, niveauInitial }: ComparativeChartProps) {
   const width = 560;
   const height = 220;
-  const padding = { top: 16, right: 16, bottom: 28, left: 8 };
+  const padding = { top: 16, right: 24, bottom: 28, left: 28 };
   const innerW = width - padding.left - padding.right;
   const innerH = height - padding.top - padding.bottom;
 

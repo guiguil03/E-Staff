@@ -1,4 +1,6 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+// Retire un éventuel "/" final — évite un double slash si NEXT_PUBLIC_API_URL
+// est renseigné avec (ex. "https://api.example.com/") ou sans.
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
