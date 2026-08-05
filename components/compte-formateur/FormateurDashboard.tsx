@@ -9,6 +9,7 @@ import GradingQueueSummaryCard from "./GradingQueueSummaryCard";
 import AdminColumn from "./AdminColumn";
 import GroupDetailPanel from "./GroupDetailPanel";
 import WeeklyReportPanel from "./WeeklyReportPanel";
+import PaymentAlertsTable from "./PaymentAlertsTable";
 import { GLOBAL_C1_RATE, GROUPES } from "./exampleData";
 import { useRequireRole } from "@/lib/useRequireRole";
 
@@ -55,6 +56,8 @@ export default function FormateurDashboard() {
           selectedGroup={panel?.type === "group" ? panel.key : null}
           onSelectGroup={(key) => setPanel({ type: "group", key })}
         />
+
+        <PaymentAlertsTable />
 
         {panel?.type === "group" && (
           <GroupDetailPanel

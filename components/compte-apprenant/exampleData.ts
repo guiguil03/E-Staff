@@ -66,3 +66,12 @@ export const PROCHAINE_SEANCE = {
   // figée, pour que la démo affiche toujours un compte à rebours vivant.
   hoursFromNow: 26,
 };
+
+export const DOSSIER = {
+  dateInscription: "2026-02-01",
+  seancesRestantes: 8,
+  seancesTotal: 20,
+  echeanceRenouvellement: "2026-08-31",
+  quotaAnnulations: 3,
+  annulationsUtilisees: 1,
+};

@@ -21,6 +21,10 @@ export interface Apprenant {
   tauxAbsence: number;
   retards: number;
   alerteDecrochage: boolean;
+  // Dossier administratif — alimente le Tableau "Alertes Paiements &
+  // Casiers Apprenants" du cockpit formateur.
+  echeanceRenouvellement: string; // ISO
+  seancesRestantes: number;
 }
 
 const COMPETENCY_LABELS = [
@@ -52,6 +56,14 @@ function makeApprenant(
     ...c,
     score: Math.max(4, Math.min(20, Math.round(base + ((i % 3) - 1) * 1.5))),
   }));
+
+  // Échéances étalées (formule déterministe) pour obtenir un mélange
+  // réaliste d'apprenants à jour / bientôt échus / en retard — utile pour
+  // démontrer les 3 états du Tableau Alertes Paiements.
+  const offsetDays = ((index * 7) % 50) - 20;
+  const echeance = new Date();
+  echeance.setDate(echeance.getDate() + offsetDays);
+
   return {
     id: `apprenant-${index + 1}`,
     firstName,
@@ -68,6 +80,8 @@ function makeApprenant(
     tauxAbsence: alerteDecrochage ? 20 : Math.round(Math.random() * 8),
     retards: alerteDecrochage ? 3 : Math.round(Math.random() * 2),
     alerteDecrochage,
+    echeanceRenouvellement: echeance.toISOString().slice(0, 10),
+    seancesRestantes: Math.max(0, 20 - ((index * 3) % 21)),
   };
 }
 
@@ -139,6 +153,20 @@ export const SUBMISSION_QUEUE: SubmissionQueueItem[] = [
   { id: "sub-5", apprenantId: "apprenant-27", type: "Vidéo", exercice: "Débat plateau télé", soumisDepuis: "hier" },
   { id: "sub-6", apprenantId: "apprenant-6", type: "Texte", exercice: "Cas pratique — email client", soumisDepuis: "hier" },
 ];
+
+// Planning par Groupe & Moyenne de Séance — 12 séances par groupe. Les
+// séances 1-4 sont considérées "passées" (correspondent aux S1-S4 déjà
+// visibles dans l'historique de chaque apprenant) ; 5-12 sont à venir,
+// donc sans note pré-remplie — le formateur les saisit lui-même.
+export const SEANCE_NUMBERS = Array.from({ length: 12 }, (_, i) => i + 1);
+export const DERNIERE_SEANCE_PASSEE = 4;
+
+export const OBJECTIFS_PAR_DEFAUT: Record<number, string> = {
+  1: "Consolidation des fondamentaux grammaticaux et lexicaux.",
+  2: "Structuration de l'argumentation à l'oral et à l'écrit.",
+  3: "Travail sur l'aisance orale et la gestion du trac.",
+  4: "Renforcement du vocabulaire professionnel sectoriel.",
+};
 
 export const BROADCAST_TARGETS = [
   { key: "tous", label: "Tous les apprenants (30)" },

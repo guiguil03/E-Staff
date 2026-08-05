@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
 
@@ -65,6 +66,16 @@ export default function TeachColumn() {
             )}
           </div>
         </div>
+
+        <Link
+          href="/compte/formateur/planning"
+          className="mt-5 flex items-center justify-between rounded border border-white/10 bg-obsidian px-3 py-2.5 font-sans text-sm text-white transition-colors hover:border-accent/50"
+        >
+          Planning par Groupe &amp; Moyenne de Séance
+          <span aria-hidden="true" className="text-accent">
+            →
+          </span>
+        </Link>
       </div>
     </Reveal>
   );

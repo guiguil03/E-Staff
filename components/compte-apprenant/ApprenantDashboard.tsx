@@ -6,12 +6,14 @@ import ComparativeChart from "./ComparativeChart";
 import CecrGauge from "./CecrGauge";
 import OperationalTracking from "./OperationalTracking";
 import QuickActions from "./QuickActions";
+import MonDossier from "./MonDossier";
 import {
   ALERTE_PEDAGOGIQUE,
   ASSIDUITE,
   CECR_GAUGE,
   COMMENTAIRE_FORMATEUR,
   DIAGNOSTIC_INITIAL,
+  DOSSIER,
   PROCHAINE_SEANCE,
   SEANCE_ACTUELLE,
   TAUX_REUSSITE_GLOBAL,
@@ -67,6 +69,14 @@ export default function ApprenantDashboard() {
             <QuickActions
               prochaineSeanceTitle={PROCHAINE_SEANCE.title}
               hoursFromNow={PROCHAINE_SEANCE.hoursFromNow}
+            />
+            <MonDossier
+              dateInscription={DOSSIER.dateInscription}
+              seancesRestantes={DOSSIER.seancesRestantes}
+              seancesTotal={DOSSIER.seancesTotal}
+              echeanceRenouvellement={DOSSIER.echeanceRenouvellement}
+              quotaAnnulations={DOSSIER.quotaAnnulations}
+              annulationsUtilisees={DOSSIER.annulationsUtilisees}
             />
           </div>
         </div>
