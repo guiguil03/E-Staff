@@ -137,21 +137,29 @@ export const GLOBAL_C1_RATE = Math.round(
 
 export const VIVIER_C1 = APPRENANTS.filter((a) => a.moyenneGlobale >= 75);
 
+// Grille utilisée pour corriger ce rendu — mêmes grilles DELF que la
+// notation de séance (voir gradingGrids.ts), pas de grille "générique"
+// séparée. Compréhension orale/écrite n'apparaissent pas ici : ces
+// compétences se notent par dépôt+note directe, pas par grille de
+// correction (cf. Planning > Noter).
+export type SubmissionCompetencyKey = "expression_orale" | "expression_ecrite" | "posture_eloquence";
+
 export interface SubmissionQueueItem {
   id: string;
   apprenantId: string;
   type: "Vidéo" | "Audio" | "Texte";
   exercice: string;
+  competence: SubmissionCompetencyKey;
   soumisDepuis: string;
 }
 
 export const SUBMISSION_QUEUE: SubmissionQueueItem[] = [
-  { id: "sub-1", apprenantId: "apprenant-3", type: "Audio", exercice: "Pitch de présentation 60s", soumisDepuis: "il y a 40 min" },
-  { id: "sub-2", apprenantId: "apprenant-8", type: "Vidéo", exercice: "Atelier posture non-verbale", soumisDepuis: "il y a 1h30" },
-  { id: "sub-3", apprenantId: "apprenant-14", type: "Texte", exercice: "Rédaction email support", soumisDepuis: "il y a 2h" },
-  { id: "sub-4", apprenantId: "apprenant-22", type: "Audio", exercice: "Appel à blanc — objection budget", soumisDepuis: "il y a 3h" },
-  { id: "sub-5", apprenantId: "apprenant-27", type: "Vidéo", exercice: "Débat plateau télé", soumisDepuis: "hier" },
-  { id: "sub-6", apprenantId: "apprenant-6", type: "Texte", exercice: "Cas pratique — email client", soumisDepuis: "hier" },
+  { id: "sub-1", apprenantId: "apprenant-3", type: "Audio", exercice: "Pitch de présentation 60s", competence: "expression_orale", soumisDepuis: "il y a 40 min" },
+  { id: "sub-2", apprenantId: "apprenant-8", type: "Vidéo", exercice: "Atelier posture non-verbale", competence: "posture_eloquence", soumisDepuis: "il y a 1h30" },
+  { id: "sub-3", apprenantId: "apprenant-14", type: "Texte", exercice: "Rédaction email support", competence: "expression_ecrite", soumisDepuis: "il y a 2h" },
+  { id: "sub-4", apprenantId: "apprenant-22", type: "Audio", exercice: "Appel à blanc — objection budget", competence: "expression_orale", soumisDepuis: "il y a 3h" },
+  { id: "sub-5", apprenantId: "apprenant-27", type: "Vidéo", exercice: "Débat plateau télé", competence: "posture_eloquence", soumisDepuis: "hier" },
+  { id: "sub-6", apprenantId: "apprenant-6", type: "Texte", exercice: "Cas pratique — email client", competence: "expression_ecrite", soumisDepuis: "hier" },
 ];
 
 // Planning par Groupe & Moyenne de Séance — 12 séances par groupe. Les
