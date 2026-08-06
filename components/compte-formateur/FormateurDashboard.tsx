@@ -7,7 +7,12 @@ import TopBar from "./TopBar";
 import GroupEvolutionChart from "./GroupEvolutionChart";
 import TeachColumn from "./TeachColumn";
 import GradingQueueSummaryCard from "./GradingQueueSummaryCard";
-import AdminColumn from "./AdminColumn";
+import {
+  SearchApprenantCard,
+  BroadcastCard,
+  VivierC1Card,
+  WeeklyReportCard,
+} from "./AdminColumn";
 import GroupDetailPanel from "./GroupDetailPanel";
 import WeeklyReportPanel from "./WeeklyReportPanel";
 import PaymentAlertsTable from "./PaymentAlertsTable";
@@ -51,16 +56,45 @@ export default function FormateurDashboard() {
           </h1>
         </Reveal>
 
-        <TopBar
-          globalC1Rate={GLOBAL_C1_RATE}
-          groupes={GROUPES}
-          selectedGroup={panel?.type === "group" ? panel.key : null}
-          onSelectGroup={(key) => setPanel({ type: "group", key })}
-        />
+        {/* Cockpit en bento : grille compacte, chaque bloc garde sa propre
+            carte, séparés par un petit espace de transition (gap-3) plutôt
+            que le grand espace d'origine (gap-6/space-y-6). */}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-6">
+          <TopBar
+            globalC1Rate={GLOBAL_C1_RATE}
+            groupes={GROUPES}
+            selectedGroup={panel?.type === "group" ? panel.key : null}
+            onSelectGroup={(key) => setPanel({ type: "group", key })}
+          />
 
-        <GroupEvolutionChart />
+          <div className="lg:col-span-6">
+            <GroupEvolutionChart />
+          </div>
 
-        <PaymentAlertsTable onSelectApprenant={goToApprenant} />
+          <div className="lg:col-span-6">
+            <PaymentAlertsTable onSelectApprenant={goToApprenant} />
+          </div>
+
+          <div className="lg:col-span-2">
+            <TeachColumn />
+          </div>
+          <div className="lg:col-span-2">
+            <GradingQueueSummaryCard />
+          </div>
+          <div className="lg:col-span-2">
+            <SearchApprenantCard onSelectApprenant={goToApprenant} />
+          </div>
+
+          <div className="lg:col-span-2">
+            <BroadcastCard />
+          </div>
+          <div className="lg:col-span-2">
+            <VivierC1Card onSelectApprenant={goToApprenant} />
+          </div>
+          <div className="lg:col-span-2">
+            <WeeklyReportCard onOpenReport={() => setPanel({ type: "report" })} />
+          </div>
+        </div>
 
         {panel?.type === "group" && (
           <GroupDetailPanel
@@ -70,15 +104,6 @@ export default function FormateurDashboard() {
           />
         )}
         {panel?.type === "report" && <WeeklyReportPanel onClose={() => setPanel(null)} />}
-
-        <div className="grid gap-6 lg:grid-cols-3">
-          <TeachColumn />
-          <GradingQueueSummaryCard />
-          <AdminColumn
-            onSelectApprenant={goToApprenant}
-            onOpenReport={() => setPanel({ type: "report" })}
-          />
-        </div>
       </div>
     </div>
   );

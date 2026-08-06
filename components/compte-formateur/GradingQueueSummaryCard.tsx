@@ -9,8 +9,8 @@ export default function GradingQueueSummaryCard() {
   const preview = SUBMISSION_QUEUE.slice(0, 3);
 
   return (
-    <Reveal>
-      <div className="rounded border border-white/10 bg-obsidianCard p-6">
+    <Reveal className="h-full">
+      <div className="flex h-full flex-col rounded border border-white/10 bg-obsidianCard p-6">
         <div className="flex items-baseline justify-between">
           <h3 className="font-display text-base font-semibold text-white">
             Évaluer &amp; Corriger

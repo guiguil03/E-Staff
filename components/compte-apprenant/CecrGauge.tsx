@@ -6,6 +6,8 @@ interface CecrGaugeProps {
   subtitle?: string;
   /** Remplace "Palier atteint : X" par un libellé personnalisé (ex. "% de la cohorte au niveau C1"). */
   valueLabel?: (paliers: string) => string;
+  /** Si true, n'affiche que le contenu (pas de carte rounded/border/bg) — pour s'intégrer dans une grille bento qui gère déjà le fond et les séparateurs. */
+  bare?: boolean;
 }
 
 // Paliers CECR fournis par la cliente (jauge de cumul du mois).
@@ -41,6 +43,7 @@ export default function CecrGauge({
   title = "Jauge de cumul du mois",
   subtitle = "Paliers CECR",
   valueLabel,
+  bare = false,
 }: CecrGaugeProps) {
   const cx = 120;
   const cy = 130;
@@ -57,8 +60,8 @@ export default function CecrGauge({
   ];
 
   return (
-    <Reveal>
-      <div className="rounded border border-white/10 bg-obsidianCard p-6 text-center">
+    <Reveal className="h-full">
+      <div className={bare ? "h-full p-6 text-center" : "h-full rounded border border-white/10 bg-obsidianCard p-6 text-center"}>
         <h3 className="font-display text-lg font-semibold text-white">{title}</h3>
         <p className="mt-1 font-sans text-xs text-white/50">{subtitle}</p>
 

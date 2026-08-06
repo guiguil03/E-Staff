@@ -20,8 +20,8 @@ export default function TeachColumn() {
   }
 
   return (
-    <Reveal>
-      <div className="rounded border border-white/10 bg-obsidianCard p-6">
+    <Reveal className="h-full">
+      <div className="h-full rounded border border-white/10 bg-obsidianCard p-6">
         <h3 className="font-display text-base font-semibold text-white">Enseigner</h3>
 
         <div className="mt-4 rounded border border-accent bg-accent/10 p-4 text-center">
