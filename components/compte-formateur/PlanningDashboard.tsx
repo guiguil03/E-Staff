@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import Reveal from "@/components/Reveal";
-import Button from "@/components/ui/Button";
 import { useRequireRole } from "@/lib/useRequireRole";
 import {
   APPRENANTS,
@@ -13,60 +13,51 @@ import {
   SEANCE_NUMBERS,
   type Apprenant,
 } from "./exampleData";
+import { COMPETENCY_DEFS, tauxAssimilation, type CompetencyKey } from "./gradingGrids";
+import { getCompetencyEntry, usePlanningGradesVersion } from "./planningGradesStore";
 
-const COMPETENCY_KEYS = [
-  { key: "comprehension_orale", label: "Compr. orale" },
-  { key: "expression_orale", label: "Expr. orale" },
-  { key: "comprehension_ecrite", label: "Compr. écrite" },
-  { key: "expression_ecrite", label: "Expr. écrite" },
-  { key: "posture_eloquence", label: "Posture" },
-];
+// Pour les séances déjà passées (1 à DERNIERE_SEANCE_PASSEE) sans note
+// saisie dans planningGradesStore, on affiche une valeur plausible dérivée
+// des compétences actuelles de l'apprenant (léger delta décroissant, même
+// logique que son historique hebdomadaire) — purement pour l'affichage,
+// ça n'écrit rien dans le store. Les séances futures démarrent vides.
+function derivedScore(apprenant: Apprenant, competencyKey: CompetencyKey, seance: number): number | null {
+  if (seance > DERNIERE_SEANCE_PASSEE) return null;
+  const delta = [-2, -1, 0, 0][seance - 1] ?? 0;
+  const current = apprenant.competencies.find((c) => c.key === competencyKey)?.score ?? 12;
+  return Math.max(0, Math.min(20, current + delta));
+}
 
-type GradeGrid = Record<string, Record<string, number | "">>;
-
-// Pour les séances déjà passées (1 à DERNIERE_SEANCE_PASSEE), on dérive des
-// notes plausibles à partir des compétences actuelles de l'apprenant (léger
-// delta décroissant, même logique que son historique hebdomadaire) ; les
-// séances futures démarrent vides — c'est au formateur de les saisir.
-function deriveGrid(apprenants: Apprenant[], seance: number): GradeGrid {
-  const grid: GradeGrid = {};
-  const delta = seance <= DERNIERE_SEANCE_PASSEE ? [-2, -1, 0, 0][seance - 1] : null;
-  for (const a of apprenants) {
-    grid[a.id] = {};
-    for (const c of COMPETENCY_KEYS) {
-      if (delta === null) {
-        grid[a.id][c.key] = "";
-      } else {
-        const current = a.competencies.find((comp) => comp.key === c.key)?.score ?? 12;
-        grid[a.id][c.key] = Math.max(0, Math.min(20, current + delta));
-      }
-    }
-  }
-  return grid;
+function displayedScore(apprenant: Apprenant, competencyKey: CompetencyKey, seance: number): number | null {
+  const entry = getCompetencyEntry(seance, apprenant.id, competencyKey);
+  if (entry && entry.scoreOn20 !== null && entry.scoreOn20 !== undefined) return entry.scoreOn20;
+  return derivedScore(apprenant, competencyKey, seance);
 }
 
 // Page dédiée "Planning par Groupe & Moyenne de Séance" — pilotage
-// pédagogique séance par séance. La saisie des 5 compétences ici est
-// distincte de la notation des rendus vidéo/audio (page /corriger) : cette
-// grille couvre l'évaluation en direct pendant la séance elle-même.
-// Sync : en l'absence de backend, la saisie ici reste locale à cette page
-// (pas de compte réel partagé avec l'apprenant) — le point d'accroche pour
-// une vraie synchronisation (mise à jour de la progression hebdomadaire de
-// chaque apprenant) est signalé dans le commentaire de `saveGrades`.
+// pédagogique séance par séance. La saisie détaillée par compétence (grille
+// de critères pour Expression Orale/Écrite et Posture & Éloquence, dépôt +
+// note pour Compréhension Orale/Écrite) se fait sur la page dédiée
+// /compte/formateur/planning/noter/[apprenantId] (bouton "Noter" par
+// ligne) — ce tableau reste une vue de lecture qui agrège les scores
+// enregistrés dans planningGradesStore.
+// Sync : en l'absence de backend, la saisie reste locale à cette session de
+// navigation (pas de compte réel partagé avec l'apprenant) — le point
+// d'accroche pour une vraie synchronisation (mise à jour de la progression
+// hebdomadaire de chaque apprenant) reste à construire une fois un backend
+// partagé en place pour ce module.
 export default function PlanningDashboard() {
   const checked = useRequireRole("formateur");
-  const [groupeKey, setGroupeKey] = useState(GROUPES[0].key);
-  const [seance, setSeance] = useState(1);
+  const searchParams = useSearchParams();
+  const [groupeKey, setGroupeKey] = useState(searchParams.get("groupe") || GROUPES[0].key);
+  const [seance, setSeance] = useState(Number(searchParams.get("seance") ?? "1"));
   const [objectifs, setObjectifs] = useState(OBJECTIFS_PAR_DEFAUT[1] ?? "");
-  const [grades, setGrades] = useState<GradeGrid>({});
-  const [saved, setSaved] = useState(false);
+  usePlanningGradesVersion();
 
   const apprenantsGroupe = APPRENANTS.filter((a) => a.groupe === groupeKey);
 
   useEffect(() => {
-    setGrades(deriveGrid(apprenantsGroupe, seance));
     setObjectifs(OBJECTIFS_PAR_DEFAUT[seance] ?? "");
-    setSaved(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupeKey, seance]);
 
@@ -78,26 +69,14 @@ export default function PlanningDashboard() {
     );
   }
 
-  function setGrade(apprenantId: string, competencyKey: string, value: string) {
-    const num = value === "" ? "" : Math.max(0, Math.min(20, Number(value)));
-    setGrades((prev) => ({
-      ...prev,
-      [apprenantId]: { ...prev[apprenantId], [competencyKey]: num },
-    }));
-    setSaved(false);
-  }
-
-  function moyenneApprenant(apprenantId: string): number | null {
-    const row = grades[apprenantId];
-    if (!row) return null;
-    const values = COMPETENCY_KEYS.map((c) => row[c.key]).filter(
-      (v): v is number => v !== "" && v !== undefined
-    );
-    if (values.length < COMPETENCY_KEYS.length) return null;
+  function moyenneApprenant(apprenant: Apprenant): number | null {
+    const scores = COMPETENCY_DEFS.map((c) => displayedScore(apprenant, c.key, seance));
+    if (scores.some((s) => s === null)) return null;
+    const values = scores as number[];
     return Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 100) / 100;
   }
 
-  const moyennesApprenants = apprenantsGroupe.map((a) => moyenneApprenant(a.id));
+  const moyennesApprenants = apprenantsGroupe.map((a) => moyenneApprenant(a));
   const moyennesCompletes = moyennesApprenants.filter((m): m is number => m !== null);
   const moyenneGroupe =
     moyennesCompletes.length > 0
@@ -105,15 +84,6 @@ export default function PlanningDashboard() {
           (moyennesCompletes.reduce((s, m) => s + m, 0) / moyennesCompletes.length) * 100
         ) / 100
       : null;
-
-  // Point d'accroche pour la vraie synchronisation [Saisie Formateur] →
-  // [Calcul Automatique] → [Mises à jour Apprenant] décrite par la
-  // cliente : une fois un backend partagé en place, cet enregistrement
-  // écrirait la séance en base et recalculerait la progression hebdomadaire
-  // de chaque apprenant concerné.
-  function saveGrades() {
-    setSaved(true);
-  }
 
   return (
     <div className="min-h-screen bg-obsidian px-4 py-10 sm:px-6 sm:py-14">
@@ -191,13 +161,10 @@ export default function PlanningDashboard() {
               <p className="font-sans text-sm text-white/60">
                 Ressources / supports de cette séance
               </p>
-              <Button variant="ghostDark" disabled>
-                Joindre un fichier
-              </Button>
+              <span className="font-mono text-[10px] uppercase tracking-widest text-white/30">
+                Bientôt disponible
+              </span>
             </div>
-            <p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-white/30">
-              PDF, audio, exercice — bientôt disponible
-            </p>
           </div>
         </Reveal>
 
@@ -206,66 +173,75 @@ export default function PlanningDashboard() {
             <h3 className="font-display text-base font-semibold text-white">
               Grille des 5 compétences (/20)
             </h3>
+            <p className="mt-1 font-sans text-xs text-white/50">
+              Vue de lecture — la notation détaillée (grille de critères ou dépôt de document) se
+              fait via le bouton &laquo; Noter &raquo;.
+            </p>
             <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[560px] font-sans text-sm">
+              <table className="w-full min-w-[720px] font-sans text-sm">
                 <thead>
                   <tr className="border-b border-white/10 text-left text-xs text-white/40">
                     <th className="py-2 pr-2 font-mono font-normal">Apprenant</th>
-                    {COMPETENCY_KEYS.map((c) => (
+                    {COMPETENCY_DEFS.map((c) => (
                       <th key={c.key} className="py-2 pr-2 font-mono font-normal">
                         {c.label}
                       </th>
                     ))}
-                    <th className="py-2 font-mono font-normal text-right">Moyenne</th>
+                    <th className="py-2 pr-2 font-mono font-normal text-right">Moyenne</th>
+                    <th className="py-2 pr-2 font-mono font-normal text-right">Assimilation</th>
+                    <th className="py-2 font-mono font-normal text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {apprenantsGroupe.map((a) => (
-                    <tr key={a.id} className="border-b border-white/5">
-                      <td className="py-2 pr-2 text-white">
-                        {a.firstName} {a.lastName}
-                      </td>
-                      {COMPETENCY_KEYS.map((c) => (
-                        <td key={c.key} className="py-2 pr-2">
-                          <input
-                            type="number"
-                            min={0}
-                            max={20}
-                            value={grades[a.id]?.[c.key] ?? ""}
-                            onChange={(e) => setGrade(a.id, c.key, e.target.value)}
-                            className="w-14 rounded border border-white/20 bg-obsidian px-2 py-1 text-center font-sans text-sm text-white outline-none focus:border-accent"
-                          />
+                  {apprenantsGroupe.map((a) => {
+                    const moyenne = moyenneApprenant(a);
+                    return (
+                      <tr key={a.id} className="border-b border-white/5">
+                        <td className="py-2 pr-2 text-white">
+                          {a.firstName} {a.lastName}
                         </td>
-                      ))}
-                      <td className="py-2 text-right font-mono text-sm text-accent">
-                        {moyenneApprenant(a.id) ?? "—"}
-                      </td>
-                    </tr>
-                  ))}
+                        {COMPETENCY_DEFS.map((c) => {
+                          const score = displayedScore(a, c.key, seance);
+                          return (
+                            <td key={c.key} className="py-2 pr-2 text-white/80">
+                              {score ?? "—"}
+                            </td>
+                          );
+                        })}
+                        <td className="py-2 pr-2 text-right font-mono text-sm text-accent">
+                          {moyenne ?? "—"}
+                        </td>
+                        <td className="py-2 pr-2 text-right font-mono text-sm text-white/70">
+                          {moyenne !== null ? `${tauxAssimilation(moyenne)}%` : "—"}
+                        </td>
+                        <td className="py-2 text-right">
+                          <Link
+                            href={`/compte/formateur/planning/noter/${a.id}?seance=${seance}&groupe=${groupeKey}`}
+                            className="inline-block rounded border border-accent/40 px-3 py-1 font-mono text-[11px] uppercase tracking-widest text-accent hover:bg-accent/10"
+                          >
+                            Noter
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
-            <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4">
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
               <p className="font-sans text-sm font-semibold text-white">
                 Moyenne du Groupe — Séance n°{seance}
               </p>
               <p className="font-display text-xl font-bold text-accent">
                 {moyenneGroupe ?? "—"}
                 <span className="text-sm font-normal text-white/40">/20</span>
+                {moyenneGroupe !== null && (
+                  <span className="ml-3 font-sans text-sm font-normal text-white/50">
+                    {tauxAssimilation(moyenneGroupe)}% d&apos;assimilation
+                  </span>
+                )}
               </p>
-            </div>
-
-            <div className="mt-4 flex items-center gap-3">
-              <Button variant="dark" onClick={saveGrades}>
-                Enregistrer la séance
-              </Button>
-              {saved && (
-                <p className="font-sans text-xs text-white/50">
-                  Séance enregistrée pour cette session. Synchronisation avec la progression
-                  hebdomadaire de chaque apprenant — bientôt disponible.
-                </p>
-              )}
             </div>
           </div>
         </Reveal>

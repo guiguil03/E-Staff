@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import PlanningDashboard from "@/components/compte-formateur/PlanningDashboard";
 
 export const metadata: Metadata = {
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 };
 
 export default function PlanningPage() {
-  return <PlanningDashboard />;
+  return (
+    <Suspense fallback={null}>
+      <PlanningDashboard />
+    </Suspense>
+  );
 }
