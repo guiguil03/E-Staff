@@ -80,6 +80,7 @@ export default function PlanningDashboard() {
   const [objectifs, setObjectifs] = useState(OBJECTIFS_PAR_DEFAUT[1] ?? "");
   const [horaireSeance, setHoraireSeance] = useState<SeanceApi | null>(null);
   const [horaireInput, setHoraireInput] = useState("");
+  const [dureeInput, setDureeInput] = useState(90);
   const [horaireStatus, setHoraireStatus] = useState<"idle" | "loading" | "saving" | "error">(
     "idle"
   );
@@ -100,6 +101,7 @@ export default function PlanningDashboard() {
         if (cancelled) return;
         setHoraireSeance(data);
         setHoraireInput(data.startAt ? toDatetimeLocalValue(data.startAt) : "");
+        setDureeInput(data.dureeMinutes);
         setHoraireStatus("idle");
       })
       .catch(() => {
@@ -119,10 +121,11 @@ export default function PlanningDashboard() {
       const startAt = new Date(horaireInput).toISOString();
       const data = await apiPut<SeanceApi>(
         `/seances/${groupeKey}/${seance}`,
-        { startAt },
+        { startAt, dureeMinutes: dureeInput },
         formateurHeaders()
       );
       setHoraireSeance(data);
+      setDureeInput(data.dureeMinutes);
       setHoraireStatus("idle");
     } catch {
       setHoraireStatus("error");
@@ -230,6 +233,23 @@ export default function PlanningDashboard() {
                   className="mt-1 rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
                 />
               </div>
+              <div>
+                <label
+                  htmlFor="duree-seance"
+                  className="block font-mono text-xs uppercase tracking-widest text-white/50"
+                >
+                  Durée (min)
+                </label>
+                <input
+                  id="duree-seance"
+                  type="number"
+                  min={15}
+                  step={5}
+                  value={dureeInput}
+                  onChange={(e) => setDureeInput(Math.max(15, Number(e.target.value)))}
+                  className="mt-1 w-24 rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
+                />
+              </div>
               <Button
                 variant="ghostDark"
                 onClick={saveHoraire}
@@ -240,11 +260,18 @@ export default function PlanningDashboard() {
               <p className="font-mono text-xs text-white/40">
                 {horaireStatus === "loading" && "Chargement..."}
                 {horaireStatus === "error" && "Erreur — réessayer."}
-                {horaireStatus === "idle" &&
-                  horaireSeance?.startAt &&
-                  (horaireSeance.dailyRoomName
-                    ? "Salle vidéo créée."
-                    : "Salle vidéo : bientôt disponible (fournisseur non configuré).")}
+                {horaireStatus === "idle" && horaireSeance?.startAt && (
+                  <>
+                    {horaireSeance.dailyRoomName
+                      ? "Salle vidéo créée."
+                      : "Salle vidéo : bientôt disponible (fournisseur non configuré)."}{" "}
+                    Se termine à{" "}
+                    {new Date(
+                      new Date(horaireSeance.startAt).getTime() + horaireSeance.dureeMinutes * 60000
+                    ).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}{" "}
+                    — bascule ensuite en séance passée.
+                  </>
+                )}
               </p>
             </div>
           </div>
