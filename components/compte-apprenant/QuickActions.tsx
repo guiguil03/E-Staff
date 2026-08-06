@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Reveal from "@/components/Reveal";
 import CountdownTimer from "./CountdownTimer";
+import ClasseVirtuelleJoinButton from "./ClasseVirtuelleJoinButton";
 
 interface QuickActionsProps {
   prochaineSeanceTitle: string;
@@ -52,7 +53,7 @@ export default function QuickActions({
         </div>
 
         <div className="mt-6 space-y-2">
-          <PlaceholderAction label="Rejoindre la salle de classe virtuelle" />
+          <ClasseVirtuelleJoinButton />
           <PlaceholderAction label="Accéder aux supports de cours" />
           <PlaceholderAction label="Rendre un exercice" />
           <LiveAction label="Accéder au Forum" href="/forum" />

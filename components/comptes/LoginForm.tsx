@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import { apiPost, ApiError } from "@/lib/api";
-import { ACCOUNT_ROLE_KEY, ROLE_ROUTES } from "@/lib/accountSession";
+import { ACCOUNT_MATRICULE_KEY, ACCOUNT_ROLE_KEY, ROLE_ROUTES } from "@/lib/accountSession";
 
 // Login générique — un seul endpoint pour tous les rôles, en attendant le
 // vrai système de comptes/matricules RH (module 7 de la roadmap). Le rôle
@@ -33,6 +33,7 @@ export default function LoginForm() {
         password,
       });
       sessionStorage.setItem(ACCOUNT_ROLE_KEY, res.role);
+      sessionStorage.setItem(ACCOUNT_MATRICULE_KEY, matricule);
       router.push(ROLE_ROUTES[res.role] ?? "/");
     } catch (err) {
       setStatus("error");

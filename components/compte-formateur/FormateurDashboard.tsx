@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Reveal from "@/components/Reveal";
 import TopBar from "./TopBar";
+import GroupEvolutionChart from "./GroupEvolutionChart";
 import TeachColumn from "./TeachColumn";
 import GradingQueueSummaryCard from "./GradingQueueSummaryCard";
 import AdminColumn from "./AdminColumn";
@@ -57,7 +58,9 @@ export default function FormateurDashboard() {
           onSelectGroup={(key) => setPanel({ type: "group", key })}
         />
 
-        <PaymentAlertsTable />
+        <GroupEvolutionChart />
+
+        <PaymentAlertsTable onSelectApprenant={goToApprenant} />
 
         {panel?.type === "group" && (
           <GroupDetailPanel

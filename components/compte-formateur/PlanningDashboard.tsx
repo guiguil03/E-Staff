@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Reveal from "@/components/Reveal";
+import Button from "@/components/ui/Button";
 import { useRequireRole } from "@/lib/useRequireRole";
+import { apiGet, apiPut } from "@/lib/api";
+import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 import {
   APPRENANTS,
   DERNIERE_SEANCE_PASSEE,
@@ -15,6 +18,29 @@ import {
 } from "./exampleData";
 import { COMPETENCY_DEFS, tauxAssimilation, type CompetencyKey } from "./gradingGrids";
 import { getCompetencyEntry, usePlanningGradesVersion } from "./planningGradesStore";
+
+interface SeanceApi {
+  id: string;
+  groupeCle: string;
+  numero: number;
+  startAt: string | null;
+  dureeMinutes: number;
+  objectifs: string | null;
+  dailyRoomName: string | null;
+  dailyRoomUrl: string | null;
+}
+
+function formateurHeaders(): HeadersInit {
+  const matricule =
+    typeof window !== "undefined" ? sessionStorage.getItem(ACCOUNT_MATRICULE_KEY) : null;
+  return matricule ? { "x-formateur-matricule": matricule } : {};
+}
+
+function toDatetimeLocalValue(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 // Pour les séances déjà passées (1 à DERNIERE_SEANCE_PASSEE) sans note
 // saisie dans planningGradesStore, on affiche une valeur plausible dérivée
@@ -52,6 +78,11 @@ export default function PlanningDashboard() {
   const [groupeKey, setGroupeKey] = useState(searchParams.get("groupe") || GROUPES[0].key);
   const [seance, setSeance] = useState(Number(searchParams.get("seance") ?? "1"));
   const [objectifs, setObjectifs] = useState(OBJECTIFS_PAR_DEFAUT[1] ?? "");
+  const [horaireSeance, setHoraireSeance] = useState<SeanceApi | null>(null);
+  const [horaireInput, setHoraireInput] = useState("");
+  const [horaireStatus, setHoraireStatus] = useState<"idle" | "loading" | "saving" | "error">(
+    "idle"
+  );
   usePlanningGradesVersion();
 
   const apprenantsGroupe = APPRENANTS.filter((a) => a.groupe === groupeKey);
@@ -60,6 +91,43 @@ export default function PlanningDashboard() {
     setObjectifs(OBJECTIFS_PAR_DEFAUT[seance] ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupeKey, seance]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setHoraireStatus("loading");
+    apiGet<SeanceApi>(`/seances/${groupeKey}/${seance}`, formateurHeaders())
+      .then((data) => {
+        if (cancelled) return;
+        setHoraireSeance(data);
+        setHoraireInput(data.startAt ? toDatetimeLocalValue(data.startAt) : "");
+        setHoraireStatus("idle");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setHoraireSeance(null);
+        setHoraireStatus("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupeKey, seance]);
+
+  async function saveHoraire() {
+    if (!horaireInput) return;
+    setHoraireStatus("saving");
+    try {
+      const startAt = new Date(horaireInput).toISOString();
+      const data = await apiPut<SeanceApi>(
+        `/seances/${groupeKey}/${seance}`,
+        { startAt },
+        formateurHeaders()
+      );
+      setHoraireSeance(data);
+      setHoraireStatus("idle");
+    } catch {
+      setHoraireStatus("error");
+    }
+  }
 
   if (!checked) {
     return (
@@ -138,6 +206,47 @@ export default function PlanningDashboard() {
             <p className="font-mono text-xs text-white/40">
               {apprenantsGroupe.length} apprenants dans ce groupe
             </p>
+          </div>
+        </Reveal>
+
+        <Reveal delay={60}>
+          <div className="mt-6 rounded border border-white/10 bg-obsidianCard p-6">
+            <h3 className="font-display text-base font-semibold text-white">
+              Horaire &amp; Classe virtuelle
+            </h3>
+            <div className="mt-3 flex flex-wrap items-end gap-4">
+              <div>
+                <label
+                  htmlFor="horaire-seance"
+                  className="block font-mono text-xs uppercase tracking-widest text-white/50"
+                >
+                  Date &amp; heure
+                </label>
+                <input
+                  id="horaire-seance"
+                  type="datetime-local"
+                  value={horaireInput}
+                  onChange={(e) => setHoraireInput(e.target.value)}
+                  className="mt-1 rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
+                />
+              </div>
+              <Button
+                variant="ghostDark"
+                onClick={saveHoraire}
+                disabled={!horaireInput || horaireStatus === "saving"}
+              >
+                {horaireStatus === "saving" ? "Enregistrement..." : "Planifier"}
+              </Button>
+              <p className="font-mono text-xs text-white/40">
+                {horaireStatus === "loading" && "Chargement..."}
+                {horaireStatus === "error" && "Erreur — réessayer."}
+                {horaireStatus === "idle" &&
+                  horaireSeance?.startAt &&
+                  (horaireSeance.dailyRoomName
+                    ? "Salle vidéo créée."
+                    : "Salle vidéo : bientôt disponible (fournisseur non configuré).")}
+              </p>
+            </div>
           </div>
         </Reveal>
 

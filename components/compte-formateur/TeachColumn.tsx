@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
+import ClasseVirtuelleJoinButton from "./ClasseVirtuelleJoinButton";
 
 // Colonne "Enseigner" — dépôt des objectifs J-7 et accès à la classe
 // virtuelle. Pas de backend de dépôt de fichiers/cours pour l'instant : les
@@ -24,17 +25,9 @@ export default function TeachColumn() {
         <h3 className="font-display text-base font-semibold text-white">Enseigner</h3>
 
         <div className="mt-4 rounded border border-accent bg-accent/10 p-4 text-center">
-          <p className="font-sans text-sm font-semibold text-accent">
-            Prochaine séance dans 25h
-          </p>
           <div className="mt-3">
-            <Button variant="dark" className="w-full justify-center" disabled>
-              Lancer la Classe Virtuelle
-            </Button>
+            <ClasseVirtuelleJoinButton />
           </div>
-          <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-white/40">
-            Bientôt disponible
-          </p>
         </div>
 
         <div className="mt-5">
