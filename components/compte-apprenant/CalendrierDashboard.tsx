@@ -83,6 +83,42 @@ export default function CalendrierDashboard() {
             {Array.isArray(seances) && <CalendarMonthView events={events} />}
           </div>
         </Reveal>
+
+        {Array.isArray(seances) && seances.length > 0 && (
+          <Reveal delay={80}>
+            <div className="mt-6 rounded border border-white/10 bg-obsidianCard p-6">
+              <h3 className="font-display text-base font-semibold text-white">
+                Détail des séances
+              </h3>
+              <div className="mt-4 space-y-3">
+                {seances.map((s) => (
+                  <div
+                    key={`${s.groupeCle}-${s.numero}`}
+                    className="rounded border border-white/10 bg-obsidian p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-sans text-sm font-semibold text-white">
+                        Séance n°{s.numero}
+                      </p>
+                      <p className="font-mono text-xs text-accent">
+                        {new Date(s.startAt).toLocaleString("fr-FR", {
+                          dateStyle: "long",
+                          timeStyle: "short",
+                        })}
+                      </p>
+                    </div>
+                    <p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-white/40">
+                      Durée : {s.dureeMinutes} min
+                    </p>
+                    <p className="mt-2 font-sans text-sm text-white/70">
+                      {s.objectifs ?? "Thème à venir — le formateur n'a pas encore précisé les objectifs."}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Reveal>
+        )}
       </div>
     </div>
   );

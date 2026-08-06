@@ -47,7 +47,7 @@ export default function ApprenantDashboard() {
           tauxReussiteGlobal={TAUX_REUSSITE_GLOBAL}
         />
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+        <div className="grid items-start gap-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-6">
             <CompetencyBars
               title="Évaluation de la dernière séance"
