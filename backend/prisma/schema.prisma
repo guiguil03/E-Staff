@@ -182,6 +182,8 @@ model Apprenant {
 
   groupeId String
   groupe   Groupe @relation(fields: [groupeId], references: [id])
+
+  presences Presence[]
 }
 
 // Horaire réel d'une des 12 séances d'un groupe. startAt reste nullable :
@@ -207,5 +209,29 @@ model Seance {
   rappelJ1EnvoyeAt    DateTime?
   rappel15minEnvoyeAt DateTime?
 
+  presences Presence[]
+
   @@unique([groupeId, numero])
+}
+
+// Présence en classe virtuelle — alimentée par les webhooks Daily
+// (participant.joined/participant.left, voir daily-webhook.controller.ts).
+// apprenantId est nullable : un webhook peut arriver pour un participant
+// qu'on n'arrive pas à rattacher (ex. le formateur, ou un identifiant de
+// token corrompu) — on garde quand même la ligne plutôt que de la perdre.
+model Presence {
+  id       String  @id @default(cuid())
+  seanceId String
+  seance   Seance  @relation(fields: [seanceId], references: [id])
+
+  apprenantId String?
+  apprenant   Apprenant? @relation(fields: [apprenantId], references: [id])
+  role        String // "apprenant" | "formateur" | "inconnu"
+
+  dailyParticipantId String  @unique
+  displayName        String?
+
+  joinedAt      DateTime
+  leftAt        DateTime?
+  dureeSecondes Int?
 }

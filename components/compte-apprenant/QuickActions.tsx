@@ -56,6 +56,7 @@ export default function QuickActions({
           <ClasseVirtuelleJoinButton />
           <PlaceholderAction label="Accéder aux supports de cours" />
           <PlaceholderAction label="Rendre un exercice" />
+          <LiveAction label="Calendrier des classes virtuelles" href="/compte/apprenant/calendrier" />
           <LiveAction label="Accéder au Forum" href="/forum" />
           <LiveAction label="Accéder à la Communauté" href="/communaute" />
           <PlaceholderAction label="Contacter le formateur" />

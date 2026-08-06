@@ -69,6 +69,26 @@ export default function TeachColumn() {
             →
           </span>
         </Link>
+
+        <Link
+          href="/compte/formateur/calendrier"
+          className="mt-2 flex items-center justify-between rounded border border-white/10 bg-obsidian px-3 py-2.5 font-sans text-sm text-white transition-colors hover:border-accent/50"
+        >
+          Calendrier des classes virtuelles
+          <span aria-hidden="true" className="text-accent">
+            →
+          </span>
+        </Link>
+
+        <Link
+          href="/compte/formateur/historique"
+          className="mt-2 flex items-center justify-between rounded border border-white/10 bg-obsidian px-3 py-2.5 font-sans text-sm text-white transition-colors hover:border-accent/50"
+        >
+          Historique des séances
+          <span aria-hidden="true" className="text-accent">
+            →
+          </span>
+        </Link>
       </div>
     </Reveal>
   );

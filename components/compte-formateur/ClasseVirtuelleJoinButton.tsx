@@ -61,23 +61,14 @@ export default function ClasseVirtuelleJoinButton() {
   }, []);
 
   if (seance === "loading") {
-    return (
-      <Button variant="dark" className="w-full justify-center" disabled>
-        Chargement...
-      </Button>
-    );
+    return <p className="font-sans text-sm text-white/50">Chargement...</p>;
   }
 
+  // Pas de bouton "Lancer" tant qu'il n'y a rien à lancer — juste
+  // l'information, pour ne pas afficher une action qui ne mène nulle part.
   if (seance === "erreur" || seance === null) {
     return (
-      <>
-        <Button variant="dark" className="w-full justify-center" disabled>
-          Lancer la Classe Virtuelle
-        </Button>
-        <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-white/40">
-          Aucune séance programmée
-        </p>
-      </>
+      <p className="font-sans text-sm text-white/50">Aucune classe virtuelle programmée.</p>
     );
   }
 
@@ -94,14 +85,9 @@ export default function ClasseVirtuelleJoinButton() {
   }
 
   return (
-    <>
-      <Button variant="dark" className="w-full justify-center" disabled>
-        Lancer la Classe Virtuelle
-      </Button>
-      <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-white/40">
-        Groupe {seance.groupeCle} — {formatRelative(seance.startAt)}
-      </p>
-    </>
+    <p className="font-sans text-sm text-white/50">
+      Prochaine séance — Groupe {seance.groupeCle} {formatRelative(seance.startAt)}
+    </p>
   );
 }
 

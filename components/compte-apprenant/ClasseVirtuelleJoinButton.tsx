@@ -45,36 +45,27 @@ export default function ClasseVirtuelleJoinButton() {
     };
   }, []);
 
-  const baseClass =
-    "flex items-center justify-between rounded border px-4 py-3 font-sans text-sm transition-colors";
+  const infoClass =
+    "flex items-center justify-between rounded border border-dashed border-white/15 px-4 py-3 font-sans text-sm text-white/50";
 
   if (status === "loading") {
-    return (
-      <div className={`${baseClass} border-dashed border-white/15 text-white/50`}>
-        Rejoindre la salle de classe virtuelle
-        <span className="font-mono text-[10px] uppercase tracking-widest text-white/30">
-          Chargement...
-        </span>
-      </div>
-    );
+    return <div className={infoClass}>Classe virtuelle — chargement...</div>;
   }
 
+  // Rien à afficher tant qu'aucune séance n'est programmée — pas de
+  // libellé "Rejoindre" trompeur pour une action qui n'existe pas encore.
   if (status === "erreur" || status === null) {
-    return (
-      <div className={`${baseClass} border-dashed border-white/15 text-white/50`}>
-        Rejoindre la salle de classe virtuelle
-        <span className="font-mono text-[10px] uppercase tracking-widest text-white/30">
-          Aucune séance programmée
-        </span>
-      </div>
-    );
+    return <div className={infoClass}>Aucune classe virtuelle programmée pour le moment.</div>;
   }
 
+  // Le lien "Rejoindre" n'apparaît que dans la fenêtre de rejoin (10 min
+  // avant → fin de séance) — en dehors, on informe juste du délai, sans
+  // afficher un bouton d'action inactif.
   if (status.withinJoinWindow && status.configured) {
     return (
       <Link
         href="/compte/apprenant/classe-virtuelle"
-        className={`${baseClass} border-accent/30 bg-obsidian text-white hover:border-accent`}
+        className="flex items-center justify-between rounded border border-accent/30 bg-obsidian px-4 py-3 font-sans text-sm text-white transition-colors hover:border-accent"
       >
         Rejoindre la salle de classe virtuelle
         <span aria-hidden="true" className="text-accent">
@@ -84,16 +75,13 @@ export default function ClasseVirtuelleJoinButton() {
     );
   }
 
-  const label = status.withinJoinWindow
-    ? "Bientôt disponible"
-    : status.startAt
-      ? `Ouvre ${formatRelative(status.startAt)}`
-      : "Bientôt disponible";
+  if (status.withinJoinWindow) {
+    return <div className={infoClass}>Classe virtuelle — configuration en cours.</div>;
+  }
 
   return (
-    <div className={`${baseClass} border-dashed border-white/15 text-white/50`}>
-      Rejoindre la salle de classe virtuelle
-      <span className="font-mono text-[10px] uppercase tracking-widest text-white/30">{label}</span>
+    <div className={infoClass}>
+      Prochaine classe virtuelle {status.startAt ? formatRelative(status.startAt) : ""}
     </div>
   );
 }
