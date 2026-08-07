@@ -6,9 +6,7 @@ import Reveal from "@/components/Reveal";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { apiGet, ApiError } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
-import { APPRENANTS, GROUPES } from "./exampleData";
-import { COMPETENCY_DEFS } from "./gradingGrids";
-import { getCompetencyEntry, usePlanningGradesVersion } from "./planningGradesStore";
+import { GROUPES } from "./exampleData";
 
 interface PresenceApi {
   apprenantId: string | null;
@@ -28,6 +26,7 @@ interface SeanceHistoriqueApi {
   objectifs: string | null;
   rappelJ1Envoye: boolean;
   rappel15minEnvoye: boolean;
+  moyenne: number | null;
   presences: PresenceApi[];
 }
 
@@ -43,28 +42,8 @@ function formatDuree(seconds: number | null): string {
   return min < 60 ? `${min} min` : `${Math.floor(min / 60)}h${String(min % 60).padStart(2, "0")}`;
 }
 
-// Moyenne de séance côté grille de notation — reste dans
-// planningGradesStore (state frontend local, non persisté en base), donc
-// disponible seulement pour les séances notées durant la session de
-// navigation en cours. Affiché en best-effort avec "—" honnête sinon,
-// plutôt que de prétendre à une vraie persistance qui n'existe pas.
-function moyenneSeanceLocale(groupeKey: string, numero: number): number | null {
-  const apprenants = APPRENANTS.filter((a) => a.groupe === groupeKey);
-  if (apprenants.length === 0) return null;
-  const moyennes = apprenants.map((a) => {
-    const scores = COMPETENCY_DEFS.map((c) => getCompetencyEntry(numero, a.id, c.key)?.scoreOn20);
-    if (scores.some((s) => s === undefined || s === null)) return null;
-    const values = scores as number[];
-    return values.reduce((s, v) => s + v, 0) / values.length;
-  });
-  const completes = moyennes.filter((m): m is number => m !== null);
-  if (completes.length === 0) return null;
-  return Math.round((completes.reduce((s, m) => s + m, 0) / completes.length) * 100) / 100;
-}
-
 export default function HistoriqueDashboard() {
   const checked = useRequireRole("formateur");
-  usePlanningGradesVersion();
   const [groupeKey, setGroupeKey] = useState(GROUPES[0].key);
   const [historique, setHistorique] = useState<SeanceHistoriqueApi[] | "loading" | "erreur">(
     "loading"
@@ -139,7 +118,7 @@ export default function HistoriqueDashboard() {
           )}
           {Array.isArray(historique) &&
             historique.map((s) => {
-              const moyenne = moyenneSeanceLocale(groupeKey, s.numero);
+              const moyenne = s.moyenne;
               return (
                 <Reveal key={s.numero}>
                   <div className="rounded border border-white/10 bg-obsidianCard p-6">

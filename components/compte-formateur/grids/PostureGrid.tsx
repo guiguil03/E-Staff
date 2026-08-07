@@ -15,6 +15,8 @@ interface PostureGridProps {
   initialEntry?: GridCompetencyEntry;
   onSave: (entry: GridCompetencyEntry) => void;
   onCancel: () => void;
+  /** Visibilité seule (Compte Apprenant) : aucune interaction, pas de bouton Enregistrer. */
+  readOnly?: boolean;
 }
 
 const BONUS_OPTIONS: PostureAdjustments["bonus"][] = [0, 0.5, 1];
@@ -22,7 +24,7 @@ const BONUS_OPTIONS: PostureAdjustments["bonus"][] = [0, 0.5, 1];
 // Grille "Éloquence & Posture" fournie par la cliente : 12 sous-critères à
 // 3 échelons (0,5/1/1,75 pt, max brut 21) + malus temps/support (-1 chacun)
 // + bonus coup de cœur (+0,5 ou +1), note finale plafonnée à 20.
-export default function PostureGrid({ initialEntry, onSave, onCancel }: PostureGridProps) {
+export default function PostureGrid({ initialEntry, onSave, onCancel, readOnly = false }: PostureGridProps) {
   const [selections, setSelections] = useState<Record<string, number | undefined>>(
     initialEntry?.selections ?? {}
   );
@@ -61,7 +63,9 @@ export default function PostureGrid({ initialEntry, onSave, onCancel }: PostureG
                             {POSTURE_LEVELS.map((level) => (
                               <label
                                 key={level.key}
-                                className={`cursor-pointer rounded border px-2 py-1.5 text-center text-xs transition-colors ${
+                                className={`rounded border px-2 py-1.5 text-center text-xs transition-colors ${
+                                  readOnly ? "cursor-default" : "cursor-pointer"
+                                } ${
                                   selected === level.value
                                     ? "border-accent bg-accent/10 text-accent"
                                     : "border-white/15 text-white/70 hover:border-white/30"
@@ -72,6 +76,7 @@ export default function PostureGrid({ initialEntry, onSave, onCancel }: PostureG
                                   name={c.key}
                                   className="sr-only"
                                   checked={selected === level.value}
+                                  disabled={readOnly}
                                   onChange={() => selectLevel(c.key, level.value)}
                                 />
                                 {level.label}
@@ -99,6 +104,7 @@ export default function PostureGrid({ initialEntry, onSave, onCancel }: PostureG
             <input
               type="checkbox"
               checked={adjustments.malusTemps}
+              disabled={readOnly}
               onChange={(e) =>
                 setAdjustments((prev) => ({ ...prev, malusTemps: e.target.checked }))
               }
@@ -109,6 +115,7 @@ export default function PostureGrid({ initialEntry, onSave, onCancel }: PostureG
             <input
               type="checkbox"
               checked={adjustments.malusSupport}
+              disabled={readOnly}
               onChange={(e) =>
                 setAdjustments((prev) => ({ ...prev, malusSupport: e.target.checked }))
               }
@@ -123,6 +130,7 @@ export default function PostureGrid({ initialEntry, onSave, onCancel }: PostureG
                   type="radio"
                   name="bonus"
                   checked={adjustments.bonus === v}
+                  disabled={readOnly}
                   onChange={() => setAdjustments((prev) => ({ ...prev, bonus: v }))}
                 />
                 {v === 0 ? "Aucun" : `+${v}`}
@@ -136,30 +144,37 @@ export default function PostureGrid({ initialEntry, onSave, onCancel }: PostureG
         Note calculée : {score ?? "—"} / 20
       </p>
 
-      <label className="mt-4 block font-sans text-xs text-white/70" htmlFor="posture-comments">
-        Commentaires / Axes d&apos;amélioration
-      </label>
-      <textarea
-        id="posture-comments"
-        rows={3}
-        value={comments}
-        onChange={(e) => setComments(e.target.value)}
-        className="mt-1 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
-      />
+      {(comments || !readOnly) && (
+        <>
+          <label className="mt-4 block font-sans text-xs text-white/70" htmlFor="posture-comments">
+            Commentaires / Axes d&apos;amélioration
+          </label>
+          <textarea
+            id="posture-comments"
+            rows={3}
+            value={comments}
+            onChange={(e) => setComments(e.target.value)}
+            readOnly={readOnly}
+            className="mt-1 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
+          />
+        </>
+      )}
 
       <div className="mt-4 flex items-center gap-3">
-        <Button
-          variant="dark"
-          onClick={() =>
-            score !== null &&
-            onSave({ kind: "grid", selections, adjustments, comments, scoreOn20: score })
-          }
-          disabled={score === null}
-        >
-          Enregistrer la note
-        </Button>
+        {!readOnly && (
+          <Button
+            variant="dark"
+            onClick={() =>
+              score !== null &&
+              onSave({ kind: "grid", selections, adjustments, comments, scoreOn20: score })
+            }
+            disabled={score === null}
+          >
+            Enregistrer la note
+          </Button>
+        )}
         <Button variant="ghostDark" onClick={onCancel}>
-          Annuler
+          {readOnly ? "Fermer" : "Annuler"}
         </Button>
       </div>
     </div>

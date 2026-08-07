@@ -19,6 +19,8 @@ interface DelfGridProps {
   initialEntry?: GridCompetencyEntry;
   onSave: (entry: GridCompetencyEntry) => void;
   onCancel: () => void;
+  /** Visibilité seule (Compte Apprenant) : aucune interaction, pas de bouton Enregistrer. */
+  readOnly?: boolean;
 }
 
 // Grille DELF B2/B2+ à 4 échelons, réutilisée pour Expression Orale et
@@ -31,6 +33,7 @@ export default function DelfGrid({
   initialEntry,
   onSave,
   onCancel,
+  readOnly = false,
 }: DelfGridProps) {
   const [selections, setSelections] = useState<Record<string, number | undefined>>(
     initialEntry?.selections ?? {}
@@ -67,15 +70,19 @@ export default function DelfGrid({
                     <p className="font-sans text-sm text-white/90">{c.label}</p>
                     <div className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
                       {DELF_LEVELS.map((level) => {
-                        const disabled = isForced
-                          ? level.value !== rule!.forced
-                          : rule?.capAt !== undefined && level.value > rule.capAt;
+                        const disabled =
+                          readOnly ||
+                          (isForced
+                            ? level.value !== rule!.forced
+                            : rule?.capAt !== undefined && level.value > rule.capAt);
                         const selected = selections[c.key] === level.value;
                         return (
                           <label
                             key={level.key}
-                            className={`cursor-pointer rounded border px-2 py-1.5 text-center text-xs transition-colors ${
-                              disabled
+                            className={`rounded border px-2 py-1.5 text-center text-xs transition-colors ${
+                              readOnly ? "cursor-default" : "cursor-pointer"
+                            } ${
+                              disabled && !selected
                                 ? "cursor-not-allowed border-white/5 text-white/20"
                                 : selected
                                   ? "border-accent bg-accent/10 text-accent"
@@ -105,21 +112,24 @@ export default function DelfGrid({
         </div>
       ))}
 
-      {anomalies && (
+      {anomalies && (anomaly || !readOnly) && (
         <div className="mt-6 rounded border border-dashed border-white/15 p-4">
           <p className="font-sans text-sm font-semibold text-white">Anomalies</p>
           <div className="mt-2 space-y-2">
-            {anomalies.map((a) => (
-              <label key={a.key} className="flex items-start gap-2 font-sans text-xs text-white/70">
-                <input
-                  type="checkbox"
-                  checked={anomaly === a.key}
-                  onChange={() => selectAnomaly(a.key)}
-                  className="mt-0.5"
-                />
-                {a.label}
-              </label>
-            ))}
+            {anomalies
+              .filter((a) => !readOnly || anomaly === a.key)
+              .map((a) => (
+                <label key={a.key} className="flex items-start gap-2 font-sans text-xs text-white/70">
+                  <input
+                    type="checkbox"
+                    checked={anomaly === a.key}
+                    onChange={() => selectAnomaly(a.key)}
+                    disabled={readOnly}
+                    className="mt-0.5"
+                  />
+                  {a.label}
+                </label>
+              ))}
           </div>
         </div>
       )}
@@ -128,29 +138,36 @@ export default function DelfGrid({
         Note calculée : {score ?? "—"} / 20
       </p>
 
-      <label className="mt-4 block font-sans text-xs text-white/70" htmlFor="delf-comments">
-        Commentaires
-      </label>
-      <textarea
-        id="delf-comments"
-        rows={3}
-        value={comments}
-        onChange={(e) => setComments(e.target.value)}
-        className="mt-1 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
-      />
+      {(comments || !readOnly) && (
+        <>
+          <label className="mt-4 block font-sans text-xs text-white/70" htmlFor="delf-comments">
+            Commentaires
+          </label>
+          <textarea
+            id="delf-comments"
+            rows={3}
+            value={comments}
+            onChange={(e) => setComments(e.target.value)}
+            readOnly={readOnly}
+            className="mt-1 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
+          />
+        </>
+      )}
 
       <div className="mt-4 flex items-center gap-3">
-        <Button
-          variant="dark"
-          onClick={() =>
-            score !== null && onSave({ kind: "grid", selections, anomaly, comments, scoreOn20: score })
-          }
-          disabled={score === null}
-        >
-          Enregistrer la note
-        </Button>
+        {!readOnly && (
+          <Button
+            variant="dark"
+            onClick={() =>
+              score !== null && onSave({ kind: "grid", selections, anomaly, comments, scoreOn20: score })
+            }
+            disabled={score === null}
+          >
+            Enregistrer la note
+          </Button>
+        )}
         <Button variant="ghostDark" onClick={onCancel}>
-          Annuler
+          {readOnly ? "Fermer" : "Annuler"}
         </Button>
       </div>
     </div>

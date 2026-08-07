@@ -10,6 +10,7 @@ import { EvaluationModule } from "./evaluation/evaluation.module";
 import { AuthModule } from "./auth/auth.module";
 import { ClasseVirtuelleModule } from "./classe-virtuelle/classe-virtuelle.module";
 import { ForumModule } from "./forum/forum.module";
+import { NotationModule } from "./notation/notation.module";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ForumModule } from "./forum/forum.module";
     AuthModule,
     ClasseVirtuelleModule,
     ForumModule,
+    NotationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

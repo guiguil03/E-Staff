@@ -14,10 +14,12 @@ import {
   GROUPES,
   OBJECTIFS_PAR_DEFAUT,
   SEANCE_NUMBERS,
+  apprenantMatricule,
   type Apprenant,
 } from "./exampleData";
-import { COMPETENCY_DEFS, tauxAssimilation, type CompetencyKey } from "./gradingGrids";
-import { getCompetencyEntry, usePlanningGradesVersion } from "./planningGradesStore";
+import { COMPETENCY_DEFS, tauxAssimilation } from "./gradingGrids";
+
+type NotationMap = Record<string, Record<string, { scoreOn20: number | null }>>;
 
 interface SeanceApi {
   id: string;
@@ -42,36 +44,14 @@ function toDatetimeLocalValue(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// Pour les séances déjà passées (1 à DERNIERE_SEANCE_PASSEE) sans note
-// saisie dans planningGradesStore, on affiche une valeur plausible dérivée
-// des compétences actuelles de l'apprenant (léger delta décroissant, même
-// logique que son historique hebdomadaire) — purement pour l'affichage,
-// ça n'écrit rien dans le store. Les séances futures démarrent vides.
-function derivedScore(apprenant: Apprenant, competencyKey: CompetencyKey, seance: number): number | null {
-  if (seance > DERNIERE_SEANCE_PASSEE) return null;
-  const delta = [-2, -1, 0, 0][seance - 1] ?? 0;
-  const current = apprenant.competencies.find((c) => c.key === competencyKey)?.score ?? 12;
-  return Math.max(0, Math.min(20, current + delta));
-}
-
-function displayedScore(apprenant: Apprenant, competencyKey: CompetencyKey, seance: number): number | null {
-  const entry = getCompetencyEntry(seance, apprenant.id, competencyKey);
-  if (entry && entry.scoreOn20 !== null && entry.scoreOn20 !== undefined) return entry.scoreOn20;
-  return derivedScore(apprenant, competencyKey, seance);
-}
-
 // Page dédiée "Planning par Groupe & Moyenne de Séance" — pilotage
 // pédagogique séance par séance. La saisie détaillée par compétence (grille
 // de critères pour Expression Orale/Écrite et Posture & Éloquence, dépôt +
 // note pour Compréhension Orale/Écrite) se fait sur la page dédiée
 // /compte/formateur/planning/noter/[apprenantId] (bouton "Noter" par
-// ligne) — ce tableau reste une vue de lecture qui agrège les scores
-// enregistrés dans planningGradesStore.
-// Sync : en l'absence de backend, la saisie reste locale à cette session de
-// navigation (pas de compte réel partagé avec l'apprenant) — le point
-// d'accroche pour une vraie synchronisation (mise à jour de la progression
-// hebdomadaire de chaque apprenant) reste à construire une fois un backend
-// partagé en place pour ce module.
+// ligne) — ce tableau reste une vue de lecture qui agrège les scores.
+// Persisté en base (table Notation, depuis le 2026-08-07) — l'apprenant
+// concerné voit exactement les mêmes données depuis son propre compte.
 export default function PlanningDashboard() {
   const checked = useRequireRole("formateur");
   const searchParams = useSearchParams();
@@ -85,13 +65,28 @@ export default function PlanningDashboard() {
     "idle"
   );
   const [horaireError, setHoraireError] = useState<string | null>(null);
-  usePlanningGradesVersion();
+  const [notations, setNotations] = useState<NotationMap | "loading" | "erreur">("loading");
 
   const apprenantsGroupe = APPRENANTS.filter((a) => a.groupe === groupeKey);
 
   useEffect(() => {
     setObjectifs(OBJECTIFS_PAR_DEFAUT[seance] ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupeKey, seance]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setNotations("loading");
+    apiGet<NotationMap>(`/notations/${groupeKey}/${seance}`, formateurHeaders())
+      .then((data) => {
+        if (!cancelled) setNotations(data);
+      })
+      .catch(() => {
+        if (!cancelled) setNotations("erreur");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [groupeKey, seance]);
 
   useEffect(() => {
@@ -158,8 +153,13 @@ export default function PlanningDashboard() {
     );
   }
 
+  function scoreFor(apprenant: Apprenant, competencyKey: string): number | null {
+    if (notations === "loading" || notations === "erreur") return null;
+    return notations[apprenantMatricule(apprenant.id)]?.[competencyKey]?.scoreOn20 ?? null;
+  }
+
   function moyenneApprenant(apprenant: Apprenant): number | null {
-    const scores = COMPETENCY_DEFS.map((c) => displayedScore(apprenant, c.key, seance));
+    const scores = COMPETENCY_DEFS.map((c) => scoreFor(apprenant, c.key));
     if (scores.some((s) => s === null)) return null;
     const values = scores as number[];
     return Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 100) / 100;
@@ -370,7 +370,7 @@ export default function PlanningDashboard() {
                           {a.firstName} {a.lastName}
                         </td>
                         {COMPETENCY_DEFS.map((c) => {
-                          const score = displayedScore(a, c.key, seance);
+                          const score = scoreFor(a, c.key);
                           return (
                             <td key={c.key} className="py-2 pr-2 text-white/80">
                               {score ?? "—"}

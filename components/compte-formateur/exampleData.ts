@@ -111,6 +111,17 @@ export const APPRENANTS: Apprenant[] = GROUP_SEEDS.flatMap((group, gi) =>
   )
 );
 
+// Pont vers le vrai backend : l'id de démo "apprenant-N" correspond
+// exactement au matricule ETF-2026-000N planté par prisma/seed.ts (même
+// index de génération des deux côtés) — voir le commentaire équivalent dans
+// backend/src/notation/notation.service.ts. Permet d'appeler les endpoints
+// Notation/classe-virtuelle (qui identifient l'apprenant par matricule)
+// sans requête réseau supplémentaire pour résoudre l'id.
+export function apprenantMatricule(apprenantId: string): string {
+  const n = apprenantId.split("-")[1] ?? "0";
+  return `ETF-2026-${n.padStart(4, "0")}`;
+}
+
 function groupStatut(moyenne: number): "vert" | "orange" | "rouge" {
   if (moyenne >= 75) return "vert";
   if (moyenne >= 60) return "orange";

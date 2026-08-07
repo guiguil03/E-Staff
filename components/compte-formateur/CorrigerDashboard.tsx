@@ -1,34 +1,97 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Reveal from "@/components/Reveal";
 import { useRequireRole } from "@/lib/useRequireRole";
-import { APPRENANTS, SUBMISSION_QUEUE } from "./exampleData";
+import { apiGet, apiGetBlob, apiPut, ApiError } from "@/lib/api";
+import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
+import { COMPETENCY_DEFS } from "./gradingGrids";
 import {
-  COMPETENCY_DEFS,
   EXPRESSION_ORALE_CRITERIA,
   EXPRESSION_ORALE_MAX,
   EXPRESSION_ECRITE_CRITERIA,
   EXPRESSION_ECRITE_MAX,
   EXPRESSION_ECRITE_ANOMALIES,
 } from "./gradingGrids";
+import type { CompetencyEntry } from "./planningGradesStore";
 import DelfGrid from "./grids/DelfGrid";
 import PostureGrid from "./grids/PostureGrid";
 
-// Page dédiée "Évaluer & Corriger" — file d'attente des rendus d'apprenants
-// déjà inscrits (vidéo/audio/texte pendant leur cursus). Distinct du test
-// d'admission avant compte (module /evaluation, backend séparé). Notation
-// avec les mêmes grilles DELF que la notation de séance (Planning > Noter,
-// voir gradingGrids.ts) plutôt qu'une grille générique séparée — un même
-// rendu "pitch de présentation" et une séance d'expression orale utilisent
-// désormais exactement le même barème. Pas de backend de dépôt/notation
-// d'exercices libres pour l'instant : la notation ici reste en état local,
-// non persistée.
+interface ACorrigerItem {
+  id: string;
+  apprenantMatricule: string;
+  apprenantPrenom: string;
+  apprenantNom: string;
+  groupeCle: string;
+  groupeLabel: string;
+  numero: number;
+  competence: string;
+  fileName: string | null;
+  soumisAt: string | null;
+}
+
+const VIDEO_EXT = [".mp4", ".webm", ".mov", ".mkv"];
+
+function formateurHeaders(): HeadersInit {
+  const matricule =
+    typeof window !== "undefined" ? sessionStorage.getItem(ACCOUNT_MATRICULE_KEY) : null;
+  return matricule ? { "x-formateur-matricule": matricule } : {};
+}
+
+function isVideo(fileName: string | null): boolean {
+  if (!fileName) return false;
+  const lower = fileName.toLowerCase();
+  return VIDEO_EXT.some((ext) => lower.endsWith(ext));
+}
+
+// Page dédiée "Évaluer & Corriger" — file d'attente des devoirs déposés par
+// les apprenants (voir Compte Apprenant > tableau des séances). Distinct du
+// test d'admission avant compte (module /evaluation, backend séparé).
+// Notation avec les mêmes grilles DELF que la notation de séance (Planning
+// > Noter, voir gradingGrids.ts) — un même rendu "pitch de présentation" et
+// une séance d'expression orale utilisent exactement le même barème, et
+// écrivent dans la même table Notation. Persisté en base depuis le
+// 2026-08-07 (auparavant file d'attente fictive, non connectée à un vrai
+// dépôt apprenant).
 export default function CorrigerDashboard() {
   const checked = useRequireRole("formateur");
-  const [queue, setQueue] = useState(SUBMISSION_QUEUE);
+  const [queue, setQueue] = useState<ACorrigerItem[] | "loading" | "erreur">("loading");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+
+  function refresh() {
+    setQueue("loading");
+    apiGet<ACorrigerItem[]>("/notations/a-corriger", formateurHeaders())
+      .then(setQueue)
+      .catch((err) => setQueue(err instanceof ApiError ? [] : "erreur"));
+  }
+
+  useEffect(() => {
+    if (!checked) return;
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checked]);
+
+  const openItemData = Array.isArray(queue) ? queue.find((i) => i.id === openId) : undefined;
+
+  useEffect(() => {
+    if (!openItemData) {
+      setMediaUrl(null);
+      return;
+    }
+    let objectUrl: string | null = null;
+    apiGetBlob(`/notations/${openItemData.id}/devoir`, formateurHeaders())
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob);
+        setMediaUrl(objectUrl);
+      })
+      .catch(() => setMediaUrl(null));
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openItemData?.id]);
 
   if (!checked) {
     return (
@@ -38,19 +101,30 @@ export default function CorrigerDashboard() {
     );
   }
 
-  function openItem(id: string) {
-    setOpenId(id);
-  }
+  async function handleSave(entry: CompetencyEntry) {
+    if (!openItemData) return;
+    const payload =
+      entry.kind === "grid"
+        ? {
+            gridData: {
+              selections: entry.selections,
+              anomaly: entry.anomaly,
+              adjustments: entry.adjustments,
+            },
+            commentaires: entry.comments,
+            scoreOn20: entry.scoreOn20,
+          }
+        : { note: entry.note, scoreOn20: entry.scoreOn20 };
 
-  function handleSave() {
-    setQueue((q) => q.filter((item) => item.id !== openId));
+    await apiPut(
+      `/notations/${openItemData.groupeCle}/${openItemData.numero}/${openItemData.apprenantMatricule}/${openItemData.competence}`,
+      payload,
+      formateurHeaders()
+    );
     setOpenId(null);
+    refresh();
   }
 
-  const openItemData = queue.find((i) => i.id === openId);
-  const openApprenant = openItemData
-    ? APPRENANTS.find((a) => a.id === openItemData.apprenantId)
-    : null;
   const competenceLabel = openItemData
     ? COMPETENCY_DEFS.find((c) => c.key === openItemData.competence)?.label
     : undefined;
@@ -70,38 +144,44 @@ export default function CorrigerDashboard() {
             Évaluer &amp; Corriger
           </h1>
           <p className="mt-1 font-sans text-sm text-white/60">
-            {queue.length} rendu{queue.length > 1 ? "s" : ""} en attente
+            {Array.isArray(queue) ? `${queue.length} rendu${queue.length > 1 ? "s" : ""} en attente` : ""}
           </p>
         </Reveal>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[280px_1fr]">
           <Reveal>
             <div className="space-y-2">
-              {queue.map((item) => {
-                const apprenant = APPRENANTS.find((a) => a.id === item.apprenantId);
-                const label = COMPETENCY_DEFS.find((c) => c.key === item.competence)?.label;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => openItem(item.id)}
-                    className={`flex w-full items-center justify-between rounded border px-3 py-2.5 text-left transition-colors ${
-                      openId === item.id
-                        ? "border-accent bg-obsidianCard"
-                        : "border-white/10 bg-obsidianCard hover:border-accent/50"
-                    }`}
-                  >
-                    <span>
-                      <span className="block font-sans text-sm text-white">
-                        {apprenant?.firstName} {apprenant?.lastName}
+              {queue === "loading" && (
+                <p className="font-sans text-sm text-white/50">Chargement...</p>
+              )}
+              {queue === "erreur" && (
+                <p className="font-sans text-sm text-white/50">Erreur de chargement.</p>
+              )}
+              {Array.isArray(queue) &&
+                queue.map((item) => {
+                  const label = COMPETENCY_DEFS.find((c) => c.key === item.competence)?.label;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setOpenId(item.id)}
+                      className={`flex w-full items-center justify-between rounded border px-3 py-2.5 text-left transition-colors ${
+                        openId === item.id
+                          ? "border-accent bg-obsidianCard"
+                          : "border-white/10 bg-obsidianCard hover:border-accent/50"
+                      }`}
+                    >
+                      <span>
+                        <span className="block font-sans text-sm text-white">
+                          {item.apprenantPrenom} {item.apprenantNom}
+                        </span>
+                        <span className="block font-mono text-[11px] text-white/40">
+                          {label} · {item.groupeLabel} n°{item.numero}
+                        </span>
                       </span>
-                      <span className="block font-mono text-[11px] text-white/40">
-                        {item.type} · {label} · {item.soumisDepuis}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-              {queue.length === 0 && (
+                    </button>
+                  );
+                })}
+              {Array.isArray(queue) && queue.length === 0 && (
                 <p className="rounded border border-white/10 bg-obsidianCard p-4 font-sans text-sm text-white/50">
                   Tous les rendus ont été corrigés.
                 </p>
@@ -110,19 +190,27 @@ export default function CorrigerDashboard() {
           </Reveal>
 
           <Reveal delay={60}>
-            {openItemData && openApprenant ? (
+            {openItemData ? (
               <div className="rounded border border-accent/30 bg-obsidianCard p-6">
                 <p className="font-sans text-sm font-semibold text-white">
-                  {openApprenant.firstName} {openApprenant.lastName} —{" "}
-                  <span className="text-white/60">Groupe {openApprenant.groupe}</span>
+                  {openItemData.apprenantPrenom} {openItemData.apprenantNom} —{" "}
+                  <span className="text-white/60">Groupe {openItemData.groupeCle}</span>
                 </p>
                 <p className="font-sans text-xs text-white/60">
-                  {openItemData.type} — {openItemData.exercice} · {competenceLabel}
+                  {competenceLabel} — {openItemData.groupeLabel} n°{openItemData.numero}
                 </p>
 
-                <div className="mt-4 flex h-28 items-center justify-center rounded border border-dashed border-white/15 font-mono text-[11px] uppercase tracking-widest text-white/30">
-                  Aperçu {openItemData.type.toLowerCase()} — bientôt disponible
-                </div>
+                {mediaUrl ? (
+                  isVideo(openItemData.fileName) ? (
+                    <video controls src={mediaUrl} className="mt-4 w-full rounded" />
+                  ) : (
+                    <audio controls src={mediaUrl} className="mt-4 w-full" />
+                  )
+                ) : (
+                  <div className="mt-4 flex h-28 items-center justify-center rounded border border-dashed border-white/15 font-mono text-[11px] uppercase tracking-widest text-white/30">
+                    Chargement du fichier...
+                  </div>
+                )}
 
                 <div className="mt-5">
                   {openItemData.competence === "expression_orale" && (

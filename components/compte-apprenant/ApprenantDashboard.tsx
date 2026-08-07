@@ -1,12 +1,13 @@
 "use client";
 
 import ProfileHeader from "./ProfileHeader";
-import CompetencyBars from "./CompetencyBars";
+import EvaluationCumulee from "./EvaluationCumulee";
 import ComparativeChart from "./ComparativeChart";
 import CecrGauge from "./CecrGauge";
 import OperationalTracking from "./OperationalTracking";
 import QuickActions from "./QuickActions";
 import MonDossier from "./MonDossier";
+import MesNotationsTable from "./MesNotationsTable";
 import {
   ALERTE_PEDAGOGIQUE,
   ASSIDUITE,
@@ -15,7 +16,6 @@ import {
   DIAGNOSTIC_INITIAL,
   DOSSIER,
   PROCHAINE_SEANCE,
-  SEANCE_ACTUELLE,
   TAUX_REUSSITE_GLOBAL,
   WEEKLY_AVERAGES,
 } from "./exampleData";
@@ -49,10 +49,7 @@ export default function ApprenantDashboard() {
 
         <div className="grid items-start gap-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-6">
-            <CompetencyBars
-              title="Évaluation de la dernière séance"
-              competencies={SEANCE_ACTUELLE.competencies}
-            />
+            <EvaluationCumulee />
             <ComparativeChart
               points={WEEKLY_AVERAGES.map((w) => ({ label: w.label, value: w.moyenne }))}
               niveauInitial={DIAGNOSTIC_INITIAL.global}
@@ -80,6 +77,8 @@ export default function ApprenantDashboard() {
             />
           </div>
         </div>
+
+        <MesNotationsTable />
       </div>
     </div>
   );

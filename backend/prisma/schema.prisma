@@ -184,6 +184,7 @@ model Apprenant {
   groupe   Groupe @relation(fields: [groupeId], references: [id])
 
   presences Presence[]
+  notations Notation[]
 }
 
 // Horaire réel d'une des 12 séances d'un groupe. startAt reste nullable :
@@ -210,8 +211,44 @@ model Seance {
   rappel15minEnvoyeAt DateTime?
 
   presences Presence[]
+  notations Notation[]
 
   @@unique([groupeId, numero])
+}
+
+// Notation d'une compétence pour un apprenant sur une séance — remplace le
+// state frontend local (planningGradesStore) pour que le formateur ET
+// l'apprenant lisent la même donnée depuis leurs comptes respectifs
+// (décision produit 2026-08-07). Sert aussi de file "Évaluer & Corriger" :
+// une ligne avec fileKey renseigné et gradedAt nul est un devoir en attente.
+model Notation {
+  id String @id @default(cuid())
+
+  seanceId String
+  seance   Seance @relation(fields: [seanceId], references: [id])
+
+  apprenantId String
+  apprenant   Apprenant @relation(fields: [apprenantId], references: [id])
+
+  competence String // CompetencyKey (voir gradingGrids.ts côté front)
+
+  // Dépôt de l'apprenant — uniquement pour les compétences à grille
+  // (expression_orale/ecrite, posture_eloquence) ; comprehension_orale/ecrite
+  // n'ont pas de dépôt, juste une note directe du formateur.
+  fileKey  String?
+  fileName String?
+  soumisAt DateTime?
+
+  // Notation du formateur — gridData est le JSON { selections, anomaly?,
+  // adjustments? } tel que produit par DelfGrid/PostureGrid côté front ;
+  // note sert aux compétences upload-only (comprehension_orale/ecrite).
+  gridData     String?
+  note         Float?
+  commentaires String?
+  scoreOn20    Float?
+  gradedAt     DateTime?
+
+  @@unique([seanceId, apprenantId, competence])
 }
 
 // Présence en classe virtuelle — alimentée par les webhooks Daily

@@ -331,10 +331,16 @@ export class ClasseVirtuelleService {
     }));
   }
 
+  // Nombre de compétences notées par apprenant — voir COMPETENCY_DEFS côté
+  // front (gradingGrids.ts) : comprehension_orale/ecrite, expression_orale/
+  // ecrite, posture_eloquence. Dupliqué ici en constante plutôt qu'importé
+  // (le backend n'a pas de dépendance vers le code frontend).
+  private static readonly NB_COMPETENCES = 5;
+
   // Historique des séances passées d'un groupe — horaire, rappels envoyés,
-  // présence (table Presence, alimentée par les webhooks Daily). La
-  // moyenne/objectifs de notation détaillée reste côté frontend
-  // (planningGradesStore, non persistée) — pas incluse ici.
+  // présence (table Presence, alimentée par les webhooks Daily), et moyenne
+  // réelle du groupe calculée depuis la table Notation (persistée depuis le
+  // 2026-08-07 — auparavant seulement côté state frontend, non partagée).
   async getHistorique(groupeCle: string) {
     const groupe = await this.findGroupeOrThrow(groupeCle);
     const now = new Date();
@@ -346,27 +352,46 @@ export class ClasseVirtuelleService {
           include: { apprenant: true },
           orderBy: { joinedAt: "asc" },
         },
+        notations: true,
       },
     });
 
-    return seances.map((s) => ({
-      numero: s.numero,
-      startAt: s.startAt,
-      dureeMinutes: s.dureeMinutes,
-      objectifs: s.objectifs,
-      rappelJ1Envoye: s.rappelJ1EnvoyeAt !== null,
-      rappel15minEnvoye: s.rappel15minEnvoyeAt !== null,
-      presences: s.presences.map((p) => ({
-        apprenantId: p.apprenantId,
-        prenom: p.apprenant?.prenom ?? null,
-        nom: p.apprenant?.nom ?? null,
-        role: p.role,
-        displayName: p.displayName,
-        joinedAt: p.joinedAt,
-        leftAt: p.leftAt,
-        dureeSecondes: p.dureeSecondes,
-      })),
-    }));
+    return seances.map((s) => {
+      const parApprenant = new Map<string, number[]>();
+      for (const n of s.notations) {
+        if (n.scoreOn20 === null) continue;
+        const scores = parApprenant.get(n.apprenantId) ?? [];
+        scores.push(n.scoreOn20);
+        parApprenant.set(n.apprenantId, scores);
+      }
+      const moyennesApprenants = [...parApprenant.values()]
+        .filter((scores) => scores.length === ClasseVirtuelleService.NB_COMPETENCES)
+        .map((scores) => scores.reduce((sum, v) => sum + v, 0) / scores.length);
+      const moyenne =
+        moyennesApprenants.length > 0
+          ? Math.round((moyennesApprenants.reduce((sum, v) => sum + v, 0) / moyennesApprenants.length) * 100) / 100
+          : null;
+
+      return {
+        numero: s.numero,
+        startAt: s.startAt,
+        dureeMinutes: s.dureeMinutes,
+        objectifs: s.objectifs,
+        rappelJ1Envoye: s.rappelJ1EnvoyeAt !== null,
+        rappel15minEnvoye: s.rappel15minEnvoyeAt !== null,
+        moyenne,
+        presences: s.presences.map((p) => ({
+          apprenantId: p.apprenantId,
+          prenom: p.apprenant?.prenom ?? null,
+          nom: p.apprenant?.nom ?? null,
+          role: p.role,
+          displayName: p.displayName,
+          joinedAt: p.joinedAt,
+          leftAt: p.leftAt,
+          dureeSecondes: p.dureeSecondes,
+        })),
+      };
+    });
   }
 
   async getApprenantProchaineSeanceRoom(matricule: string): Promise<RoomStatus | null> {
