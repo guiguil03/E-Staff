@@ -34,6 +34,15 @@ export async function apiPut<T>(path: string, body: unknown, headers?: HeadersIn
   return res.json();
 }
 
+export async function apiDelete<T>(path: string, headers?: HeadersInit): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, { method: "DELETE", headers });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new ApiError(payload?.message ?? "Une erreur est survenue.", res.status);
+  }
+  return res.json();
+}
+
 export async function apiGet<T>(path: string, headers?: HeadersInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, { headers });
   if (!res.ok) throw new ApiError("Une erreur est survenue.", res.status);

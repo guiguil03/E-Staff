@@ -55,6 +55,25 @@ export class DailyService {
     return { configured: true, roomName: data.name, roomUrl: data.url };
   }
 
+  // Supprime la salle Daily — appelé quand une planification est annulée
+  // (voir ClasseVirtuelleService.cancelSeance) pour ne pas laisser de salles
+  // orphelines actives côté Daily. Silencieux si non configuré ou déjà
+  // supprimée (404) : l'annulation côté e-Staf ne doit jamais échouer pour
+  // ça.
+  async deleteRoom(roomName: string): Promise<void> {
+    const apiKey = process.env.DAILY_API_KEY;
+    if (!apiKey) return;
+
+    const res = await fetch(`https://api.daily.co/v1/rooms/${roomName}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok && res.status !== 404) {
+      const body = await res.text().catch(() => "");
+      this.logger.error(`Échec de suppression de salle Daily ${roomName}: ${res.status} ${body}`);
+    }
+  }
+
   // Jeton de réunion nominatif — permet aux webhooks de présence
   // (participant.joined/left) de rattacher un participant à un vrai
   // apprenant/formateur via user_id, plutôt qu'un simple lien de salle

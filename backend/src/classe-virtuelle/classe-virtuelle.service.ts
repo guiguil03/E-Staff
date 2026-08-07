@@ -22,6 +22,7 @@ export interface RoomStatus {
   numero: number;
   startAt: Date | null;
   dureeMinutes: number;
+  objectifs: string | null;
   withinJoinWindow: boolean;
   configured: boolean;
   roomUrl: string | null;
@@ -55,6 +56,32 @@ export class ClasseVirtuelleService {
     return { ...seance, groupeCle };
   }
 
+  // Annule la planification d'une séance : réinitialise l'horaire et
+  // supprime la salle Daily associée (le créneau numéro reste, réutilisable
+  // pour une nouvelle planification plus tard) — pas une suppression du
+  // Seance lui-même, qui représente le créneau structurel du groupe.
+  async cancelSeance(groupeCle: string, numero: number) {
+    const seance = await this.findSeanceOrThrow(groupeCle, numero);
+
+    if (seance.dailyRoomName) {
+      await this.daily.deleteRoom(seance.dailyRoomName);
+    }
+
+    const updated = await this.prisma.seance.update({
+      where: { id: seance.id },
+      data: {
+        startAt: null,
+        objectifs: null,
+        dailyRoomName: null,
+        dailyRoomUrl: null,
+        rappelJ1EnvoyeAt: null,
+        rappel15minEnvoyeAt: null,
+      },
+    });
+
+    return { ...updated, groupeCle };
+  }
+
   async upsertSeance(groupeCle: string, numero: number, dto: UpsertSeanceDto) {
     const seance = await this.findSeanceOrThrow(groupeCle, numero);
 
@@ -62,12 +89,26 @@ export class ClasseVirtuelleService {
     const dureeMinutes = dto.dureeMinutes ?? seance.dureeMinutes;
     const startAtChanged =
       nextStartAt?.getTime() !== seance.startAt?.getTime() && nextStartAt !== null;
+    const dureeChanged = dto.dureeMinutes !== undefined && dto.dureeMinutes !== seance.dureeMinutes;
 
     let dailyRoomName = seance.dailyRoomName;
     let dailyRoomUrl = seance.dailyRoomUrl;
 
-    // Crée la salle Daily la première fois qu'un horaire est renseigné.
-    if (nextStartAt && !seance.dailyRoomName) {
+    // Une salle Daily existante a son `exp` calé sur l'horaire/durée en
+    // vigueur au moment de sa création — un replanning (date ou durée)
+    // laisserait cet `exp` périmé (déjà passé au moment du nouveau
+    // créneau), et Daily rejetterait le join avec "This room is no longer
+    // available" même si notre fenêtre de rejoin calculée dit que c'est
+    // ouvert. On recrée donc la salle pour que l'expiration suive.
+    if (nextStartAt && dailyRoomName && (startAtChanged || dureeChanged)) {
+      await this.daily.deleteRoom(dailyRoomName);
+      dailyRoomName = null;
+      dailyRoomUrl = null;
+    }
+
+    // Crée la salle Daily la première fois qu'un horaire est renseigné (ou
+    // après une recréation ci-dessus suite à un replanning).
+    if (nextStartAt && !dailyRoomName) {
       const expUnixSeconds = Math.floor(nextStartAt.getTime() / 1000) + dureeMinutes * 60 + 15 * 60;
       const room = await this.daily.createRoom(seance.id, expUnixSeconds);
       if (room.roomName) {
@@ -117,6 +158,7 @@ export class ClasseVirtuelleService {
     numero: number,
     startAt: Date | null,
     dureeMinutes: number,
+    objectifs: string | null,
     dailyRoomName: string | null,
     dailyRoomUrl: string | null,
     joiner?: { userId: string; userName: string; isOwner: boolean }
@@ -146,6 +188,7 @@ export class ClasseVirtuelleService {
       numero,
       startAt,
       dureeMinutes,
+      objectifs,
       withinJoinWindow,
       configured,
       roomUrl,
@@ -162,6 +205,7 @@ export class ClasseVirtuelleService {
       numero,
       seance.startAt,
       seance.dureeMinutes,
+      seance.objectifs,
       seance.dailyRoomName,
       seance.dailyRoomUrl,
       formateur ? { userId: formateur.id, userName: `${formateur.prenom} ${formateur.nom}`, isOwner: true } : undefined
@@ -289,6 +333,7 @@ export class ClasseVirtuelleService {
       seance.numero,
       seance.startAt,
       seance.dureeMinutes,
+      seance.objectifs,
       seance.dailyRoomName,
       seance.dailyRoomUrl,
       { userId: apprenant.id, userName: `${apprenant.prenom} ${apprenant.nom}`, isOwner: false }

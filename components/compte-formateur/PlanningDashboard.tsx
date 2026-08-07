@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
 import { useRequireRole } from "@/lib/useRequireRole";
-import { apiGet, apiPut } from "@/lib/api";
+import { apiDelete, apiGet, apiPut } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 import {
   APPRENANTS,
@@ -125,6 +125,19 @@ export default function PlanningDashboard() {
         formateurHeaders()
       );
       setHoraireSeance(data);
+      setDureeInput(data.dureeMinutes);
+      setHoraireStatus("idle");
+    } catch {
+      setHoraireStatus("error");
+    }
+  }
+
+  async function cancelHoraire() {
+    setHoraireStatus("saving");
+    try {
+      const data = await apiDelete<SeanceApi>(`/seances/${groupeKey}/${seance}`, formateurHeaders());
+      setHoraireSeance(data);
+      setHoraireInput("");
       setDureeInput(data.dureeMinutes);
       setHoraireStatus("idle");
     } catch {
@@ -257,6 +270,19 @@ export default function PlanningDashboard() {
               >
                 {horaireStatus === "saving" ? "Enregistrement..." : "Planifier"}
               </Button>
+              {horaireSeance?.startAt && (
+                <Button variant="ghostDark" onClick={cancelHoraire} disabled={horaireStatus === "saving"}>
+                  Annuler la planification
+                </Button>
+              )}
+              {horaireSeance?.startAt && (
+                <Link
+                  href={`/compte/formateur/classe-virtuelle/${groupeKey}/${seance}`}
+                  className="font-mono text-xs uppercase tracking-widest text-accent hover:underline"
+                >
+                  Voir la page de lancement →
+                </Link>
+              )}
               <p className="font-mono text-xs text-white/40">
                 {horaireStatus === "loading" && "Chargement..."}
                 {horaireStatus === "error" && "Erreur — réessayer."}

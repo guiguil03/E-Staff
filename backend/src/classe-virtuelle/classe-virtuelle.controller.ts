@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Headers, Param, ParseIntPipe, Put, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  ParseIntPipe,
+  Put,
+  UseGuards,
+} from "@nestjs/common";
 import { FormateurGuard } from "../common/formateur.guard";
 import { ClasseVirtuelleService } from "./classe-virtuelle.service";
 import { UpsertSeanceDto } from "./dto/upsert-seance.dto";
@@ -21,6 +31,12 @@ export class ClasseVirtuelleController {
     @Body() dto: UpsertSeanceDto
   ) {
     return this.service.upsertSeance(groupeCle, numero, dto);
+  }
+
+  @Delete("seances/:groupeCle/:numero")
+  @UseGuards(FormateurGuard)
+  cancelSeance(@Param("groupeCle") groupeCle: string, @Param("numero", ParseIntPipe) numero: number) {
+    return this.service.cancelSeance(groupeCle, numero);
   }
 
   @Get("seances/:groupeCle/:numero/room")
