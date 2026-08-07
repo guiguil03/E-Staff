@@ -9,6 +9,7 @@ import { ConnecteursModule } from "./connecteurs/connecteurs.module";
 import { EvaluationModule } from "./evaluation/evaluation.module";
 import { AuthModule } from "./auth/auth.module";
 import { ClasseVirtuelleModule } from "./classe-virtuelle/classe-virtuelle.module";
+import { ForumModule } from "./forum/forum.module";
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ClasseVirtuelleModule } from "./classe-virtuelle/classe-virtuelle.modul
     EvaluationModule,
     AuthModule,
     ClasseVirtuelleModule,
+    ForumModule,
   ],
   controllers: [AppController],
   providers: [AppService],

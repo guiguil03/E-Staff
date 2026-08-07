@@ -20,6 +20,11 @@ const TEST_ACCOUNTS: { matricule?: string; password?: string; role: string }[] =
     password: process.env.FORMATEUR_TEST_PASSWORD,
     role: "formateur",
   },
+  {
+    matricule: process.env.ADMIN_TEST_MATRICULE,
+    password: process.env.ADMIN_TEST_PASSWORD,
+    role: "admin",
+  },
 ];
 
 @Controller("auth")

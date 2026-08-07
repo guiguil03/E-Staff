@@ -14,10 +14,18 @@ interface CreateRoomResult {
 export class DailyService {
   private readonly logger = new Logger(DailyService.name);
 
-  async createRoom(seanceId: string, expUnixSeconds: number): Promise<CreateRoomResult> {
+  // broadcastOnly: true (Forum "Live du mois") active owner_only_broadcast
+  // côté Daily — seul le titulaire du jeton is_owner a caméra/micro, tout
+  // le monde d'autre est spectateur en lecture seule. false (classes
+  // virtuelles) laisse tout le monde parler, comportement par défaut.
+  async createRoom(
+    roomId: string,
+    expUnixSeconds: number,
+    broadcastOnly = false
+  ): Promise<CreateRoomResult> {
     const apiKey = process.env.DAILY_API_KEY;
     if (!apiKey) {
-      this.logger.log(`[daily:stub] salle non créée pour la séance ${seanceId} (DAILY_API_KEY absente)`);
+      this.logger.log(`[daily:stub] salle non créée pour ${roomId} (DAILY_API_KEY absente)`);
       return { configured: false };
     }
 
@@ -28,17 +36,18 @@ export class DailyService {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        name: seanceId,
+        name: roomId,
         properties: {
           exp: expUnixSeconds,
           enable_prejoin_ui: true,
+          ...(broadcastOnly ? { owner_only_broadcast: true } : {}),
         },
       }),
     });
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      this.logger.error(`Échec de création de salle Daily pour ${seanceId}: ${res.status} ${body}`);
+      this.logger.error(`Échec de création de salle Daily pour ${roomId}: ${res.status} ${body}`);
       return { configured: true };
     }
 

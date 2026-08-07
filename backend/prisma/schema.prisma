@@ -235,3 +235,28 @@ model Presence {
   leftAt        DateTime?
   dureeSecondes Int?
 }
+
+// ---------------------------------------------------------------------------
+// Forum — "Le Live du mois"
+// ---------------------------------------------------------------------------
+// Distinct de Seance : public (pas rattaché à un Groupe/Apprenant), diffusion
+// 1 hôte (l'invité, via le compte Admin) → plusieurs spectateurs, pas un
+// appel multi-parties. Planifié par le rôle Admin (voir AdminGuard),
+// affiché sur la page /forum publique.
+model ForumLive {
+  id String @id @default(cuid())
+
+  titre       String
+  invite      String // nom de l'invité du mois
+  description String?
+
+  startAt      DateTime?
+  dureeMinutes Int       @default(60)
+
+  // Salle Daily.co en mode owner_only_broadcast (voir daily.service.ts) —
+  // seul l'hôte (Admin) a caméra/micro, les spectateurs sont en lecture seule.
+  dailyRoomName String?
+  dailyRoomUrl  String?
+
+  createdAt DateTime @default(now())
+}

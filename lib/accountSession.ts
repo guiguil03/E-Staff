@@ -11,4 +11,5 @@ export const ACCOUNT_MATRICULE_KEY = "estaf-account-matricule";
 export const ROLE_ROUTES: Record<string, string> = {
   apprenant: "/compte/apprenant",
   formateur: "/compte/formateur",
+  admin: "/compte/admin",
 };
