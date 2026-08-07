@@ -32,6 +32,7 @@ interface ACorrigerItem {
 }
 
 const VIDEO_EXT = [".mp4", ".webm", ".mov", ".mkv"];
+const AUDIO_EXT = [".mp3", ".wav", ".ogg", ".m4a", ".aac"];
 
 function formateurHeaders(): HeadersInit {
   const matricule =
@@ -43,6 +44,12 @@ function isVideo(fileName: string | null): boolean {
   if (!fileName) return false;
   const lower = fileName.toLowerCase();
   return VIDEO_EXT.some((ext) => lower.endsWith(ext));
+}
+
+function isAudio(fileName: string | null): boolean {
+  if (!fileName) return false;
+  const lower = fileName.toLowerCase();
+  return AUDIO_EXT.some((ext) => lower.endsWith(ext));
 }
 
 // Page dédiée "Évaluer & Corriger" — file d'attente des devoirs déposés par
@@ -203,8 +210,19 @@ export default function CorrigerDashboard() {
                 {mediaUrl ? (
                   isVideo(openItemData.fileName) ? (
                     <video controls src={mediaUrl} className="mt-4 w-full rounded" />
-                  ) : (
+                  ) : isAudio(openItemData.fileName) ? (
                     <audio controls src={mediaUrl} className="mt-4 w-full" />
+                  ) : (
+                    <a
+                      href={mediaUrl}
+                      download={openItemData.fileName ?? undefined}
+                      className="mt-4 flex items-center justify-between rounded border border-white/15 bg-obsidian px-4 py-3 font-sans text-sm text-accent hover:border-accent/50"
+                    >
+                      <span>{openItemData.fileName ?? "Document déposé"}</span>
+                      <span className="font-mono text-[11px] uppercase tracking-widest text-white/40">
+                        Télécharger →
+                      </span>
+                    </a>
                   )
                 ) : (
                   <div className="mt-4 flex h-28 items-center justify-center rounded border border-dashed border-white/15 font-mono text-[11px] uppercase tracking-widest text-white/30">
