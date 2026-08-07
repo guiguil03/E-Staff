@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { DailyService } from "./daily.service";
 import { EmailService } from "../common/email.service";
@@ -63,10 +63,23 @@ export class ClasseVirtuelleService {
   async cancelSeance(groupeCle: string, numero: number) {
     const seance = await this.findSeanceOrThrow(groupeCle, numero);
 
+    // Ne jamais couper une classe virtuelle en cours par erreur.
+    if (seance.startAt) {
+      const opensAt = seance.startAt.getTime() - JOIN_WINDOW_BEFORE_MINUTES * 60 * 1000;
+      const closesAt = seance.startAt.getTime() + seance.dureeMinutes * 60 * 1000;
+      const now = Date.now();
+      if (now >= opensAt && now <= closesAt) {
+        throw new BadRequestException(
+          "Cette séance est en cours (fenêtre de rejoin ouverte) — impossible de l'annuler maintenant."
+        );
+      }
+    }
+
     if (seance.dailyRoomName) {
       await this.daily.deleteRoom(seance.dailyRoomName);
     }
 
+    const wasScheduled = seance.startAt;
     const updated = await this.prisma.seance.update({
       where: { id: seance.id },
       data: {
@@ -79,6 +92,22 @@ export class ClasseVirtuelleService {
       },
     });
 
+    // Prévient les apprenants qu'une séance qu'ils attendaient est annulée
+    // — même logique que l'alerte de planification, sens inverse.
+    if (wasScheduled) {
+      const groupe = await this.prisma.groupe.findUnique({
+        where: { cle: groupeCle },
+        include: { apprenants: true },
+      });
+      for (const apprenant of groupe?.apprenants ?? []) {
+        await this.email.send({
+          to: apprenant.email,
+          subject: `Séance annulée — ${groupe!.label}`,
+          text: `Bonjour ${apprenant.prenom},\n\nLa séance qui était programmée pour ${groupe!.label} le ${formatDateTime(wasScheduled)} a été annulée par votre formateur.\n\nVous serez prévenu(e) dès qu'une nouvelle date sera fixée.\n\nÀ bientôt,\nL'équipe e-Staf`,
+        });
+      }
+    }
+
     return { ...updated, groupeCle };
   }
 
@@ -90,6 +119,31 @@ export class ClasseVirtuelleService {
     const startAtChanged =
       nextStartAt?.getTime() !== seance.startAt?.getTime() && nextStartAt !== null;
     const dureeChanged = dto.dureeMinutes !== undefined && dto.dureeMinutes !== seance.dureeMinutes;
+
+    if (startAtChanged && nextStartAt && nextStartAt.getTime() < Date.now()) {
+      throw new BadRequestException("Impossible de planifier une séance dans le passé.");
+    }
+
+    // Un seul formateur ne peut pas être sur deux classes virtuelles à la
+    // fois — bloque le chevauchement avec n'importe quelle autre séance déjà
+    // planifiée, tous groupes confondus.
+    if (startAtChanged || dureeChanged) {
+      const nextEnd = nextStartAt!.getTime() + dureeMinutes * 60 * 1000;
+      const autres = await this.prisma.seance.findMany({
+        where: { startAt: { not: null }, id: { not: seance.id } },
+        include: { groupe: true },
+      });
+      const conflit = autres.find((s) => {
+        const sStart = s.startAt!.getTime();
+        const sEnd = sStart + s.dureeMinutes * 60 * 1000;
+        return nextStartAt!.getTime() < sEnd && nextEnd > sStart;
+      });
+      if (conflit) {
+        throw new BadRequestException(
+          `Conflit d'horaire avec ${conflit.groupe.label} — séance n°${conflit.numero} à ${formatDateTime(conflit.startAt!)}.`
+        );
+      }
+    }
 
     let dailyRoomName = seance.dailyRoomName;
     let dailyRoomUrl = seance.dailyRoomUrl;

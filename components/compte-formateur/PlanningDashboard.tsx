@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
 import { useRequireRole } from "@/lib/useRequireRole";
-import { apiDelete, apiGet, apiPut } from "@/lib/api";
+import { apiDelete, apiGet, apiPut, ApiError } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 import {
   APPRENANTS,
@@ -84,6 +84,7 @@ export default function PlanningDashboard() {
   const [horaireStatus, setHoraireStatus] = useState<"idle" | "loading" | "saving" | "error">(
     "idle"
   );
+  const [horaireError, setHoraireError] = useState<string | null>(null);
   usePlanningGradesVersion();
 
   const apprenantsGroupe = APPRENANTS.filter((a) => a.groupe === groupeKey);
@@ -117,6 +118,7 @@ export default function PlanningDashboard() {
   async function saveHoraire() {
     if (!horaireInput) return;
     setHoraireStatus("saving");
+    setHoraireError(null);
     try {
       const startAt = new Date(horaireInput).toISOString();
       const data = await apiPut<SeanceApi>(
@@ -127,20 +129,23 @@ export default function PlanningDashboard() {
       setHoraireSeance(data);
       setDureeInput(data.dureeMinutes);
       setHoraireStatus("idle");
-    } catch {
+    } catch (err) {
+      setHoraireError(err instanceof ApiError ? err.message : "Erreur — réessayer.");
       setHoraireStatus("error");
     }
   }
 
   async function cancelHoraire() {
     setHoraireStatus("saving");
+    setHoraireError(null);
     try {
       const data = await apiDelete<SeanceApi>(`/seances/${groupeKey}/${seance}`, formateurHeaders());
       setHoraireSeance(data);
       setHoraireInput("");
       setDureeInput(data.dureeMinutes);
       setHoraireStatus("idle");
-    } catch {
+    } catch (err) {
+      setHoraireError(err instanceof ApiError ? err.message : "Erreur — réessayer.");
       setHoraireStatus("error");
     }
   }
@@ -285,7 +290,9 @@ export default function PlanningDashboard() {
               )}
               <p className="font-mono text-xs text-white/40">
                 {horaireStatus === "loading" && "Chargement..."}
-                {horaireStatus === "error" && "Erreur — réessayer."}
+                {horaireStatus === "error" && (
+                  <span className="text-accent">{horaireError ?? "Erreur — réessayer."}</span>
+                )}
                 {horaireStatus === "idle" && horaireSeance?.startAt && (
                   <>
                     {horaireSeance.dailyRoomName
