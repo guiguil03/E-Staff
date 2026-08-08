@@ -49,6 +49,29 @@ model EntrepriseProjet {
 }
 
 // ---------------------------------------------------------------------------
+// Page "Former son équipe" — prise de rendez-vous par secteur
+// ---------------------------------------------------------------------------
+
+model EntrepriseFormation {
+  id String @id @default(cuid())
+
+  companyName String
+  contactName String
+  email       String
+  phone       String
+
+  // "francais-admin-b2b" | "tourisme-hotellerie" | "centres-appels" | "bootcamp" | "vivier" | ""
+  secteur  String
+  effectif String
+  // "rendez-vous" | "audit" | "devis" — quel CTA a déclenché la demande
+  motif    String
+  message  String?
+
+  consentAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
 // Bouton 2 — "Devenir Connecteur e-Staf"
 // ---------------------------------------------------------------------------
 

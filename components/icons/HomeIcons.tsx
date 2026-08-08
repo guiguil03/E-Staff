@@ -141,6 +141,21 @@ export function StarPersonIcon({ className }: IconProps) {
   );
 }
 
+export function TeamGrowthIcon({ className }: IconProps) {
+  // Two people side by side with a rising arrow — "montée en compétences en
+  // interne" (training your own team), distinct from HandshakeIcon (external
+  // partnership) and BriefcaseIcon (recruiting a role).
+  return (
+    <svg {...BASE_PROPS} className={className} aria-hidden="true">
+      <circle cx="7.5" cy="7" r="2.4" />
+      <path d="M3 19.5c0-2.9 2-4.8 4.5-4.8s4.5 1.9 4.5 4.8" />
+      <circle cx="15.5" cy="5.5" r="2" />
+      <path d="M12.3 12.5c.6-1 1.8-1.6 3.2-1.6 2.1 0 3.8 1.5 3.8 4" />
+      <path d="M17 3.5l3-1.5v3M20 2l-2.6 4" />
+    </svg>
+  );
+}
+
 export function HandshakeIcon({ className }: IconProps) {
   // Two forearms meeting in a grip — a simplified but legible handshake mark
   // (a fully literal clasped-hands drawing reads as noise at small icon

@@ -5,6 +5,7 @@ import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { PrismaModule } from "./prisma/prisma.module";
 import { EntreprisesProjetsModule } from "./entreprises-projets/entreprises-projets.module";
+import { EntreprisesFormationsModule } from "./entreprises-formations/entreprises-formations.module";
 import { ConnecteursModule } from "./connecteurs/connecteurs.module";
 import { EvaluationModule } from "./evaluation/evaluation.module";
 import { AuthModule } from "./auth/auth.module";
@@ -18,6 +19,7 @@ import { NotationModule } from "./notation/notation.module";
     ScheduleModule.forRoot(),
     PrismaModule,
     EntreprisesProjetsModule,
+    EntreprisesFormationsModule,
     ConnecteursModule,
     EvaluationModule,
     AuthModule,

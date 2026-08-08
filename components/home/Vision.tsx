@@ -9,6 +9,7 @@ import {
   HandshakeIcon,
   MicrophoneIcon,
   StarPersonIcon,
+  TeamGrowthIcon,
 } from "@/components/icons/HomeIcons";
 
 interface VisionCardProps {
@@ -150,17 +151,17 @@ export default function Vision() {
                 Du côté des <span className="text-teal">Entreprises</span>
               </h3>
               <p className="mt-3 max-w-sm font-sans text-sm text-white/60">
-                Nous offrons un prolongement naturel à cette exigence humaine. En vous garantissant
-                des profils formés, et managés avec rigueur, des infrastructures sécurisées pour
-                vous permettre de grandir en toute confiance, en sachant que chaque collaborateur
-                qui vous rejoint est un talent pleinement épanoui et prêt à donner le meilleur de
-                lui-même.
+                Nous offrons un prolongement naturel à cette exigence humaine. Qu&apos;il
+                s&apos;agisse de recruter nos talents certifiés ou de former vos propres équipes en
+                interne (montée en compétences), nous vous garantissons des collaborateurs
+                managés avec rigueur et des infrastructures sécurisées pour vous permettre de
+                grandir en toute confiance.
               </p>
             </div>
           </Reveal>
 
           <Reveal delay={100} className="md:col-start-3 md:row-start-2">
-            <div className="grid w-full grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
+            <div className="grid w-full grid-cols-1 gap-6 sm:grid-cols-3 md:grid-cols-1 lg:grid-cols-3">
               <VisionCard
                 href="/communaute"
                 accent="teal"
@@ -174,6 +175,13 @@ export default function Vision() {
                 icon={<HandshakeIcon className="h-full w-full" />}
               >
                 Découvrir nos offres B2B
+              </VisionCard>
+              <VisionCard
+                href="/entreprises/former-son-equipe"
+                accent="teal"
+                icon={<TeamGrowthIcon className="h-full w-full" />}
+              >
+                Former son équipe
               </VisionCard>
             </div>
           </Reveal>
