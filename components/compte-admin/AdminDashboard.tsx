@@ -9,6 +9,7 @@ import { apiGet, apiPostAuthed, apiPut } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 import ValidationRhPanel from "./ValidationRhPanel";
 import PaiementsPanel from "./PaiementsPanel";
+import PipelineOverviewPanel from "./PipelineOverviewPanel";
 
 interface ForumLiveApi {
   id: string;
@@ -125,15 +126,25 @@ export default function AdminDashboard() {
           </p>
         </Reveal>
 
-        <div className="mt-6">
+        <Reveal delay={20}>
+          <h2 className="mt-8 font-display text-lg font-semibold text-white">
+            RH — Suivi des candidats
+          </h2>
+        </Reveal>
+        <div className="mt-4">
           <ValidationRhPanel />
         </div>
         <div className="mt-6">
           <PaiementsPanel />
         </div>
+        <div className="mt-6">
+          <PipelineOverviewPanel />
+        </div>
 
         <Reveal delay={40}>
-          <h2 className="mt-10 font-display text-lg font-semibold text-white">Forum</h2>
+          <h2 className="mt-12 border-t border-white/10 pt-8 font-display text-lg font-semibold text-white">
+            Forum
+          </h2>
         </Reveal>
 
         <Reveal delay={40}>

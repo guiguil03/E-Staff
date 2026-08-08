@@ -104,6 +104,12 @@ export class EvaluationController {
   }
 
   @UseGuards(AdminGuard)
+  @Get("pipeline-overview")
+  listPipelineOverview() {
+    return this.service.listPipelineOverview();
+  }
+
+  @UseGuards(AdminGuard)
   @Post("attempts/:id/validate-contract")
   validateContract(@Param("id") id: string, @Body() dto: ValidateContractDto) {
     return this.service.validateContract(id, dto);

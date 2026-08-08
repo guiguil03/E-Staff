@@ -360,6 +360,27 @@ export class EvaluationService {
 
   // ---- Interface admin (RH) ----------------------------------------------
 
+  // Vue d'ensemble RH — tout le pipeline post-correction, pas seulement les
+  // files d'attente actionnables (Validation/Paiements), pour que l'admin
+  // voie aussi ce qui est déjà en cours d'envoi ou activé.
+  async listPipelineOverview() {
+    return this.prisma.evaluationAttempt.findMany({
+      where: {
+        status: {
+          in: [
+            "corrige",
+            "valide_pret_envoi",
+            "contrat_envoye",
+            "en_attente_paiement",
+            "active",
+          ],
+        },
+      },
+      include: { candidat: true, apprenant: true },
+      orderBy: { gradedAt: "desc" },
+    });
+  }
+
   async listPendingPayment() {
     return this.prisma.evaluationAttempt.findMany({
       where: { status: "en_attente_paiement" },
