@@ -7,6 +7,8 @@ import Button from "@/components/ui/Button";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { apiGet, apiPostAuthed, apiPut } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
+import ValidationRhPanel from "./ValidationRhPanel";
+import PaiementsPanel from "./PaiementsPanel";
 
 interface ForumLiveApi {
   id: string;
@@ -116,11 +118,22 @@ export default function AdminDashboard() {
 
         <Reveal>
           <h1 className="mt-4 font-display text-2xl font-bold text-white sm:text-3xl">
-            Espace Admin — Forum
+            Espace Admin
           </h1>
           <p className="mt-1 font-sans text-sm text-white/60">
-            Planifier le Live du mois et rédiger ses informations.
+            Validation RH des candidats, confirmation des paiements et planification du Forum.
           </p>
+        </Reveal>
+
+        <div className="mt-6">
+          <ValidationRhPanel />
+        </div>
+        <div className="mt-6">
+          <PaiementsPanel />
+        </div>
+
+        <Reveal delay={40}>
+          <h2 className="mt-10 font-display text-lg font-semibold text-white">Forum</h2>
         </Reveal>
 
         <Reveal delay={40}>

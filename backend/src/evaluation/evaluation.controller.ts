@@ -16,7 +16,11 @@ import { CreateCandidatDto } from "./dto/create-candidat.dto";
 import { SubmitAnswersDto } from "./dto/submit-answers.dto";
 import { UploadSituationDto } from "./dto/upload-situation.dto";
 import { GradeSituationDto } from "./dto/grade-situation.dto";
+import { ValidateContractDto } from "./dto/validate-contract.dto";
+import { SubmitPaymentReferenceDto } from "./dto/submit-payment-reference.dto";
+import { ConfirmPaymentDto } from "./dto/confirm-payment.dto";
 import { TrainerGuard } from "../common/trainer.guard";
+import { AdminGuard } from "../common/admin.guard";
 
 @Controller("evaluation")
 export class EvaluationController {
@@ -84,16 +88,63 @@ export class EvaluationController {
   }
 
   @UseGuards(TrainerGuard)
-  @Post("attempts/:id/send-result")
-  sendResult(@Param("id") id: string) {
-    return this.service.sendResultEmail(id);
-  }
-
-  @UseGuards(TrainerGuard)
   @Get("situation-responses/:id/audio")
   async streamAudio(@Param("id") id: string, @Res() res: Response) {
     const { stream, contentType } = await this.service.getSituationAudioStream(id);
     if (contentType) res.set("Content-Type", contentType);
     stream.pipe(res);
+  }
+
+  // ---- Interface admin (RH) — validation + paiement ----------------------
+
+  @UseGuards(AdminGuard)
+  @Get("pending-validation")
+  listPendingValidation() {
+    return this.service.listPendingValidation();
+  }
+
+  @UseGuards(AdminGuard)
+  @Post("attempts/:id/validate-contract")
+  validateContract(@Param("id") id: string, @Body() dto: ValidateContractDto) {
+    return this.service.validateContract(id, dto);
+  }
+
+  @UseGuards(AdminGuard)
+  @Get("pending-payment")
+  listPendingPayment() {
+    return this.service.listPendingPayment();
+  }
+
+  @UseGuards(AdminGuard)
+  @Get("groupes-avec-places")
+  listGroupesAvecPlaces() {
+    return this.service.listGroupesAvecPlaces();
+  }
+
+  @UseGuards(AdminGuard)
+  @Post("attempts/:id/confirm-payment")
+  confirmPayment(@Param("id") id: string, @Body() dto: ConfirmPaymentDto) {
+    return this.service.confirmPayment(id, dto);
+  }
+
+  // ---- Parcours candidat (public) — contrat + paiement -------------------
+  // Accessible uniquement via le lien envoyé par e-mail (attemptId comme
+  // jeton), même principe que le reste du parcours candidat sans compte.
+
+  @Get("contrats/:id")
+  getContractInfo(@Param("id") id: string) {
+    return this.service.getContractInfo(id);
+  }
+
+  @Get("contrats/:id/pdf")
+  async streamContractPdf(@Param("id") id: string, @Res() res: Response) {
+    const { stream, contentType } = await this.service.getContractPdfStream(id);
+    res.set("Content-Type", contentType ?? "application/pdf");
+    stream.pipe(res);
+  }
+
+  @Post("contrats/:id/paiement")
+  submitPaymentReference(@Param("id") id: string, @Body() dto: SubmitPaymentReferenceDto) {
+    return this.service.submitPaymentReference(id, dto);
   }
 }

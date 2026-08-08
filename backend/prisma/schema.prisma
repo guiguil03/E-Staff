@@ -119,7 +119,8 @@ model EvaluationAttempt {
   candidatId String
   candidat   Candidat @relation(fields: [candidatId], references: [id])
 
-  // "en_cours" | "soumis" | "en_correction" | "corrige" | "resultat_envoye"
+  // "en_cours" | "soumis" | "en_correction" | "corrige"
+  // | "valide_pret_envoi" | "contrat_envoye" | "en_attente_paiement" | "active"
   status String @default("en_cours")
 
   // Réponses brutes (auto-corrigées) — JSON { questionId: réponse }
@@ -144,6 +145,32 @@ model EvaluationAttempt {
   submittedAt       DateTime?
   gradedAt          DateTime?
   resultEmailSentAt DateTime?
+
+  // ---------------------------------------------------------------------
+  // Pipeline post-test — validation RH -> contrat -> paiement -> matricule
+  // ---------------------------------------------------------------------
+
+  // Termes saisis par l'admin RH à la validation (pas de modèle figé, voir
+  // etaff-*-brainstorm : variable selon le candidat/niveau obtenu).
+  contractDuree      String?
+  contractFrais      String?
+  contractConditions String?
+  // Clé S3 du PDF généré à la validation (StorageService), envoyé par le
+  // cron de 20h — généré une seule fois, pas régénéré à chaque tentative
+  // d'envoi.
+  contractPdfKey     String?
+  contractSentAt     DateTime?
+
+  // Référence transmise par le candidat après paiement Mobile Money /
+  // virement (pas de webhook — confirmation manuelle par un admin qui
+  // vérifie sur son compte, voir paymentConfirmedAt).
+  paymentReference   String?
+  paymentConfirmedAt DateTime?
+
+  // Rempli au moment de la confirmation de paiement : génère un vrai
+  // Apprenant (matricule + groupe choisi par l'admin) et le lie ici.
+  apprenantId String?    @unique
+  apprenant   Apprenant? @relation(fields: [apprenantId], references: [id])
 
   createdAt DateTime @default(now())
 
@@ -208,6 +235,10 @@ model Apprenant {
 
   presences Presence[]
   notations Notation[]
+  // Tentative d'évaluation à l'origine de la création de ce compte, quand
+  // applicable (pipeline post-test) — absent pour les apprenants seedés/
+  // créés manuellement.
+  evaluationAttempt EvaluationAttempt?
 }
 
 // Horaire réel d'une des 12 séances d'un groupe. startAt reste nullable :
