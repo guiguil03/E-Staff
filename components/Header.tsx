@@ -1,12 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
+import AuthNavItem from "./AuthNavItem";
 
 const NAV_ITEMS = [
   { label: "Communauté", href: "/communaute" },
   { label: "Forum", href: "/forum" },
   { label: "Se préparer aux examens", href: "/offres/examens" },
   { label: "Proposer un partenariat", href: "/entreprises" },
-  { label: "Se connecter", href: "/connexion" },
 ];
 
 export default function Header() {
@@ -36,6 +36,9 @@ export default function Header() {
                 </Link>
               </li>
             ))}
+            <li>
+              <AuthNavItem />
+            </li>
           </ul>
         </nav>
       </div>
