@@ -22,12 +22,18 @@ function adminHeaders(): HeadersInit {
 
 const emptyForm = { duree: "", frais: "", conditions: "" };
 
+interface ValidationRhPanelProps {
+  /** Prévient le parent qu'un statut a changé, pour rafraîchir la Vue
+   * d'ensemble (autrement en cache jusqu'au prochain rechargement complet). */
+  onChange?: () => void;
+}
+
 // Écran RH — liste des évaluations corrigées en attente de validation
 // (statut "corrige"). Valider saisit les termes du contrat (variables selon
 // le candidat/niveau, pas de modèle figé — voir brainstorm 2026-08-09),
 // génère le PDF côté serveur et passe la tentative en
 // "valide_pret_envoi" : le cron de 20h se charge ensuite de l'envoi groupé.
-export default function ValidationRhPanel() {
+export default function ValidationRhPanel({ onChange }: ValidationRhPanelProps) {
   const [attempts, setAttempts] = useState<PendingAttempt[] | "loading" | "erreur">("loading");
   const [openId, setOpenId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -56,6 +62,7 @@ export default function ValidationRhPanel() {
       setOpenId(null);
       setStatus("idle");
       refresh();
+      onChange?.();
     } catch {
       setStatus("error");
     }
@@ -70,6 +77,7 @@ export default function ValidationRhPanel() {
       setOpenId(null);
       setStatus("idle");
       refresh();
+      onChange?.();
     } catch {
       setStatus("error");
     }

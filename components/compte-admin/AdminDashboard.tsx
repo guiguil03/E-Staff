@@ -45,6 +45,7 @@ export default function AdminDashboard() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
+  const [pipelineRefreshKey, setPipelineRefreshKey] = useState(0);
 
   function refresh() {
     setLives("loading");
@@ -132,13 +133,13 @@ export default function AdminDashboard() {
           </h2>
         </Reveal>
         <div className="mt-4">
-          <ValidationRhPanel />
+          <ValidationRhPanel onChange={() => setPipelineRefreshKey((k) => k + 1)} />
         </div>
         <div className="mt-6">
-          <PaiementsPanel />
+          <PaiementsPanel onChange={() => setPipelineRefreshKey((k) => k + 1)} />
         </div>
         <div className="mt-6">
-          <PipelineOverviewPanel />
+          <PipelineOverviewPanel key={pipelineRefreshKey} />
         </div>
 
         <Reveal delay={40}>

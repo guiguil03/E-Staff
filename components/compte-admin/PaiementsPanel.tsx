@@ -30,7 +30,13 @@ function adminHeaders(): HeadersInit {
 // son compte Mobile Money/bancaire puis clique "Paiement reçu" en
 // choisissant le groupe — ça génère le matricule et crée le vrai Apprenant
 // instantanément (voir brainstorm 2026-08-09).
-export default function PaiementsPanel() {
+interface PaiementsPanelProps {
+  /** Prévient le parent qu'un statut a changé, pour rafraîchir la Vue
+   * d'ensemble (autrement en cache jusqu'au prochain rechargement complet). */
+  onChange?: () => void;
+}
+
+export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
   const [payments, setPayments] = useState<PendingPayment[] | "loading" | "erreur">("loading");
   const [groupes, setGroupes] = useState<GroupeAvecPlaces[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -67,6 +73,7 @@ export default function PaiementsPanel() {
       setOpenId(null);
       setStatus("idle");
       refresh();
+      onChange?.();
     } catch {
       setStatus("error");
     }
