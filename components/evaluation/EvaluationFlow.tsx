@@ -348,8 +348,9 @@ export default function EvaluationFlow() {
           </strong>
         </p>
         <p className="mt-3 font-sans text-sm text-white/70">
-          Le résultat ne vous sera pas communiqué immédiatement — vous serez
-          recontacté(e) par e-mail une fois l&apos;évaluation traitée.
+          Le résultat ne vous sera pas communiqué immédiatement. Si votre dossier est retenu, vous
+          recevrez par e-mail votre résultat ainsi que votre contrat de formation (durée, frais,
+          conditions) et la marche à suivre pour finaliser votre inscription.
         </p>
         <div className="mt-6 text-center">
           <Button variant="dark" onClick={() => setStep("lexique")}>
@@ -487,9 +488,9 @@ export default function EvaluationFlow() {
           Merci, {coordonnees.firstName} !
         </h2>
         <p className="mt-3 font-sans text-sm text-white/70">
-          Votre test a bien été enregistré. Le résultat ne vous sera pas
-          communiqué immédiatement — vous recevrez un e-mail dès que
-          l&apos;évaluation aura été traitée par notre équipe.
+          Votre test a bien été enregistré. Notre équipe l&apos;examine avec attention : si votre
+          dossier est retenu, vous recevrez par e-mail votre résultat ainsi que votre contrat de
+          formation et les prochaines étapes pour finaliser votre inscription.
         </p>
       </div>
     </Reveal>
