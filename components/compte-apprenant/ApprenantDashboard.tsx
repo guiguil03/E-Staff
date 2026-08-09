@@ -8,6 +8,7 @@ import OperationalTracking from "./OperationalTracking";
 import QuickActions from "./QuickActions";
 import MonDossier from "./MonDossier";
 import MesNotationsTable from "./MesNotationsTable";
+import ParametresPanel from "./ParametresPanel";
 import {
   ALERTE_PEDAGOGIQUE,
   ASSIDUITE,
@@ -79,6 +80,8 @@ export default function ApprenantDashboard() {
         </div>
 
         <MesNotationsTable />
+
+        <ParametresPanel />
       </div>
     </div>
   );

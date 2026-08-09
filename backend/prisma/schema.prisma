@@ -230,6 +230,17 @@ model Apprenant {
   nom       String
   email     String
 
+  // Hash bcrypt — jamais le mot de passe en clair. Généré automatiquement à
+  // la confirmation de paiement (voir EvaluationService.confirmPayment) et
+  // envoyé une seule fois, en clair, dans l'e-mail de bienvenue. Nullable
+  // pour ne pas casser les apprenants déjà seedés avant ce champ — un
+  // compte sans mot de passe ne peut simplement pas encore se connecter.
+  password String?
+
+  // Mot de passe oublié : jeton à usage unique, expire 1h après génération.
+  resetToken          String?   @unique
+  resetTokenExpiresAt DateTime?
+
   groupeId String
   groupe   Groupe @relation(fields: [groupeId], references: [id])
 

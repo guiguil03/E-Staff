@@ -4,6 +4,8 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import * as path from "path";
+import * as bcrypt from "bcryptjs";
+import * as crypto from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../common/email.service";
 import { StorageService } from "../common/storage.service";
@@ -34,6 +36,15 @@ const REQUIRED_SITUATION_COUNT = 5;
 // Formateur) — utilisé pour afficher les places restantes à l'admin lors de
 // la confirmation de paiement, pas une contrainte dure en base.
 const MAX_APPRENANTS_PAR_GROUPE = 5;
+
+// Alphabet sans caractères ambigus (pas de 0/O, 1/l/I) — plus facile à
+// retaper depuis un e-mail sur mobile.
+const TEMP_PASSWORD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+
+function generateTemporaryPassword(length = 10): string {
+  const bytes = crypto.randomBytes(length);
+  return Array.from(bytes, (b) => TEMP_PASSWORD_CHARS[b % TEMP_PASSWORD_CHARS.length]).join("");
+}
 
 export const TIER_LABELS: Record<string, string> = {
   refuse: "Non retenu pour le moment",
@@ -531,6 +542,7 @@ export class EvaluationService {
     if (!groupe) throw new NotFoundException("Groupe introuvable.");
 
     const matricule = await this.generateNextMatricule();
+    const temporaryPassword = generateTemporaryPassword();
     const apprenant = await this.prisma.apprenant.create({
       data: {
         matricule,
@@ -538,6 +550,7 @@ export class EvaluationService {
         nom: attempt.candidat.lastName,
         email: attempt.candidat.email,
         groupeId: groupe.id,
+        password: await bcrypt.hash(temporaryPassword, 10),
       },
     });
 
@@ -550,10 +563,13 @@ export class EvaluationService {
       },
     });
 
+    // Seule et unique fois où ce mot de passe existe en clair — jamais
+    // stocké, seulement haché (voir ci-dessus). L'apprenant le change dans
+    // ses Paramètres une fois connecté.
     await this.email.send({
       to: attempt.candidat.email,
-      subject: "Bienvenue chez e-Staf — votre matricule",
-      text: `Bonjour ${attempt.candidat.firstName},\n\nVotre paiement a bien été confirmé et votre place est validée dans le ${groupe.label}.\n\nVotre matricule e-Staf : ${matricule}\n\nUtilisez ce matricule pour vous connecter à votre tableau de bord personnel dès maintenant.\n\nÀ très vite,\nL'équipe e-Staf`,
+      subject: "Bienvenue chez e-Staf — vos identifiants",
+      text: `Bonjour ${attempt.candidat.firstName},\n\nVotre paiement a bien été confirmé et votre place est validée dans le ${groupe.label}.\n\nVos identifiants pour vous connecter à votre tableau de bord personnel :\nMatricule : ${matricule}\nMot de passe temporaire : ${temporaryPassword}\n\nNous vous conseillons de changer ce mot de passe dès votre première connexion (Paramètres > Changer mon mot de passe).\n\nÀ très vite,\nL'équipe e-Staf`,
     });
 
     return updated;

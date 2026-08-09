@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Button from "@/components/ui/Button";
 import { apiPost, ApiError } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY, ACCOUNT_ROLE_KEY, ROLE_ROUTES } from "@/lib/accountSession";
@@ -76,6 +77,12 @@ export default function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
             className={inputClass}
           />
+          <Link
+            href="/mot-de-passe-oublie"
+            className="mt-1.5 inline-block font-mono text-xs text-white/40 hover:text-accent hover:underline"
+          >
+            Mot de passe oublié ?
+          </Link>
         </div>
       </div>
 
