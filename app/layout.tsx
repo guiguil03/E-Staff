@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
-import { fraunces, plexSans, plexMono } from "@/lib/fonts";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
-import "./globals.css";
+import type { Metadata } from 'next'
+import { Analytics } from '@vercel/analytics/next'
+import { fraunces, plexSans, plexMono } from '@/lib/fonts'
+import { Header } from '@/components/Header'
+import { Footer } from '@/components/Footer'
+import './globals.css'
 
 export const metadata: Metadata = {
   title: "e-Staf — Académie de langues & externalisation d'élite, Madagascar",
@@ -23,6 +24,7 @@ export default function RootLayout({
         <Header />
         <main className="flex-1">{children}</main>
         <Footer />
+        <Analytics />
       </body>
     </html>
   );
