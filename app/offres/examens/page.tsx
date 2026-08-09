@@ -1,164 +1,219 @@
-import Link from 'next/link'
-import { Badge } from '@/components/ui/Badge'
-import { Button } from '@/components/ui/Button'
+import type { Metadata } from "next";
+import Reveal from "@/components/Reveal";
+import Hero from "@/components/examens/Hero";
+import DiplomaCard from "@/components/examens/DiplomaCard";
+import DfpOverviewCard from "@/components/examens/DfpOverviewCard";
+import CtaBlock from "@/components/examens/CtaBlock";
 
-/** Mono status badge — typographic stand-in for the client's emoji markers. */
-function StatutBadge({ children }: { children: string }) {
-  return (
-    <span className="inline-block rounded border border-success/40 bg-success/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-success">
-      {children}
-    </span>
-  )
-}
+export const metadata: Metadata = {
+  title: "Se préparer aux examens — e-Staf",
+  description:
+    "Préparations officielles DELF/DALF, TEF Canada/TCF et DFP (Diplômes de Français Professionnel) : décrochez votre certification internationale avec e-Staf.",
+};
 
-/** Mono cohort badge for the DFP sub-programs. */
-function CohorteBadge({ children }: { children: string }) {
-  return (
-    <span className="inline-block rounded border border-primary/20 bg-primary/5 px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-primary/80">
-      {children}
-    </span>
-  )
-}
-
-const DFP = [
+const DFP_PROGRAMS = [
   {
-    name: 'DFP Affaires',
-    cibles: 'Commerciaux, managers, entrepreneurs, cadres.',
+    id: "dfp-affaires",
+    badgeLines: ["DFP"],
+    title: "DFP Affaires",
+    subtitle: "Le Standard des Dirigeants & Commerciaux",
+    cibles: "Commerciaux, managers, entrepreneurs et cadres d'entreprise.",
     mission:
       "Validez la capacité à négocier, rédiger des contrats, animer des réunions, gérer la relation client et piloter la stratégie d'une structure en français.",
-    cohorte: 'Prochaine cohorte : 10 septembre 2026',
+    statusLabel: "PROCHAINE COHORTE FIXÉE AU 10 SEPTEMBRE 2026",
+    statusDetail: "(Inscriptions ouvertes pour bloquer la date)",
+    segment: "dfp-affaires",
+    actions: [
+      {
+        label: "S'inscrire pour le 10 Septembre",
+        ctaLabel: "S'inscrire pour le 10 Septembre",
+      },
+      { label: "Réserver ma Place", ctaLabel: "Réserver ma Place" },
+    ] as [
+      { label: string; ctaLabel: string },
+      { label: string; ctaLabel: string },
+    ],
   },
   {
-    name: 'DFP Relations Internationales',
-    cibles: 'Diplomates, fonctionnaires internationaux, ONG, juristes.',
+    id: "dfp-ri",
+    badgeLines: ["DFP"],
+    title: "DFP Relations Internationales",
+    subtitle: "Diplomatie & Géopolitique",
+    cibles:
+      "Diplomates, fonctionnaires internationaux, ONG, cadres d'organisations internationales et juristes.",
     mission:
-      'Maîtrisez le langage diplomatique, la rédaction de notes de synthèse, les comptes-rendus officiels et la négociation bilatérale ou multilatérale.',
-    cohorte: 'Prochaine cohorte : 1er octobre 2026',
+      "Maîtrisez le langage diplomatique, la rédaction de notes de synthèse, les comptes-rendus officiels et la négociation bilatérale ou multilatérale.",
+    statusLabel: "PROCHAINE COHORTE FIXÉE AU 1ER OCTOBRE 2026",
+    segment: "dfp-ri",
+    actions: [
+      {
+        label: "S'inscrire pour le 1er Octobre",
+        ctaLabel: "S'inscrire pour le 1er Octobre",
+      },
+      { label: "Réserver ma Place", ctaLabel: "Réserver ma Place" },
+    ] as [
+      { label: string; ctaLabel: string },
+      { label: string; ctaLabel: string },
+    ],
   },
   {
-    name: 'DFP Tourisme, Hôtellerie & Restauration',
-    cibles: 'Professionnels du tourisme, managers d’hôtels, restaurateurs.',
+    id: "dfp-tourisme",
+    badgeLines: ["DFP"],
+    title: "DFP Tourisme, Hôtellerie & Restauration",
+    subtitle: "L'Excellence de l'Accueil",
+    cibles:
+      "Professionnels du tourisme, managers d'hôtels, restaurateurs et acteurs de l'industrie hôtelière haut de gamme.",
     mission:
-      'Gérez la clientèle exigeante, résolvez les litiges, commercialisez des prestations touristiques et pilotez l’accueil avec un raffinement irréprochable.',
-    cohorte: 'Prochaine cohorte : 15 septembre 2026',
+      "Gérez la clientèle exigeante, résolvez les litiges, commercialisez des prestations touristiques et pilotez l'accueil avec un raffinement irréprochable.",
+    statusLabel: "PROCHAINE COHORTE FIXÉE AU 15 SEPTEMBRE 2026",
+    segment: "dfp-tourisme",
+    actions: [
+      {
+        label: "S'inscrire pour le 15 Septembre",
+        ctaLabel: "S'inscrire pour le 15 Septembre",
+      },
+      { label: "Réserver ma Place", ctaLabel: "Réserver ma Place" },
+    ] as [
+      { label: string; ctaLabel: string },
+      { label: string; ctaLabel: string },
+    ],
   },
   {
-    name: 'DFP Santé',
-    cibles: 'Médecins, infirmiers, chercheurs, personnel de santé.',
+    id: "dfp-sante",
+    badgeLines: ["DFP"],
+    title: "DFP Santé",
+    subtitle: "Le Professionnalisme Médical",
+    cibles:
+      "Médecins, infirmiers, chercheurs et personnel de santé évoluant dans un environnement francophone.",
     mission:
-      'Maîtrisez le lexique médical, rédigez des dossiers patients, communiquez avec les confrères et interagissez avec rigueur auprès des patients.',
-    cohorte: 'Prochaine cohorte : 1er octobre 2026',
+      "Maîtrisez le lexique médical, rédigez des dossiers patients, communiquez avec les confrères et interagissez avec rigueur auprès des patients.",
+    statusLabel: "PROCHAINE COHORTE FIXÉE AU 1ER OCTOBRE 2026",
+    segment: "dfp-sante",
+    actions: [
+      {
+        label: "S'inscrire pour le 1er Octobre",
+        ctaLabel: "S'inscrire pour le 1er Octobre",
+      },
+      { label: "Réserver ma Place", ctaLabel: "Réserver ma Place" },
+    ] as [
+      { label: string; ctaLabel: string },
+      { label: string; ctaLabel: string },
+    ],
   },
-] as const
+];
 
 export default function ExamensPage() {
   return (
-    <main className="mx-auto max-w-2xl px-4 py-12">
-      <p className="mb-3 font-mono text-xs uppercase tracking-widest text-accent">
-        Catalogue des programmes
-      </p>
-      <h1 className="text-3xl mb-4">Se préparer aux examens officiels</h1>
-      <p className="mb-4">
-        Ces préparations s&apos;adressent à celles et ceux qui poursuivent leurs propres
-        objectifs — immigration, carrière, diplôme. Pas besoin de vouloir devenir agent
-        chez e-Staf pour s&apos;inscrire : la montée en compétences de nos candidats vers
-        la production est un parcours distinct.
-      </p>
-      <p className="mb-10 text-sm text-muted">
-        C&apos;est d&apos;ailleurs sur ces mêmes examens que repose notre exigence : les
-        candidats e-Staf destinés à la production passent réellement les épreuves
-        officielles pour certifier leur niveau C1 — jamais auto-déclaré.
-      </p>
+    <div className="min-h-screen bg-obsidian">
+      <Hero />
 
-      {/* ------------------------------------------------------------ */}
-      <section className="mb-12 border-t border-muted/30 pt-8">
-        <h2 className="text-xl mb-2">DELF / DALF</h2>
-        <div className="mb-3 flex gap-2">
-          <Badge>B1</Badge>
-          <Badge>B2</Badge>
-          <Badge>C1</Badge>
-          <Badge>C2</Badge>
-        </div>
-        <p className="mb-4">
-          Maîtrisez les codes, la structure des épreuves et l&apos;art de rédiger ou de
-          plaider pour décrocher votre diplôme officiel de français.
-        </p>
-        <p className="mb-5">
-          <StatutBadge>
-            Préparations ouvertes — sessions en continu, passage des examens planifié
-          </StatutBadge>
-        </p>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-          <Button href="/contact" variant="accent">
-            S&apos;inscrire à la préparation DELF/DALF
-          </Button>
-          <Button href="/contact" variant="ghost">
-            Réserver mon évaluation initiale
-          </Button>
-        </div>
-      </section>
+      <div className="px-4 py-16 sm:px-6 sm:py-20">
+        <div className="mx-auto max-w-6xl">
+          {/* Section title */}
+          <Reveal delay={80}>
+            <h2 className="text-center font-display text-3xl font-bold text-accent sm:text-4xl">
+              Nos Parcours de Préparation Officiels
+            </h2>
+          </Reveal>
 
-      {/* ------------------------------------------------------------ */}
-      <section className="mb-12 border-t border-muted/30 pt-8">
-        <h2 className="text-xl mb-2">TEF Canada / TCF</h2>
-        <p className="mb-4">
-          Chaque point compte pour votre projet d&apos;immigration ou d&apos;expatriation.
-          Un entraînement chirurgical aux épreuves chronométrées pour maximiser votre
-          score (CLB 7, 8, 9+).
-        </p>
-        <p className="mb-5">
-          <StatutBadge>Préparations ouvertes — boost spécial immigration</StatutBadge>
-        </p>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-          <Button href="/contact" variant="accent">
-            Maximiser mon score TEF/TCF
-          </Button>
-          <Button href="/contact" variant="ghost">
-            Réserver ma session d&apos;entraînement
-          </Button>
-        </div>
-      </section>
+          {/* 3-card row: DELF/DALF, TEF Canada, DFP overview */}
+          <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-3">
+            <Reveal delay={100}>
+              <DiplomaCard
+                badgeLines={["DELF", "DALF"]}
+                title="Le Programme Intensif « DELF / DALF »"
+                subtitle="Le Sceau de l'Excellence"
+                mission="Maîtrisez les codes, la structure des épreuves et l'art de rédiger ou de plaider pour décrocher haut la main votre diplôme officiel de français (niveaux B1, B2, C1, C2)."
+                statusLabel="PRÉPARATIONS OUVERTES"
+                statusDetail="(Sessions en continu / Passage des examens planifié)"
+                statusTone="success"
+                segment="delf-dalf"
+                actions={[
+                  {
+                    label: "S'inscrire à la Préparation DELF/DALF",
+                    ctaLabel: "S'inscrire à la Préparation DELF/DALF",
+                  },
+                  {
+                    label: "Réserver mon Évaluation Initiale",
+                    ctaLabel: "Réserver mon Évaluation Initiale",
+                  },
+                ]}
+                className="h-full"
+              />
+            </Reveal>
 
-      {/* ------------------------------------------------------------ */}
-      <section id="dfp" className="mb-12 border-t border-muted/30 pt-8">
-        <h2 className="text-xl mb-2">DFP — Diplômes de Français Professionnel</h2>
-        <p className="mb-6">
-          Ne dites plus simplement que vous parlez français : prouvez que vous dominez le
-          jargon et les codes de votre secteur au niveau international. Inscriptions
-          ouvertes pour les quatre spécialisations.
-        </p>
-        <div className="flex flex-col divide-y divide-muted/30 border-y border-muted/30">
-          {DFP.map((programme) => (
-            <div key={programme.name} className="py-5">
-              <h3 className="text-lg mb-2">{programme.name}</h3>
-              <p className="mb-1 text-sm text-muted">
-                <span className="font-mono text-xs uppercase tracking-wide">Cibles :</span>{' '}
-                {programme.cibles}
+            <Reveal delay={160}>
+              <DiplomaCard
+                badgeLines={["TEF", "TCF"]}
+                title="Le Programme « TEF Canada / TCF »"
+                subtitle="Le Sésame de l'Immigration & Carrière"
+                mission="Chaque point compte pour votre projet d'immigration ou d'expatriation. Un entraînement chirurgical aux épreuves chronométrées pour maximiser votre score et décrocher les niveaux requis (CLB 7, 8, 9+)."
+                statusLabel="PRÉPARATIONS OUVERTES"
+                statusDetail="(Boost spécial immigration)"
+                statusTone="success"
+                segment="tef-canada"
+                actions={[
+                  {
+                    label: "Maximiser mon Score TEF/TCF",
+                    ctaLabel: "Maximiser mon Score TEF/TCF",
+                  },
+                  {
+                    label: "Réserver ma Session d'Entraînement",
+                    ctaLabel: "Réserver ma Session d'Entraînement",
+                  },
+                ]}
+                className="h-full"
+              />
+            </Reveal>
+
+            <Reveal delay={220}>
+              <DfpOverviewCard targetId="dfp-programmes" className="h-full" />
+            </Reveal>
+          </div>
+
+          {/* DFP subsection — 4 distinct dated cohorts, detailed below the overview card */}
+          <div id="dfp-programmes" className="mt-20 scroll-mt-6">
+            <Reveal>
+              <h2 className="text-center font-display text-2xl font-bold text-accent sm:text-3xl">
+                Préparations aux DFP (Diplômes de Français Professionnel)
+              </h2>
+              <p className="mx-auto mt-4 max-w-3xl text-center font-sans text-sm text-white/70 sm:text-base">
+                Ne dites plus simplement que vous parlez français : prouvez que
+                vous dominez les rouages, le jargon et les codes de votre
+                secteur d&apos;activité au niveau international.
               </p>
-              <p className="mb-3 text-sm text-muted">
-                <span className="font-mono text-xs uppercase tracking-wide">Mission :</span>{' '}
-                {programme.mission}
-              </p>
-              <CohorteBadge>{`${programme.cohorte} — inscriptions ouvertes`}</CohorteBadge>
+            </Reveal>
+
+            <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-2">
+              {DFP_PROGRAMS.map((program, index) => (
+                <Reveal key={program.id} delay={index * 60}>
+                  <DiplomaCard
+                    id={program.id}
+                    badgeLines={program.badgeLines}
+                    title={program.title}
+                    subtitle={program.subtitle}
+                    cibles={program.cibles}
+                    mission={program.mission}
+                    statusLabel={program.statusLabel}
+                    statusDetail={program.statusDetail}
+                    statusTone="accent"
+                    segment={program.segment}
+                    actions={program.actions}
+                    className="h-full"
+                  />
+                </Reveal>
+              ))}
             </div>
-          ))}
-        </div>
-        <div className="mt-6">
-          <Button href="/contact" variant="accent">
-            Rejoindre une cohorte DFP
-          </Button>
-        </div>
-      </section>
+          </div>
 
-      {/* ------------------------------------------------------------ */}
-      <p className="mb-6 text-sm text-muted">
-        Le programme phare FOL — Français Oratoire des Leaders, avec son Cursus
-        d&apos;Élite de 6 mois, a{' '}
-        <Link href="/offres/fol" className="text-primary underline">
-          sa propre page
-        </Link>
-        .
-      </p>
-    </main>
-  )
+          {/* Bottom framed CTA */}
+          <Reveal delay={100}>
+            <div className="mt-20">
+              <CtaBlock />
+            </div>
+          </Reveal>
+        </div>
+      </div>
+    </div>
+  );
 }

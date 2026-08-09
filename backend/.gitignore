@@ -1,0 +1,16 @@
+/node_modules
+/dist
+/coverage
+
+# local env
+.env
+.env*.local
+
+# local dev database
+/prisma/dev.db
+/prisma/dev.db-journal
+
+# uploaded evaluation audio (dev only — Railway volume or object storage in prod)
+/uploads/
+
+npm-debug.log*

@@ -6,19 +6,26 @@ import { Footer } from '@/components/Footer'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'e-Staf — Académie de langues & externalisation d’élite, Madagascar',
-  description: "e-Staf lève deux freins à la fois : la barrière de la langue pour les talents, et les craintes liées à l'externalisation pour les entreprises. Formation d'élite et staffing B2B depuis Madagascar.",
-}
+  title: "e-Staf — Académie de langues & externalisation d'élite, Madagascar",
+  description:
+    "e-Staf accompagne talents et entreprises à Madagascar : préparation aux examens internationaux, programme d'excellence oratoire (FOL), et externalisation d'élite avec des profils formés et managés avec rigueur.",
+};
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <html lang="fr" className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable}`}>
-      <body>
+    <html lang="fr">
+      <body
+        className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable} flex min-h-screen flex-col antialiased`}
+      >
         <Header />
-        {children}
+        <main className="flex-1">{children}</main>
         <Footer />
         <Analytics />
       </body>
     </html>
-  )
+  );
 }

@@ -1,65 +1,56 @@
-'use client'
+"use client";
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
-type From = 'up' | 'left' | 'right'
+interface RevealProps {
+  children: ReactNode;
+  className?: string;
+  /** Delay in ms applied to the transition once the element becomes visible. */
+  delay?: number;
+}
 
-/**
- * Scroll-triggered reveal wrapper. Renders its children in a div that starts
- * hidden (opacity 0, offset by `from` direction — see .reveal* in globals.css)
- * and transitions to its natural position the first time it enters the
- * viewport (IntersectionObserver, once). `delay` (ms) staggers siblings.
- *
- * The hidden state only exists under `prefers-reduced-motion: no-preference`,
- * so reduced-motion users always see fully visible static content.
- */
-export function Reveal({
-  children,
-  from = 'up',
-  delay = 0,
-  className,
-}: {
-  children: ReactNode
-  from?: From
-  delay?: number
-  className?: string
-}) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [revealed, setRevealed] = useState(false)
+// Scroll-triggered fade/slide-in wrapper. Fires once (IntersectionObserver
+// disconnects after the first intersection) and respects
+// prefers-reduced-motion by rendering fully visible with no animation.
+export default function Reveal({ children, className = "", delay = 0 }: RevealProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    if (typeof IntersectionObserver === 'undefined') {
-      setRevealed(true)
-      return
+    const node = ref.current;
+    if (!node) return;
+
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    if (prefersReducedMotion) {
+      setVisible(true);
+      return;
     }
+
     const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setRevealed(true)
-            observer.disconnect()
-          }
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          observer.disconnect();
         }
       },
-      { threshold: 0.2, rootMargin: '0px 0px -5% 0px' }
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
-
-  const classes = ['reveal', `reveal-${from}`]
-  if (revealed) classes.push('is-revealed')
-  if (className) classes.push(className)
+      { threshold: 0.15 }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div
       ref={ref}
-      className={classes.join(' ')}
-      style={{ '--reveal-delay': `${delay}ms` } as CSSProperties}
+      className={`transition-all duration-700 ease-out ${
+        visible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
+      } ${className}`.trim()}
+      style={{ transitionDelay: visible ? `${delay}ms` : "0ms" }}
     >
       {children}
     </div>
-  )
+  );
 }

@@ -1,0 +1,364 @@
+// e-Staf — schéma de données du backend NestJS.
+//
+// Provider PostgreSQL (Railway) — DATABASE_URL fourni par le service
+// Postgres Railway en production, ou par le tunnel/URL publique Railway en
+// dev local. Les statuts restent des String plutôt que des enums Prisma
+// (choix fait à l'époque du SQLite local, qui ne supportait pas les enums) ;
+// peuvent être convertis en vrais enums Prisma dans une migration séparée.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Bouton 1 — "Proposer un projet d'externalisation"
+// ---------------------------------------------------------------------------
+
+model EntrepriseProjet {
+  id String @id @default(cuid())
+
+  // 1. Informations sur l'entreprise
+  companyName String
+  taxId       String // SIRET / NIF / STAT
+  sector      String
+  address     String
+  country     String
+
+  // 2. Contact & décisionnaire
+  contactName String
+  contactRole String
+  email       String
+  phone       String
+
+  // 3. Cahier des charges & attentes
+  serviceType  String // Squad commerciale, Support client, Collecte de dons, Saisie/Back-office, Voix off, Montage, Copywriting
+  teamSize     String
+  startDate    String
+  needsDetails String
+
+  // 4. Consentement RGPD (obligatoire)
+  consentAt DateTime
+
+  // "nouveau" | "contacte" | "qualifie" | "converti"
+  status    String   @default("nouveau")
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Page "Former son équipe" — prise de rendez-vous par secteur
+// ---------------------------------------------------------------------------
+
+model EntrepriseFormation {
+  id String @id @default(cuid())
+
+  companyName String
+  contactName String
+  email       String
+  phone       String
+
+  // "francais-admin-b2b" | "tourisme-hotellerie" | "centres-appels" | "bootcamp" | "vivier" | ""
+  secteur  String
+  effectif String
+  // "rendez-vous" | "audit" | "devis" — quel CTA a déclenché la demande
+  motif    String
+  message  String?
+
+  consentAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Bouton 2 — "Devenir Connecteur e-Staf"
+// ---------------------------------------------------------------------------
+
+model Connecteur {
+  id String @id @default(cuid())
+
+  // Étape 1 — coordonnées
+  firstName String
+  lastName  String
+  email     String
+  phone     String
+
+  // Étape 3 — questionnaire de pré-qualification
+  activityType      String // Cabinet recrutement / Consultant RH-BizDev / Agence / Autre réseau B2B
+  clientCount       String // 1-5 / 5-15 / +15
+  soughtRoles       String // JSON-encoded array of checked roles
+  cvVolume          String // <50 / 50-200 / >200
+  budgetPerAgent    String // <500€ / 500-1000€ / >1000€
+  presentationMode  String // Recommandation directe / RDV à trois / Marque blanche
+  paymentChannel    String // Virement / Mobile Money / Stripe-PayPal-Wise
+  opportunityTiming String // Oui immédiat / Oui 1-3 mois / Non
+
+  // "nouveau" | "contacte" | "actif"
+  status    String   @default("nouveau")
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Module d'évaluation des candidats
+// ---------------------------------------------------------------------------
+
+model Candidat {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String
+  phone     String
+  createdAt DateTime @default(now())
+
+  attempts EvaluationAttempt[]
+}
+
+model EvaluationAttempt {
+  id         String   @id @default(cuid())
+  candidatId String
+  candidat   Candidat @relation(fields: [candidatId], references: [id])
+
+  // "en_cours" | "soumis" | "en_correction" | "corrige" | "rejete"
+  // | "valide_pret_envoi" | "contrat_envoye" | "en_attente_paiement" | "active"
+  status String @default("en_cours")
+
+  // Réponses brutes (auto-corrigées) — JSON { questionId: réponse }
+  lexiqueAnswers String?
+  oralAnswers    String?
+
+  // Scores /20 par épreuve. lexiqueScore et oralScore calculés
+  // automatiquement à la soumission ; situationsScore alimenté par le
+  // formateur au fur et à mesure de la correction des mises en situation.
+  lexiqueScore    Float?
+  oralScore       Float?
+  situationsScore Float?
+
+  // Score global /100 et palier — calculés une fois toutes les épreuves
+  // notées (voir src/evaluation/scoring.ts). Tant que seules 3 des 5
+  // épreuves prévues par le cahier des charges sont implémentées, le calcul
+  // se fait au prorata des épreuves définies (voir README du module).
+  totalScore Float?
+  // "refuse" | "formation_b1" | "niveau_b2" | "niveau_c1" | "placement_direct"
+  tier String?
+
+  submittedAt       DateTime?
+  gradedAt          DateTime?
+  resultEmailSentAt DateTime?
+
+  // ---------------------------------------------------------------------
+  // Pipeline post-test — validation RH -> contrat -> paiement -> matricule
+  // ---------------------------------------------------------------------
+
+  // Termes saisis par l'admin RH à la validation (pas de modèle figé, voir
+  // etaff-*-brainstorm : variable selon le candidat/niveau obtenu).
+  contractDuree      String?
+  contractFrais      String?
+  contractConditions String?
+  // Clé S3 du PDF généré à la validation (StorageService), envoyé par le
+  // cron de 20h — généré une seule fois, pas régénéré à chaque tentative
+  // d'envoi.
+  contractPdfKey     String?
+  contractSentAt     DateTime?
+
+  // Référence transmise par le candidat après paiement Mobile Money /
+  // virement (pas de webhook — confirmation manuelle par un admin qui
+  // vérifie sur son compte, voir paymentConfirmedAt).
+  paymentReference   String?
+  paymentConfirmedAt DateTime?
+
+  // Rempli au moment de la confirmation de paiement : génère un vrai
+  // Apprenant (matricule + groupe choisi par l'admin) et le lie ici.
+  apprenantId String?    @unique
+  apprenant   Apprenant? @relation(fields: [apprenantId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  situationResponses SituationResponse[]
+}
+
+// Une réponse audio à une des 10 situations professionnelles (le candidat
+// en choisit 5). Notée sur 4 points par le formateur via une grille de
+// critères à cocher.
+model SituationResponse {
+  id        String            @id @default(cuid())
+  attemptId String
+  attempt   EvaluationAttempt @relation(fields: [attemptId], references: [id])
+
+  situationIndex Int // 1 à 10, voir src/evaluation/situations.ts
+  audioUrl       String
+
+  score          Float? // 0 à 4
+  gradedCriteria String? // JSON des critères cochés par le formateur
+  gradedAt       DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([attemptId, situationIndex])
+}
+
+// ---------------------------------------------------------------------------
+// Cockpit Formateur / Compte Apprenant — planification & classes virtuelles
+// ---------------------------------------------------------------------------
+// Premières tables réelles pour ce module (le reste du Cockpit Formateur —
+// grilles de notation, radar de compétences — tourne encore sur de la
+// donnée de démo en dur côté front, voir components/compte-formateur/
+// exampleData.ts). Seedées avec les mêmes 6 groupes / 30 apprenants que
+// exampleData.ts (voir prisma/seed.ts) pour que la démo reste cohérente.
+
+model Groupe {
+  id    String @id @default(cuid())
+  cle   String @unique // "A".."F"
+  label String // "Groupe A"
+
+  apprenants Apprenant[]
+  seances    Seance[]
+}
+
+model Formateur {
+  id        String @id @default(cuid())
+  matricule String @unique
+  prenom    String
+  nom       String
+  email     String
+}
+
+model Apprenant {
+  id        String @id @default(cuid())
+  matricule String @unique
+  prenom    String
+  nom       String
+  email     String
+
+  // Hash bcrypt — jamais le mot de passe en clair. Généré automatiquement à
+  // la confirmation de paiement (voir EvaluationService.confirmPayment) et
+  // envoyé une seule fois, en clair, dans l'e-mail de bienvenue. Nullable
+  // pour ne pas casser les apprenants déjà seedés avant ce champ — un
+  // compte sans mot de passe ne peut simplement pas encore se connecter.
+  password String?
+
+  // Mot de passe oublié : jeton à usage unique, expire 1h après génération.
+  resetToken          String?   @unique
+  resetTokenExpiresAt DateTime?
+
+  groupeId String
+  groupe   Groupe @relation(fields: [groupeId], references: [id])
+
+  presences Presence[]
+  notations Notation[]
+  // Tentative d'évaluation à l'origine de la création de ce compte, quand
+  // applicable (pipeline post-test) — absent pour les apprenants seedés/
+  // créés manuellement.
+  evaluationAttempt EvaluationAttempt?
+}
+
+// Horaire réel d'une des 12 séances d'un groupe. startAt reste nullable :
+// une séance existe dans le planning (numéro 1-12) avant même d'être
+// programmée par le formateur.
+model Seance {
+  id       String @id @default(cuid())
+  groupeId String
+  groupe   Groupe @relation(fields: [groupeId], references: [id])
+  numero   Int // 1 à 12
+
+  startAt      DateTime?
+  dureeMinutes Int       @default(90)
+  objectifs    String?
+
+  // Salle Daily.co créée automatiquement dès que startAt est renseigné pour
+  // la première fois (voir ClasseVirtuelleService) — null tant que
+  // DAILY_API_KEY n'est pas configurée ou que startAt n'est pas défini.
+  dailyRoomName String?
+  dailyRoomUrl  String?
+
+  // Anti-doublon pour le cron de rappels (ClasseVirtuelleReminderService).
+  rappelJ1EnvoyeAt    DateTime?
+  rappel15minEnvoyeAt DateTime?
+
+  presences Presence[]
+  notations Notation[]
+
+  @@unique([groupeId, numero])
+}
+
+// Notation d'une compétence pour un apprenant sur une séance — remplace le
+// state frontend local (planningGradesStore) pour que le formateur ET
+// l'apprenant lisent la même donnée depuis leurs comptes respectifs
+// (décision produit 2026-08-07). Sert aussi de file "Évaluer & Corriger" :
+// une ligne avec fileKey renseigné et gradedAt nul est un devoir en attente.
+model Notation {
+  id String @id @default(cuid())
+
+  seanceId String
+  seance   Seance @relation(fields: [seanceId], references: [id])
+
+  apprenantId String
+  apprenant   Apprenant @relation(fields: [apprenantId], references: [id])
+
+  competence String // CompetencyKey (voir gradingGrids.ts côté front)
+
+  // Dépôt de l'apprenant — uniquement pour les compétences à grille
+  // (expression_orale/ecrite, posture_eloquence) ; comprehension_orale/ecrite
+  // n'ont pas de dépôt, juste une note directe du formateur.
+  fileKey  String?
+  fileName String?
+  soumisAt DateTime?
+
+  // Notation du formateur — gridData est le JSON { selections, anomaly?,
+  // adjustments? } tel que produit par DelfGrid/PostureGrid côté front ;
+  // note sert aux compétences upload-only (comprehension_orale/ecrite).
+  gridData     String?
+  note         Float?
+  commentaires String?
+  scoreOn20    Float?
+  gradedAt     DateTime?
+
+  @@unique([seanceId, apprenantId, competence])
+}
+
+// Présence en classe virtuelle — alimentée par les webhooks Daily
+// (participant.joined/participant.left, voir daily-webhook.controller.ts).
+// apprenantId est nullable : un webhook peut arriver pour un participant
+// qu'on n'arrive pas à rattacher (ex. le formateur, ou un identifiant de
+// token corrompu) — on garde quand même la ligne plutôt que de la perdre.
+model Presence {
+  id       String  @id @default(cuid())
+  seanceId String
+  seance   Seance  @relation(fields: [seanceId], references: [id])
+
+  apprenantId String?
+  apprenant   Apprenant? @relation(fields: [apprenantId], references: [id])
+  role        String // "apprenant" | "formateur" | "inconnu"
+
+  dailyParticipantId String  @unique
+  displayName        String?
+
+  joinedAt      DateTime
+  leftAt        DateTime?
+  dureeSecondes Int?
+}
+
+// ---------------------------------------------------------------------------
+// Forum — "Le Live du mois"
+// ---------------------------------------------------------------------------
+// Distinct de Seance : public (pas rattaché à un Groupe/Apprenant), diffusion
+// 1 hôte (l'invité, via le compte Admin) → plusieurs spectateurs, pas un
+// appel multi-parties. Planifié par le rôle Admin (voir AdminGuard),
+// affiché sur la page /forum publique.
+model ForumLive {
+  id String @id @default(cuid())
+
+  titre       String
+  invite      String // nom de l'invité du mois
+  description String?
+
+  startAt      DateTime?
+  dureeMinutes Int       @default(60)
+
+  // Salle Daily.co en mode owner_only_broadcast (voir daily.service.ts) —
+  // seul l'hôte (Admin) a caméra/micro, les spectateurs sont en lecture seule.
+  dailyRoomName String?
+  dailyRoomUrl  String?
+
+  createdAt DateTime @default(now())
+}
