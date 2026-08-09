@@ -28,12 +28,22 @@ export class ContractCronService {
       select: { id: true },
     });
 
+    let sent = 0;
     for (const attempt of attempts) {
-      await this.evaluation.sendContractNow(attempt.id);
+      try {
+        await this.evaluation.sendContractNow(attempt.id);
+        sent++;
+      } catch (err) {
+        // Un échec (ex. fournisseur email en panne) ne doit pas bloquer
+        // l'envoi des autres contrats du lot — la tentative reste
+        // "valide_pret_envoi" et sera retentée au prochain passage (20h le
+        // lendemain, ou "Envoyer maintenant" depuis l'admin entre-temps).
+        this.logger.error(`Échec d'envoi pour la tentative ${attempt.id}`, err as Error);
+      }
     }
 
     if (attempts.length > 0) {
-      this.logger.log(`${attempts.length} contrat(s) envoyé(s) (job 20h).`);
+      this.logger.log(`${sent}/${attempts.length} contrat(s) envoyé(s) (job 20h).`);
     }
   }
 }

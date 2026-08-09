@@ -359,11 +359,22 @@ export class EvaluationService {
     const link = `${process.env.FRONTEND_URL ?? "http://localhost:3000"}/evaluation/contrat/${attempt.id}`;
     const tierLabel = attempt.tier ? TIER_LABELS[attempt.tier] ?? attempt.tier : "";
 
-    await this.email.send({
+    const result = await this.email.send({
       to: attempt.candidat.email,
       subject: "Votre résultat e-Staf et votre contrat de formation",
       text: `Bonjour ${attempt.candidat.firstName},\n\nVotre évaluation a été traitée.\nRésultat : ${tierLabel}.\n\nVotre contrat de formation (durée, frais, conditions) et les prochaines étapes vous attendent ici :\n${link}\n\nÀ bientôt,\nL'équipe e-Staf`,
     });
+
+    // Un échec réel d'envoi (fournisseur configuré mais en erreur) ne doit
+    // pas faire passer en "contrat_envoye" silencieusement — le candidat ne
+    // recevrait jamais son contrat sans que personne ne le sache. Le mode
+    // simulation (pas de clé configurée) reste toléré : c'est le
+    // comportement attendu en dev.
+    if (!result.delivered && result.reason !== "no-provider-configured") {
+      throw new BadRequestException(
+        `Échec de l'envoi de l'e-mail (${result.reason}) — le contrat reste en attente d'envoi.`
+      );
+    }
 
     return this.prisma.evaluationAttempt.update({
       where: { id: attemptId },
