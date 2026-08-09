@@ -20,6 +20,7 @@ const STATUS_LABELS: Record<string, string> = {
   contrat_envoye: "Contrat envoyé — en attente de paiement",
   en_attente_paiement: "Référence reçue — à confirmer",
   active: "Activé",
+  rejete: "Non retenu",
 };
 
 const STATUS_TONE: Record<string, string> = {
@@ -28,6 +29,7 @@ const STATUS_TONE: Record<string, string> = {
   contrat_envoye: "text-accent",
   en_attente_paiement: "text-accent",
   active: "text-success",
+  rejete: "text-white/30",
 };
 
 function adminHeaders(): HeadersInit {

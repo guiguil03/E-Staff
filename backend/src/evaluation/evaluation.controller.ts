@@ -116,6 +116,12 @@ export class EvaluationController {
   }
 
   @UseGuards(AdminGuard)
+  @Post("attempts/:id/reject")
+  rejectCandidate(@Param("id") id: string) {
+    return this.service.rejectCandidate(id);
+  }
+
+  @UseGuards(AdminGuard)
   @Get("pending-payment")
   listPendingPayment() {
     return this.service.listPendingPayment();

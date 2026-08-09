@@ -119,7 +119,7 @@ model EvaluationAttempt {
   candidatId String
   candidat   Candidat @relation(fields: [candidatId], references: [id])
 
-  // "en_cours" | "soumis" | "en_correction" | "corrige"
+  // "en_cours" | "soumis" | "en_correction" | "corrige" | "rejete"
   // | "valide_pret_envoi" | "contrat_envoye" | "en_attente_paiement" | "active"
   status String @default("en_cours")
 

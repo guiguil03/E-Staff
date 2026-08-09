@@ -274,6 +274,29 @@ export class EvaluationService {
     });
   }
 
+  // Candidat non retenu (tier "refuse", ou décision RH même sur un tier
+  // validé) — chemin distinct de la validation de contrat : pas de termes à
+  // saisir, juste une notification polie et une clôture du dossier.
+  async rejectCandidate(attemptId: string) {
+    const attempt = await this.getAttemptOrThrow(attemptId);
+    if (attempt.status !== "corrige") {
+      throw new BadRequestException(
+        "Cette tentative n'est pas en attente de décision RH."
+      );
+    }
+
+    await this.email.send({
+      to: attempt.candidat.email,
+      subject: "Résultat de votre évaluation e-Staf",
+      text: `Bonjour ${attempt.candidat.firstName},\n\nNous vous remercions pour le temps consacré à notre évaluation.\n\nAprès étude de votre dossier, nous ne sommes pas en mesure de vous proposer une place pour le moment. N'hésitez pas à retenter votre chance lors d'une prochaine session.\n\nL'équipe e-Staf`,
+    });
+
+    return this.prisma.evaluationAttempt.update({
+      where: { id: attemptId },
+      data: { status: "rejete", resultEmailSentAt: new Date() },
+    });
+  }
+
   async validateContract(attemptId: string, dto: ValidateContractDto) {
     const attempt = await this.getAttemptOrThrow(attemptId);
     if (attempt.status !== "corrige" || !attempt.tier) {
@@ -373,6 +396,7 @@ export class EvaluationService {
             "contrat_envoye",
             "en_attente_paiement",
             "active",
+            "rejete",
           ],
         },
       },

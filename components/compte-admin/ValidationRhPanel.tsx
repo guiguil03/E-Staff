@@ -61,6 +61,20 @@ export default function ValidationRhPanel() {
     }
   }
 
+  async function reject() {
+    if (!openId) return;
+    if (!window.confirm("Marquer ce candidat comme non retenu ? Un e-mail lui sera envoyé.")) return;
+    setStatus("saving");
+    try {
+      await apiPostAuthed(`/evaluation/attempts/${openId}/reject`, {}, adminHeaders());
+      setOpenId(null);
+      setStatus("idle");
+      refresh();
+    } catch {
+      setStatus("error");
+    }
+  }
+
   return (
     <Reveal>
       <div className="rounded border border-white/10 bg-obsidianCard p-6">
@@ -94,8 +108,13 @@ export default function ValidationRhPanel() {
                     <span className="block font-sans text-sm text-white">
                       {a.candidat.firstName} {a.candidat.lastName}
                     </span>
-                    <span className="block font-mono text-[11px] text-white/40">
-                      {a.tier ?? "—"} · {a.totalScore ?? "—"}/100
+                    <span
+                      className={`block font-mono text-[11px] ${
+                        a.tier === "refuse" ? "text-accent" : "text-white/40"
+                      }`}
+                    >
+                      {a.tier === "refuse" ? "Non retenu (suggéré)" : (a.tier ?? "—")} ·{" "}
+                      {a.totalScore ?? "—"}/100
                     </span>
                   </span>
                   <span className="font-mono text-xs text-accent">
@@ -154,6 +173,13 @@ export default function ValidationRhPanel() {
                       <Button variant="ghostDark" onClick={() => setOpenId(null)}>
                         Annuler
                       </Button>
+                      <button
+                        onClick={reject}
+                        disabled={status === "saving"}
+                        className="ml-auto font-mono text-xs uppercase tracking-widest text-white/40 hover:text-accent disabled:opacity-50"
+                      >
+                        Marquer non retenu
+                      </button>
                     </div>
                     {status === "error" && (
                       <p className="mt-2 font-mono text-xs text-accent">Erreur — réessayer.</p>
