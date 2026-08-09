@@ -10,6 +10,7 @@ import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 import ValidationRhPanel from "./ValidationRhPanel";
 import PaiementsPanel from "./PaiementsPanel";
 import PipelineOverviewPanel from "./PipelineOverviewPanel";
+import GroupesPanel from "./GroupesPanel";
 
 interface ForumLiveApi {
   id: string;
@@ -137,6 +138,9 @@ export default function AdminDashboard() {
         </div>
         <div className="mt-6">
           <PaiementsPanel onChange={() => setPipelineRefreshKey((k) => k + 1)} />
+        </div>
+        <div className="mt-6">
+          <GroupesPanel />
         </div>
         <div className="mt-6">
           <PipelineOverviewPanel key={pipelineRefreshKey} />

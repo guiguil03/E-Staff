@@ -14,6 +14,11 @@ interface PipelineAttempt {
   apprenant: { matricule: string } | null;
 }
 
+interface Stats {
+  candidatsSemaine: number;
+  tauxConversion: number | null;
+}
+
 const STATUS_LABELS: Record<string, string> = {
   corrige: "Corrigé — à valider",
   valide_pret_envoi: "Validé — envoi ce soir (20h)",
@@ -44,22 +49,48 @@ function adminHeaders(): HeadersInit {
 // et les comptes déjà activés avec leur matricule.
 export default function PipelineOverviewPanel() {
   const [attempts, setAttempts] = useState<PipelineAttempt[] | "loading" | "erreur">("loading");
+  const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
     apiGet<PipelineAttempt[]>("/evaluation/pipeline-overview", adminHeaders())
       .then(setAttempts)
       .catch(() => setAttempts("erreur"));
+    apiGet<Stats>("/evaluation/stats", adminHeaders())
+      .then(setStats)
+      .catch(() => setStats(null));
   }, []);
 
   return (
     <Reveal delay={80}>
       <div className="rounded border border-white/10 bg-obsidianCard p-6">
-        <h3 className="font-display text-base font-semibold text-white">
-          Vue d&apos;ensemble — pipeline candidats
-        </h3>
-        <p className="mt-1 font-sans text-xs text-white/50">
-          Tous les candidats corrigés, du plus récent au plus ancien.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h3 className="font-display text-base font-semibold text-white">
+              Vue d&apos;ensemble — pipeline candidats
+            </h3>
+            <p className="mt-1 font-sans text-xs text-white/50">
+              Tous les candidats corrigés, du plus récent au plus ancien.
+            </p>
+          </div>
+          {stats && (
+            <div className="flex gap-4">
+              <div className="text-right">
+                <p className="font-display text-xl font-bold text-white">{stats.candidatsSemaine}</p>
+                <p className="font-mono text-[10px] uppercase tracking-widest text-white/40">
+                  Candidats · 7j
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="font-display text-xl font-bold text-accent">
+                  {stats.tauxConversion !== null ? `${stats.tauxConversion}%` : "—"}
+                </p>
+                <p className="font-mono text-[10px] uppercase tracking-widest text-white/40">
+                  Taux de conversion
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
 
         {attempts === "loading" && (
           <p className="mt-4 font-sans text-sm text-white/50">Chargement...</p>

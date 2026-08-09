@@ -19,6 +19,7 @@ import { GradeSituationDto } from "./dto/grade-situation.dto";
 import { ValidateContractDto } from "./dto/validate-contract.dto";
 import { SubmitPaymentReferenceDto } from "./dto/submit-payment-reference.dto";
 import { ConfirmPaymentDto } from "./dto/confirm-payment.dto";
+import { CreateGroupeDto } from "./dto/create-groupe.dto";
 import { TrainerGuard } from "../common/trainer.guard";
 import { AdminGuard } from "../common/admin.guard";
 
@@ -122,6 +123,12 @@ export class EvaluationController {
   }
 
   @UseGuards(AdminGuard)
+  @Post("attempts/:id/send-now")
+  sendContractNow(@Param("id") id: string) {
+    return this.service.sendContractNow(id);
+  }
+
+  @UseGuards(AdminGuard)
   @Get("pending-payment")
   listPendingPayment() {
     return this.service.listPendingPayment();
@@ -131,6 +138,18 @@ export class EvaluationController {
   @Get("groupes-avec-places")
   listGroupesAvecPlaces() {
     return this.service.listGroupesAvecPlaces();
+  }
+
+  @UseGuards(AdminGuard)
+  @Post("groupes")
+  createGroupe(@Body() dto: CreateGroupeDto) {
+    return this.service.createGroupe(dto);
+  }
+
+  @UseGuards(AdminGuard)
+  @Get("stats")
+  getStats() {
+    return this.service.getStats();
   }
 
   @UseGuards(AdminGuard)

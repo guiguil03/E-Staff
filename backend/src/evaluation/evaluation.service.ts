@@ -12,6 +12,7 @@ import { SubmitAnswersDto } from "./dto/submit-answers.dto";
 import { ValidateContractDto } from "./dto/validate-contract.dto";
 import { SubmitPaymentReferenceDto } from "./dto/submit-payment-reference.dto";
 import { ConfirmPaymentDto } from "./dto/confirm-payment.dto";
+import { CreateGroupeDto } from "./dto/create-groupe.dto";
 import { computeTier, computeTotalScore } from "./scoring";
 import {
   LEXIQUE_QUESTIONS,
@@ -266,9 +267,13 @@ export class EvaluationService {
 
   // ---- Pipeline post-test : validation RH -> contrat -> paiement --------
 
+  // Inclut aussi "valide_pret_envoi"/"contrat_envoye" : un contrat déjà
+  // préparé (ou déjà envoyé) reste modifiable tant que le paiement n'est pas
+  // confirmé (voir validateContract) — la RH doit pouvoir corriger une
+  // erreur de saisie sans attendre.
   async listPendingValidation() {
     return this.prisma.evaluationAttempt.findMany({
-      where: { status: "corrige" },
+      where: { status: { in: ["corrige", "valide_pret_envoi", "contrat_envoye"] } },
       include: { candidat: true },
       orderBy: { gradedAt: "asc" },
     });
@@ -297,11 +302,20 @@ export class EvaluationService {
     });
   }
 
+  // Sert aussi bien la validation initiale que la modification d'un contrat
+  // déjà préparé/envoyé (mais pas encore payé) : dans les deux cas le PDF
+  // est régénéré (même clé S3, écrasée) et le statut repasse à
+  // "valide_pret_envoi" — si le contrat avait déjà été envoyé, la version
+  // corrigée repart au prochain envoi plutôt que de laisser une ancienne
+  // version incorrecte dans la boîte mail du candidat.
   async validateContract(attemptId: string, dto: ValidateContractDto) {
     const attempt = await this.getAttemptOrThrow(attemptId);
-    if (attempt.status !== "corrige" || !attempt.tier) {
+    if (
+      !["corrige", "valide_pret_envoi", "contrat_envoye"].includes(attempt.status) ||
+      !attempt.tier
+    ) {
       throw new BadRequestException(
-        "Cette tentative n'est pas prête pour la validation (correction non terminée)."
+        "Cette tentative n'est pas modifiable (correction non terminée, ou paiement déjà en cours)."
       );
     }
 
@@ -326,7 +340,34 @@ export class EvaluationService {
         contractConditions: dto.conditions,
         contractPdfKey,
         status: "valide_pret_envoi",
+        contractSentAt: null,
       },
+    });
+  }
+
+  // Envoi immédiat (bypass du cron de 20h) — même logique que
+  // ContractCronService.sendDueContracts mais pour une seule tentative,
+  // déclenché manuellement par l'admin (cas urgent).
+  async sendContractNow(attemptId: string) {
+    const attempt = await this.getAttemptOrThrow(attemptId);
+    if (attempt.status !== "valide_pret_envoi") {
+      throw new BadRequestException(
+        "Cette tentative n'est pas en attente d'envoi (contrat non validé, ou déjà envoyé)."
+      );
+    }
+
+    const link = `${process.env.FRONTEND_URL ?? "http://localhost:3000"}/evaluation/contrat/${attempt.id}`;
+    const tierLabel = attempt.tier ? TIER_LABELS[attempt.tier] ?? attempt.tier : "";
+
+    await this.email.send({
+      to: attempt.candidat.email,
+      subject: "Votre résultat e-Staf et votre contrat de formation",
+      text: `Bonjour ${attempt.candidat.firstName},\n\nVotre évaluation a été traitée.\nRésultat : ${tierLabel}.\n\nVotre contrat de formation (durée, frais, conditions) et les prochaines étapes vous attendent ici :\n${link}\n\nÀ bientôt,\nL'équipe e-Staf`,
+    });
+
+    return this.prisma.evaluationAttempt.update({
+      where: { id: attemptId },
+      data: { status: "contrat_envoye", contractSentAt: new Date() },
     });
   }
 
@@ -411,6 +452,36 @@ export class EvaluationService {
       include: { candidat: true },
       orderBy: { paymentConfirmedAt: "asc" },
     });
+  }
+
+  // Compteurs simples pour la vue d'ensemble — candidats arrivés cette
+  // semaine (toutes tentatives confondues) et taux de conversion sur
+  // l'ensemble du pipeline post-correction (active / total post-corrige).
+  async getStats() {
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const [candidatsSemaine, totalPipeline, actifs] = await Promise.all([
+      this.prisma.evaluationAttempt.count({ where: { createdAt: { gte: weekAgo } } }),
+      this.prisma.evaluationAttempt.count({
+        where: {
+          status: {
+            in: ["corrige", "valide_pret_envoi", "contrat_envoye", "en_attente_paiement", "active", "rejete"],
+          },
+        },
+      }),
+      this.prisma.evaluationAttempt.count({ where: { status: "active" } }),
+    ]);
+    return {
+      candidatsSemaine,
+      tauxConversion: totalPipeline > 0 ? Math.round((actifs / totalPipeline) * 100) : null,
+    };
+  }
+
+  async createGroupe(dto: CreateGroupeDto) {
+    const existing = await this.prisma.groupe.findUnique({ where: { cle: dto.cle } });
+    if (existing) {
+      throw new BadRequestException(`Un groupe "${dto.cle}" existe déjà.`);
+    }
+    return this.prisma.groupe.create({ data: { cle: dto.cle, label: dto.label } });
   }
 
   async listGroupesAvecPlaces() {
