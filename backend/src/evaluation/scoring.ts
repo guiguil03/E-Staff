@@ -1,12 +1,12 @@
 // Paliers de notation (cahier des charges, module d'évaluation).
 //
-// Le barème prévu porte sur 5 épreuves /20 chacune (total /100). Seules 3
-// épreuves ont un contenu défini dans le cahier des charges reçu (lexique,
-// compréhension orale, mises en situation) — les 2 restantes ne sont pas
-// spécifiées. Le score total est donc calculé au prorata des épreuves
-// définies (moyenne des scores /20 renseignés, ramenée sur 100), plutôt que
-// d'inventer du contenu pour 2 épreuves fictives. À ajuster dès que la
-// cliente précise les épreuves manquantes.
+// Le barème prévu porte sur 5 épreuves /20 chacune (total /100). 4 épreuves
+// ont un contenu défini (lexique, compréhension orale, mises en situation,
+// production vidéo — cette dernière en placeholder, voir video-tasks.ts) —
+// le Bloc 2 (Commentaire Argumentatif) reste non spécifié. Le score total
+// est donc calculé au prorata des épreuves définies (moyenne des scores /20
+// renseignés, ramenée sur 100), plutôt que d'inventer du contenu pour
+// l'épreuve manquante. À ajuster dès que la cliente précise le Bloc 2.
 export type EvaluationTier =
   | "refuse"
   | "formation_b1"

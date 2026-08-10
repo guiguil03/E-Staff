@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -16,12 +17,19 @@ import { CreateCandidatDto } from "./dto/create-candidat.dto";
 import { SubmitAnswersDto } from "./dto/submit-answers.dto";
 import { UploadSituationDto } from "./dto/upload-situation.dto";
 import { GradeSituationDto } from "./dto/grade-situation.dto";
+import { UploadVideoDto } from "./dto/upload-video.dto";
+import { GradeVideoDto } from "./dto/grade-video.dto";
 import { ValidateContractDto } from "./dto/validate-contract.dto";
 import { SubmitPaymentReferenceDto } from "./dto/submit-payment-reference.dto";
 import { ConfirmPaymentDto } from "./dto/confirm-payment.dto";
 import { CreateGroupeDto } from "./dto/create-groupe.dto";
 import { TrainerGuard } from "../common/trainer.guard";
 import { AdminGuard } from "../common/admin.guard";
+
+// Les vidéos sont bien plus volumineuses que l'audio — Multer bufférise en
+// mémoire (pas de config disque ici, cohérent avec l'upload audio existant),
+// donc une limite explicite est nécessaire pour éviter un upload sans borne.
+const MAX_VIDEO_UPLOAD_BYTES = 300 * 1024 * 1024; // 300 Mo
 
 @Controller("evaluation")
 export class EvaluationController {
@@ -32,6 +40,11 @@ export class EvaluationController {
   @Get("situations")
   getSituations() {
     return this.service.getSituations();
+  }
+
+  @Get("video-tasks")
+  getVideoTasks() {
+    return this.service.getVideoTasks();
   }
 
   @Get("questions")
@@ -59,6 +72,28 @@ export class EvaluationController {
     return this.service.saveSituationAudio(id, dto.situationIndex, file);
   }
 
+  @Post("attempts/:id/videos")
+  @UseInterceptors(
+    FileInterceptor("video", {
+      limits: { fileSize: MAX_VIDEO_UPLOAD_BYTES },
+      fileFilter: (_req, file, cb) => {
+        cb(null, file.mimetype.startsWith("video/"));
+      },
+    })
+  )
+  uploadVideoResponse(
+    @Param("id") id: string,
+    @Body() dto: UploadVideoDto,
+    @UploadedFile() file: Express.Multer.File
+  ) {
+    if (!file) {
+      throw new BadRequestException(
+        "Fichier vidéo manquant, trop volumineux (300 Mo max) ou format non supporté."
+      );
+    }
+    return this.service.saveVideoResponse(id, dto.taskIndex, file);
+  }
+
   // ---- Interface formateur (gardée) --------------------------------------
 
   @UseGuards(TrainerGuard)
@@ -80,6 +115,12 @@ export class EvaluationController {
   }
 
   @UseGuards(TrainerGuard)
+  @Get("video-grading-criteria")
+  getVideoGradingCriteria() {
+    return this.service.getVideoGradingCriteria();
+  }
+
+  @UseGuards(TrainerGuard)
   @Post("situation-responses/:id/grade")
   gradeSituationResponse(
     @Param("id") id: string,
@@ -89,9 +130,23 @@ export class EvaluationController {
   }
 
   @UseGuards(TrainerGuard)
+  @Post("video-responses/:id/grade")
+  gradeVideoResponse(@Param("id") id: string, @Body() dto: GradeVideoDto) {
+    return this.service.gradeVideoResponse(id, dto.criteria);
+  }
+
+  @UseGuards(TrainerGuard)
   @Get("situation-responses/:id/audio")
   async streamAudio(@Param("id") id: string, @Res() res: Response) {
     const { stream, contentType } = await this.service.getSituationAudioStream(id);
+    if (contentType) res.set("Content-Type", contentType);
+    stream.pipe(res);
+  }
+
+  @UseGuards(TrainerGuard)
+  @Get("video-responses/:id/video")
+  async streamVideo(@Param("id") id: string, @Res() res: Response) {
+    const { stream, contentType } = await this.service.getVideoStream(id);
     if (contentType) res.set("Content-Type", contentType);
     stream.pipe(res);
   }

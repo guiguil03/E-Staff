@@ -19,17 +19,27 @@ interface SituationResponse {
   gradedAt: string | null;
 }
 
+interface VideoResponse {
+  id: string;
+  taskIndex: number;
+  videoUrl: string;
+  score: number | null;
+  gradedAt: string | null;
+}
+
 interface Attempt {
   id: string;
   status: string;
   lexiqueScore: number | null;
   oralScore: number | null;
   situationsScore: number | null;
+  videoScore: number | null;
   totalScore: number | null;
   tier: string | null;
   submittedAt: string | null;
   candidat: Candidat;
   situationResponses: SituationResponse[];
+  videoResponses: VideoResponse[];
 }
 
 interface Situation {
@@ -37,6 +47,14 @@ interface Situation {
   domain: string;
   context: string;
   mission: string;
+}
+
+interface VideoTask {
+  index: number;
+  title: string;
+  context: string;
+  mission: string;
+  maxSeconds: number;
 }
 
 interface GradingCriterion {
@@ -55,6 +73,14 @@ const GRADING_LEVELS = [
   { key: "1", value: 1, label: "Excellent" },
 ] as const;
 
+// Échelons du barème Bloc 5 (voir backend/src/evaluation/video-tasks.ts).
+const VIDEO_GRADING_LEVELS = [
+  { key: "0.5", value: 0.5, label: "Insuffisant" },
+  { key: "1", value: 1, label: "Passable" },
+  { key: "1.5", value: 1.5, label: "Bon" },
+  { key: "2", value: 2, label: "Excellent" },
+] as const;
+
 const SESSION_KEY = "estaf-trainer-code";
 
 export default function TrainerDashboard() {
@@ -65,7 +91,9 @@ export default function TrainerDashboard() {
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [situations, setSituations] = useState<Situation[]>([]);
+  const [videoTasks, setVideoTasks] = useState<VideoTask[]>([]);
   const [criteria, setCriteria] = useState<GradingCriterion[]>([]);
+  const [videoCriteria, setVideoCriteria] = useState<GradingCriterion[]>([]);
   const [listError, setListError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -75,6 +103,7 @@ export default function TrainerDashboard() {
       tryAuth(stored);
     }
     apiGet<Situation[]>("/evaluation/situations").then(setSituations).catch(() => {});
+    apiGet<VideoTask[]>("/evaluation/video-tasks").then(setVideoTasks).catch(() => {});
   }, []);
 
   async function tryAuth(candidateCode: string) {
@@ -88,6 +117,11 @@ export default function TrainerDashboard() {
         "x-trainer-code": candidateCode,
       });
       setCriteria(grading);
+      const videoGrading = await apiGet<GradingCriterion[]>(
+        "/evaluation/video-grading-criteria",
+        { "x-trainer-code": candidateCode }
+      );
+      setVideoCriteria(videoGrading);
       setAuthed(true);
       sessionStorage.setItem(SESSION_KEY, candidateCode);
     } catch (err) {
@@ -156,7 +190,10 @@ export default function TrainerDashboard() {
         {listError && <p className="mt-2 text-xs text-accent">{listError}</p>}
         <ul className="mt-3 space-y-2">
           {attempts.map((a) => {
-            const graded = a.situationResponses.filter((r) => r.gradedAt).length;
+            const gradedSituations = a.situationResponses.filter((r) => r.gradedAt).length;
+            const gradedVideos = a.videoResponses.filter((r) => r.gradedAt).length;
+            const graded = gradedSituations + gradedVideos;
+            const total = a.situationResponses.length + a.videoResponses.length;
             return (
               <li key={a.id}>
                 <button
@@ -171,7 +208,7 @@ export default function TrainerDashboard() {
                     {a.candidat.firstName} {a.candidat.lastName}
                   </span>
                   <span className="block text-xs text-white/50">
-                    {a.status} — {graded}/{a.situationResponses.length} notées
+                    {a.status} — {graded}/{total} notées
                   </span>
                 </button>
               </li>
@@ -188,7 +225,9 @@ export default function TrainerDashboard() {
           <AttemptDetail
             attempt={selected}
             situations={situations}
+            videoTasks={videoTasks}
             criteria={criteria}
+            videoCriteria={videoCriteria}
             code={code}
             onGraded={refreshList}
           />
@@ -205,13 +244,17 @@ export default function TrainerDashboard() {
 function AttemptDetail({
   attempt,
   situations,
+  videoTasks,
   criteria,
+  videoCriteria,
   code,
   onGraded,
 }: {
   attempt: Attempt;
   situations: Situation[];
+  videoTasks: VideoTask[];
   criteria: GradingCriterion[];
+  videoCriteria: GradingCriterion[];
   code: string;
   onGraded: () => void;
 }) {
@@ -222,10 +265,11 @@ function AttemptDetail({
           {attempt.candidat.firstName} {attempt.candidat.lastName}
         </p>
         <p className="text-xs text-white/50">{attempt.candidat.email}</p>
-        <div className="mt-3 grid grid-cols-3 gap-3 text-sm text-white/80">
+        <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-white/80 sm:grid-cols-4">
           <p>Lexique : {attempt.lexiqueScore ?? "—"}/20</p>
           <p>Oral : {attempt.oralScore ?? "—"}/20</p>
           <p>Situations : {attempt.situationsScore ?? "—"}/20</p>
+          <p>Vidéo : {attempt.videoScore ?? "—"}/20</p>
         </div>
         {attempt.totalScore !== null && (
           <p className="mt-2 text-sm text-accent">
@@ -243,6 +287,20 @@ function AttemptDetail({
             response={response}
             situation={situations.find((s) => s.index === response.situationIndex)}
             criteria={criteria}
+            code={code}
+            onGraded={onGraded}
+          />
+        ))}
+
+      {attempt.videoResponses
+        .slice()
+        .sort((a, b) => a.taskIndex - b.taskIndex)
+        .map((response) => (
+          <VideoGrader
+            key={response.id}
+            response={response}
+            task={videoTasks.find((t) => t.index === response.taskIndex)}
+            criteria={videoCriteria}
             code={code}
             onGraded={onGraded}
           />
@@ -380,6 +438,146 @@ function SituationGrader({
 
       <p className="mt-4 font-mono text-xs uppercase tracking-widest text-white/50">
         Score prévisionnel : {previewScore.toFixed(2)} / 4.00
+      </p>
+
+      {error && <p className="mt-2 text-xs text-accent">{error}</p>}
+
+      <div className="mt-4">
+        <Button variant="ghostDark" onClick={save} disabled={saving || !allSelected}>
+          {saving ? "Enregistrement..." : "Enregistrer la note"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function VideoGrader({
+  response,
+  task,
+  criteria,
+  code,
+  onGraded,
+}: {
+  response: VideoResponse;
+  task: VideoTask | undefined;
+  criteria: GradingCriterion[];
+  code: string;
+  onGraded: () => void;
+}) {
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [levels, setLevels] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const allSelected = criteria.every((c) => levels[c.key] !== undefined);
+  const previewScore = criteria.reduce((sum, c) => sum + (levels[c.key] ?? 0), 0);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    apiGetBlob(`/evaluation/video-responses/${response.id}/video`, {
+      "x-trainer-code": code,
+    })
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob);
+        setVideoUrl(objectUrl);
+      })
+      .catch(() => setError("Vidéo indisponible."));
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [response.id, code]);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPostAuthed(
+        `/evaluation/video-responses/${response.id}/grade`,
+        { criteria: levels },
+        { "x-trainer-code": code }
+      );
+      onGraded();
+    } catch {
+      setError("Échec de l'enregistrement de la note.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="rounded border border-white/10 bg-obsidianCard p-4">
+      <p className="font-mono text-xs uppercase tracking-widest text-accent">
+        Vidéo {response.taskIndex}
+        {response.gradedAt && ` — notée (${response.score}/10)`}
+      </p>
+      {task && (
+        <>
+          <p className="mt-1 font-sans text-sm font-semibold text-white">{task.title}</p>
+          <p className="mt-2 font-sans text-xs text-white/70">
+            <span className="font-semibold text-white/90">Contexte&nbsp;: </span>
+            {task.context}
+          </p>
+          <p className="mt-1 font-sans text-xs text-white/70">
+            <span className="font-semibold text-white/90">Mission&nbsp;: </span>
+            {task.mission}
+          </p>
+        </>
+      )}
+
+      {videoUrl ? (
+        <video controls src={videoUrl} className="mt-3 w-full rounded" />
+      ) : (
+        <p className="mt-3 text-xs text-white/50">Chargement de la vidéo...</p>
+      )}
+
+      <div className="mt-5 space-y-5">
+        {criteria.map((c) => {
+          const selectedKey =
+            levels[c.key] !== undefined
+              ? VIDEO_GRADING_LEVELS.find((l) => l.value === levels[c.key])?.key
+              : undefined;
+          return (
+            <div key={c.key}>
+              <p className="font-sans text-sm font-semibold text-white">{c.label}</p>
+              <p className="text-xs text-white/50">{c.description}</p>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {VIDEO_GRADING_LEVELS.map((level) => (
+                  <label
+                    key={level.key}
+                    className={`cursor-pointer rounded border px-2 py-1.5 text-center text-xs transition-colors ${
+                      selectedKey === level.key
+                        ? "border-accent bg-accent/10 text-accent"
+                        : "border-white/15 text-white/70 hover:border-white/30"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name={`${response.id}-${c.key}`}
+                      className="sr-only"
+                      checked={selectedKey === level.key}
+                      onChange={() =>
+                        setLevels((prev) => ({ ...prev, [c.key]: level.value }))
+                      }
+                    />
+                    {level.label}
+                    <span className="block font-mono text-[10px] text-white/50">
+                      {level.value.toFixed(2)} pt
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {selectedKey && (
+                <p className="mt-2 font-sans text-xs italic text-white/60">
+                  {c.descriptors[selectedKey]}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-4 font-mono text-xs uppercase tracking-widest text-white/50">
+        Score prévisionnel : {previewScore.toFixed(2)} / 10.00
       </p>
 
       {error && <p className="mt-2 text-xs text-accent">{error}</p>}

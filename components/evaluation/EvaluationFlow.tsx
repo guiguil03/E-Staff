@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import Button from "@/components/ui/Button";
 import Reveal from "@/components/Reveal";
 import AudioRecorder from "./AudioRecorder";
+import VideoRecorder from "./VideoRecorder";
 import { apiGet, apiPost, apiUpload, ApiError } from "@/lib/api";
 
 const REQUIRED_SITUATIONS = 5;
@@ -22,6 +23,14 @@ interface Situation {
   mission: string;
 }
 
+interface VideoTask {
+  index: number;
+  title: string;
+  context: string;
+  mission: string;
+  maxSeconds: number;
+}
+
 type Step =
   | "coordonnees"
   | "intro"
@@ -29,14 +38,14 @@ type Step =
   | "oral"
   | "select-situations"
   | "record-situations"
-  | "submitting"
+  | "record-videos"
   | "confirmation";
 
 const initialCoordonnees = { firstName: "", lastName: "", email: "", phone: "" };
 
-// Architecture officielle du test (100 pts, 5 blocs de 20 pts). Seuls les
-// Blocs 1, 3 et 4 sont construits pour l'instant — les Blocs 2 et 5
-// n'existent pas encore côté produit (voir mémoire de session 2026-08-04).
+// Architecture officielle du test (100 pts, 5 blocs de 20 pts). Blocs 1, 3,
+// 4 et 5 sont construits — le Bloc 2 (Commentaire Argumentatif) n'existe pas
+// encore côté produit (voir mémoire de session 2026-08-04).
 const EVALUATION_BLOCKS = [
   {
     number: 1,
@@ -57,7 +66,7 @@ const EVALUATION_BLOCKS = [
   {
     number: 5,
     title: "Production Vidéo (Débat Plateau Télé & Pitch Synthèse)",
-    available: false,
+    available: true,
   },
 ];
 
@@ -156,10 +165,12 @@ export default function EvaluationFlow() {
     oral: QcmQuestion[];
   } | null>(null);
   const [situations, setSituations] = useState<Situation[]>([]);
+  const [videoTasks, setVideoTasks] = useState<VideoTask[]>([]);
   const [lexiqueAnswers, setLexiqueAnswers] = useState<Record<string, string>>({});
   const [oralAnswers, setOralAnswers] = useState<Record<string, string>>({});
   const [selectedSituations, setSelectedSituations] = useState<number[]>([]);
   const [recordingCursor, setRecordingCursor] = useState(0);
+  const [videoCursor, setVideoCursor] = useState(0);
 
   useEffect(() => {
     apiGet<{ lexique: QcmQuestion[]; oral: QcmQuestion[] }>("/evaluation/questions")
@@ -168,6 +179,9 @@ export default function EvaluationFlow() {
     apiGet<Situation[]>("/evaluation/situations")
       .then(setSituations)
       .catch(() => setError("Impossible de charger les situations."));
+    apiGet<VideoTask[]>("/evaluation/video-tasks")
+      .then(setVideoTasks)
+      .catch(() => setError("Impossible de charger les tâches vidéo."));
   }, []);
 
   async function handleCoordonneesSubmit(e: FormEvent) {
@@ -195,6 +209,27 @@ export default function EvaluationFlow() {
     });
   }
 
+  // Les enregistrements (audio Bloc 3, vidéo Bloc 5) exigent côté back que
+  // la tentative ne soit plus "en_cours" — donc la soumission lexique/oral
+  // doit se faire ici, juste après le Bloc 4, avant de commencer les
+  // enregistrements. Il n'y a pas de second appel /submit à la fin : le
+  // parcours se termine simplement par la confirmation une fois tout envoyé.
+  async function handleOralComplete() {
+    if (!attemptId) return;
+    setError(null);
+    try {
+      await apiPost(`/evaluation/attempts/${attemptId}/submit`, {
+        lexiqueAnswers,
+        oralAnswers,
+      });
+      setStep("select-situations");
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Une erreur est survenue à la soumission."
+      );
+    }
+  }
+
   async function handleRecorded(blob: Blob) {
     if (!attemptId) return;
     const situationIndex = selectedSituations[recordingCursor];
@@ -208,7 +243,8 @@ export default function EvaluationFlow() {
       if (recordingCursor + 1 < selectedSituations.length) {
         setRecordingCursor((c) => c + 1);
       } else {
-        await finalizeSubmission();
+        setVideoCursor(0);
+        setStep("record-videos");
       }
     } catch (err) {
       setError(
@@ -217,20 +253,26 @@ export default function EvaluationFlow() {
     }
   }
 
-  async function finalizeSubmission() {
+  async function handleVideoRecorded(blob: Blob, filename: string) {
     if (!attemptId) return;
-    setStep("submitting");
+    const task = videoTasks[videoCursor];
+    if (!task) return;
+    const formData = new FormData();
+    formData.append("taskIndex", String(task.index));
+    formData.append("video", blob, filename);
+
     try {
-      await apiPost(`/evaluation/attempts/${attemptId}/submit`, {
-        lexiqueAnswers,
-        oralAnswers,
-      });
-      setStep("confirmation");
+      await apiUpload(`/evaluation/attempts/${attemptId}/videos`, formData);
+
+      if (videoCursor + 1 < videoTasks.length) {
+        setVideoCursor((c) => c + 1);
+      } else {
+        setStep("confirmation");
+      }
     } catch (err) {
       setError(
-        err instanceof ApiError ? err.message : "Une erreur est survenue à la soumission."
+        err instanceof ApiError ? err.message : "Échec de l'envoi de la vidéo."
       );
-      setStep("record-situations");
     }
   }
 
@@ -342,7 +384,7 @@ export default function EvaluationFlow() {
         </div>
 
         <p className="mt-6 font-sans text-sm text-white/70">
-          Ce test couvre pour l&apos;instant les Blocs 1, 3 et 4 (60 points).{" "}
+          Ce test couvre pour l&apos;instant les Blocs 1, 3, 4 et 5 (80 points).{" "}
           <strong className="text-white">
             Toutes les épreuves présentées sont obligatoires.
           </strong>
@@ -390,9 +432,10 @@ export default function EvaluationFlow() {
           questions={questions.oral}
           answers={oralAnswers}
           onChange={(id, v) => setOralAnswers((a) => ({ ...a, [id]: v }))}
-          onNext={() => setStep("select-situations")}
+          onNext={handleOralComplete}
           nextLabel="Épreuve suivante"
         />
+        {error && <p className="mt-4 text-sm text-accent">{error}</p>}
       </div>
     );
   }
@@ -470,15 +513,49 @@ export default function EvaluationFlow() {
           Enregistrement de 1 à 2 minutes maximum.
         </p>
         <div className="mt-6">
-          <AudioRecorder onRecorded={handleRecorded} />
+          <AudioRecorder key={situationIndex} onRecorded={handleRecorded} />
         </div>
         {error && <p className="mt-4 text-sm text-accent">{error}</p>}
       </div>
     );
   }
 
-  if (step === "submitting") {
-    return <p className="text-center text-white/60">Envoi de vos réponses...</p>;
+  if (step === "record-videos") {
+    const task = videoTasks[videoCursor];
+    return (
+      <div className="mx-auto max-w-lg rounded border border-white/10 bg-obsidianCard p-6">
+        <p className="font-mono text-xs uppercase tracking-widest text-accent">
+          Bloc 5 — Vidéo {videoCursor + 1} / {videoTasks.length}
+        </p>
+        <p className="mt-2 font-display text-sm font-semibold text-white">
+          {task?.title}
+        </p>
+        <p className="mt-3 font-sans text-sm text-white/80">
+          <span className="font-semibold text-white">Contexte&nbsp;: </span>
+          {task?.context}
+        </p>
+        <p className="mt-3 font-sans text-sm text-white/80">
+          <span className="font-semibold text-white">Votre mission&nbsp;: </span>
+          {task?.mission}
+        </p>
+        {task && (
+          <p className="mt-3 font-sans text-xs text-white/50">
+            Enregistrement de {Math.floor(task.maxSeconds / 60)} minute
+            {task.maxSeconds >= 120 ? "s" : ""} maximum.
+          </p>
+        )}
+        <div className="mt-6">
+          {task && (
+            <VideoRecorder
+              key={task.index}
+              onRecorded={handleVideoRecorded}
+              maxSeconds={task.maxSeconds}
+            />
+          )}
+        </div>
+        {error && <p className="mt-4 text-sm text-accent">{error}</p>}
+      </div>
+    );
   }
 
   return (

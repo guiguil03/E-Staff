@@ -26,11 +26,18 @@ import {
   SITUATION_GRADING_CRITERIA,
   SITUATIONS,
 } from "./situations";
+import {
+  VIDEO_GRADING_CRITERIA,
+  VIDEO_GRADING_LEVELS,
+  VIDEO_TASKS,
+} from "./video-tasks";
 import { generateContractPdf } from "./contract-pdf";
 
 const ALLOWED_LEVEL_VALUES: number[] = GRADING_LEVELS.map((l) => l.value);
+const ALLOWED_VIDEO_LEVEL_VALUES: number[] = VIDEO_GRADING_LEVELS.map((l) => l.value);
 
 const REQUIRED_SITUATION_COUNT = 5;
+const REQUIRED_VIDEO_COUNT = 2;
 
 // Nombre max d'apprenants par groupe (6 groupes A-F × 5 = 30, voir Cockpit
 // Formateur) — utilisé pour afficher les places restantes à l'admin lors de
@@ -70,6 +77,14 @@ export class EvaluationService {
     return SITUATION_GRADING_CRITERIA;
   }
 
+  getVideoTasks() {
+    return VIDEO_TASKS;
+  }
+
+  getVideoGradingCriteria() {
+    return VIDEO_GRADING_CRITERIA;
+  }
+
   getQuestions() {
     // On ne renvoie jamais correctChoice au front.
     const strip = (q: { id: string; prompt: string; choices: string[] }) => ({
@@ -94,7 +109,12 @@ export class EvaluationService {
   private async getAttemptOrThrow(attemptId: string) {
     const attempt = await this.prisma.evaluationAttempt.findUnique({
       where: { id: attemptId },
-      include: { situationResponses: true, candidat: true, apprenant: true },
+      include: {
+        situationResponses: true,
+        videoResponses: true,
+        candidat: true,
+        apprenant: true,
+      },
     });
     if (!attempt) throw new NotFoundException("Tentative introuvable.");
     return attempt;
@@ -182,12 +202,63 @@ export class EvaluationService {
     }
   }
 
+  async saveVideoResponse(
+    attemptId: string,
+    taskIndex: number,
+    file: Express.Multer.File
+  ) {
+    const attempt = await this.getAttemptOrThrow(attemptId);
+    if (attempt.status === "en_cours") {
+      throw new BadRequestException(
+        "Répondez d'abord aux épreuves lexique et compréhension orale."
+      );
+    }
+
+    const extension = path.extname(file.originalname) || ".webm";
+    const key = `evaluations/${attemptId}/video-${taskIndex}${extension}`;
+    await this.storage.uploadBuffer(
+      key,
+      file.buffer,
+      file.mimetype || "video/webm"
+    );
+
+    return this.prisma.videoResponse.upsert({
+      where: {
+        attemptId_taskIndex: { attemptId, taskIndex },
+      },
+      create: {
+        attemptId,
+        taskIndex,
+        videoUrl: key,
+      },
+      update: {
+        videoUrl: key,
+        score: null,
+        gradedCriteria: null,
+        gradedAt: null,
+      },
+    });
+  }
+
+  async getVideoStream(videoResponseId: string) {
+    const response = await this.prisma.videoResponse.findUnique({
+      where: { id: videoResponseId },
+    });
+    if (!response) throw new NotFoundException("Réponse introuvable.");
+
+    try {
+      return await this.storage.getObjectStream(response.videoUrl);
+    } catch {
+      throw new NotFoundException("Fichier vidéo introuvable.");
+    }
+  }
+
   // ---- Formateur --------------------------------------------------------
 
   async listAttemptsForGrading() {
     return this.prisma.evaluationAttempt.findMany({
       where: { status: { in: ["soumis", "en_correction"] } },
-      include: { candidat: true, situationResponses: true },
+      include: { candidat: true, situationResponses: true, videoResponses: true },
       orderBy: { submittedAt: "asc" },
     });
   }
@@ -235,13 +306,58 @@ export class EvaluationService {
     });
   }
 
+  async gradeVideoResponse(
+    videoResponseId: string,
+    criteria: Record<string, number>
+  ) {
+    const response = await this.prisma.videoResponse.findUnique({
+      where: { id: videoResponseId },
+    });
+    if (!response) throw new NotFoundException("Réponse introuvable.");
+
+    for (const c of VIDEO_GRADING_CRITERIA) {
+      const value = criteria[c.key];
+      if (typeof value !== "number" || !ALLOWED_VIDEO_LEVEL_VALUES.includes(value)) {
+        throw new BadRequestException(
+          `Critère "${c.label}" : merci de sélectionner un échelon valide (0.5 / 1 / 1.5 / 2).`
+        );
+      }
+    }
+
+    const score = VIDEO_GRADING_CRITERIA.reduce(
+      (total, c) => total + criteria[c.key],
+      0
+    );
+
+    await this.prisma.videoResponse.update({
+      where: { id: videoResponseId },
+      data: {
+        score,
+        gradedCriteria: JSON.stringify(criteria),
+        gradedAt: new Date(),
+      },
+    });
+
+    await this.recomputeAttemptIfComplete(response.attemptId);
+
+    return this.prisma.videoResponse.findUnique({
+      where: { id: videoResponseId },
+    });
+  }
+
   private async recomputeAttemptIfComplete(attemptId: string) {
     const attempt = await this.getAttemptOrThrow(attemptId);
-    const graded = attempt.situationResponses.filter(
+    const gradedSituations = attempt.situationResponses.filter(
+      (r) => r.gradedAt !== null
+    );
+    const gradedVideos = attempt.videoResponses.filter(
       (r) => r.gradedAt !== null
     );
 
-    if (graded.length < REQUIRED_SITUATION_COUNT) {
+    const situationsComplete = gradedSituations.length >= REQUIRED_SITUATION_COUNT;
+    const videosComplete = gradedVideos.length >= REQUIRED_VIDEO_COUNT;
+
+    if (!situationsComplete || !videosComplete) {
       if (attempt.status === "soumis") {
         await this.prisma.evaluationAttempt.update({
           where: { id: attemptId },
@@ -251,11 +367,13 @@ export class EvaluationService {
       return;
     }
 
-    const situationsScore = graded.reduce((sum, r) => sum + (r.score ?? 0), 0);
+    const situationsScore = gradedSituations.reduce((sum, r) => sum + (r.score ?? 0), 0);
+    const videoScore = gradedVideos.reduce((sum, r) => sum + (r.score ?? 0), 0);
     const totalScore = computeTotalScore([
       attempt.lexiqueScore,
       attempt.oralScore,
       situationsScore,
+      videoScore,
     ]);
     const tier = totalScore === null ? null : computeTier(totalScore);
 
@@ -263,6 +381,7 @@ export class EvaluationService {
       where: { id: attemptId },
       data: {
         situationsScore,
+        videoScore,
         totalScore,
         tier,
         status: "corrige",
