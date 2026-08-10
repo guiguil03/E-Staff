@@ -72,6 +72,49 @@ model EntrepriseFormation {
 }
 
 // ---------------------------------------------------------------------------
+// Formulaires d'inscription (examens DELF/DALF/TEF/DFP, FOL, métiers Studio
+// Métier) — voir components/RegistrationForm.tsx.
+// ---------------------------------------------------------------------------
+
+model Registration {
+  id String @id @default(cuid())
+
+  // "delf-dalf" | "tef-canada" | "dfp" | "fol" | slug d'un métier Studio
+  // Métier — voir components/RegistrationForm.tsx pour les segments réels.
+  segment String
+
+  firstName String
+  email     String
+  phone     String
+
+  // "nouveau" | "contacte" | "converti"
+  status    String   @default("nouveau")
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Demandes de compte (page /creer-un-compte) — voir
+// components/comptes/AccountCreationForm.tsx et roles.ts pour les 8 rôles.
+// Une demande n'active jamais un compte automatiquement : la RH attribue le
+// matricule séparément une fois une des conditions (test, convention,
+// entretien) remplie.
+// ---------------------------------------------------------------------------
+
+model AccountRequest {
+  id String @id @default(cuid())
+
+  role String // un des ids de components/comptes/roles.ts
+
+  firstName String
+  email     String
+  phone     String
+
+  // "nouveau" | "contacte" | "traite"
+  status    String   @default("nouveau")
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
 // Bouton 2 — "Devenir Connecteur e-Staf"
 // ---------------------------------------------------------------------------
 

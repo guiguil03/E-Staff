@@ -2,14 +2,12 @@
 
 import { useState } from "react";
 import Button from "@/components/ui/Button";
+import { apiPost } from "@/lib/api";
 import { ACCOUNT_ROLES } from "./roles";
 
-// No backend/database exists yet. This form follows the same honest pattern
-// as components/RegistrationForm.tsx: local state, a POST to an API route
-// that isn't wired up yet, and a graceful failure message — never a fake
-// success. The "envoi" of this request is a request to be contacted by RH,
-// not the creation of a working account (per the client's own sequence:
-// test / convention / entretien RH → attribution du matricule → accès).
+// The "envoi" of this request is a request to be contacted by RH, not the
+// creation of a working account (per the client's own sequence: test /
+// convention / entretien RH → attribution du matricule → accès).
 
 const inputClass =
   "w-full rounded border border-white/20 bg-obsidian px-4 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none transition-colors focus:border-accent";
@@ -32,12 +30,7 @@ export default function AccountCreationForm() {
     e.preventDefault();
     setStatus("sending");
     try {
-      const res = await fetch("/api/account-requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: roleId, firstName, email, phone }),
-      });
-      if (!res.ok) throw new Error("failed");
+      await apiPost("/account-requests", { role: roleId, firstName, email, phone });
       setStatus("sent");
     } catch {
       setStatus("error");

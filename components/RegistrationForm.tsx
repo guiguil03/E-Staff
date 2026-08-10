@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import Button from "@/components/ui/Button";
+import { apiPost } from "@/lib/api";
 
 interface RegistrationFormProps {
   /** Identifies which funnel submitted this — e.g. "delf-dalf", "tef-canada",
-   * "dfp", "fol", or a métier slug like "teleconseiller". No database exists
-   * yet; this is included in the (currently-failing) POST payload so the
-   * shape is ready for when a backend exists later. */
+   * "dfp", "fol", or a métier slug like "teleconseiller". */
   segment: string;
   ctaLabel?: string;
   /** Pass "dark" to render on an obsidian background (FOL / Studio Métier). */
@@ -34,12 +33,7 @@ export default function RegistrationForm({
     e.preventDefault();
     setStatus("sending");
     try {
-      const res = await fetch("/api/registrations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ segment, firstName, email, phone }),
-      });
-      if (!res.ok) throw new Error("failed");
+      await apiPost("/registrations", { segment, firstName, email, phone });
       setStatus("sent");
     } catch {
       setStatus("error");

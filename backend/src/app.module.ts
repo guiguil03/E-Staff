@@ -12,6 +12,8 @@ import { AuthModule } from "./auth/auth.module";
 import { ClasseVirtuelleModule } from "./classe-virtuelle/classe-virtuelle.module";
 import { ForumModule } from "./forum/forum.module";
 import { NotationModule } from "./notation/notation.module";
+import { RegistrationsModule } from "./registrations/registrations.module";
+import { AccountRequestsModule } from "./account-requests/account-requests.module";
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { NotationModule } from "./notation/notation.module";
     ClasseVirtuelleModule,
     ForumModule,
     NotationModule,
+    RegistrationsModule,
+    AccountRequestsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
