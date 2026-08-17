@@ -5,6 +5,8 @@
 // plausible pour valider le design avec la cliente, à remplacer par de
 // vraies données une fois le module construit.
 
+import type { PalierKey } from "./cecrPaliers";
+
 export interface CompetencyScore {
   key: string;
   label: string;
@@ -42,7 +44,13 @@ export const WEEKLY_AVERAGES = [
   { week: 3, label: "S3", moyenne: 74 },
 ];
 
-export const CECR_GAUGE = { value: 62 }; // % — palier calculé dans CecrGauge.tsx
+// Niveau CECR de départ de l'apprenant (validé lors du test d'évaluation
+// initial, avant même la 1ère séance) + taux d'évolution DANS ce palier ce
+// mois-ci (0-100%, PAS une position absolue — voir cecrPaliers.ts). La
+// position affichée sur la jauge se calcule à partir des deux avec
+// computeJaugePosition, jamais en passant ce taux directement à CecrGauge.
+export const NIVEAU_INITIAL: PalierKey = "c1";
+export const TAUX_EVOLUTION_MENSUEL = 50; // % — cumul du mois
 
 export const ASSIDUITE = [
   { semaine: 1, tauxAbsence: 0, retards: 0, statut: "ok" as const },

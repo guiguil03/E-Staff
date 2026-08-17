@@ -1,22 +1,24 @@
 import Reveal from "@/components/Reveal";
+import { PALIERS } from "./cecrPaliers";
 
 interface CecrGaugeProps {
+  /** Position absolue sur l'échelle 0-100 des paliers CECR (voir cecrPaliers.ts)
+   * — pour une progression individuelle, calculer avec `computeJaugePosition`
+   * plutôt que passer un cumul brut, sous peine de mal placer l'aiguille. */
   value: number; // 0-100
   title?: string;
   subtitle?: string;
+  /** Nombre affiché en gros sous la jauge — par défaut `value`. À utiliser
+   * quand `value` est une position déjà décalée par un niveau initial : afficher
+   * le taux d'évolution brut (ex. "50%") est plus lisible que la position
+   * absolue recalculée (ex. "67.5%"), tout en gardant l'aiguille/le palier
+   * corrects puisqu'ils continuent d'utiliser `value`. */
+  displayValue?: number;
   /** Remplace "Palier atteint : X" par un libellé personnalisé (ex. "% de la cohorte au niveau C1"). */
   valueLabel?: (paliers: string) => string;
   /** Si true, n'affiche que le contenu (pas de carte rounded/border/bg) — pour s'intégrer dans une grille bento qui gère déjà le fond et les séparateurs. */
   bare?: boolean;
 }
-
-// Paliers CECR fournis par la cliente (jauge de cumul du mois).
-const PALIERS = [
-  { key: "b1", label: "B1", from: 30, to: 45, colorClass: "stroke-teal" },
-  { key: "b2", label: "B2", from: 45, to: 60, colorClass: "stroke-success" },
-  { key: "c1", label: "C1", from: 60, to: 75, colorClass: "stroke-accent" },
-  { key: "c2", label: "C2", from: 75, to: 90, colorClass: "stroke-accent/50" },
-] as const;
 
 function palierAtteint(value: number): string {
   const hit = [...PALIERS].reverse().find((p) => value >= p.from);
@@ -42,6 +44,7 @@ export default function CecrGauge({
   value,
   title = "Jauge de cumul du mois",
   subtitle = "Paliers CECR",
+  displayValue,
   valueLabel,
   bare = false,
 }: CecrGaugeProps) {
@@ -50,6 +53,7 @@ export default function CecrGauge({
   const r = 96;
   const strokeWidth = 16;
   const clamped = Math.min(100, Math.max(0, value));
+  const displayed = Math.min(100, Math.max(0, displayValue ?? value));
   const needleAngle = (clamped / 100) * 180 - 90;
   const needleLength = r - 26;
 
@@ -65,7 +69,7 @@ export default function CecrGauge({
         <h3 className="font-display text-lg font-semibold text-white">{title}</h3>
         <p className="mt-1 font-sans text-xs text-white/50">{subtitle}</p>
 
-        <svg viewBox="0 0 240 150" className="mx-auto mt-2 w-full max-w-[280px]" role="img" aria-label={`Progression CECR : ${clamped}%, palier atteint ${palierAtteint(clamped)}`}>
+        <svg viewBox="0 0 240 150" className="mx-auto mt-2 w-full max-w-[280px]" role="img" aria-label={`Progression CECR : ${displayed}%, palier atteint ${palierAtteint(clamped)}`}>
           {segments.map((seg) => (
             <path
               key={`${seg.from}-${seg.to}`}
@@ -107,7 +111,7 @@ export default function CecrGauge({
           })}
         </svg>
 
-        <p className="-mt-2 font-display text-3xl font-bold text-accent">{clamped}%</p>
+        <p className="-mt-2 font-display text-3xl font-bold text-accent">{displayed}%</p>
         <p className="mt-1 font-mono text-xs uppercase tracking-widest text-white/50">
           {valueLabel
             ? valueLabel(palierAtteint(clamped))

@@ -4,6 +4,7 @@ import ProfileHeader from "./ProfileHeader";
 import EvaluationCumulee from "./EvaluationCumulee";
 import ComparativeChart from "./ComparativeChart";
 import CecrGauge from "./CecrGauge";
+import { computeJaugePosition, PALIER_LABELS } from "./cecrPaliers";
 import OperationalTracking from "./OperationalTracking";
 import QuickActions from "./QuickActions";
 import MonDossier from "./MonDossier";
@@ -12,11 +13,12 @@ import ParametresPanel from "./ParametresPanel";
 import {
   ALERTE_PEDAGOGIQUE,
   ASSIDUITE,
-  CECR_GAUGE,
   COMMENTAIRE_FORMATEUR,
   DIAGNOSTIC_INITIAL,
   DOSSIER,
+  NIVEAU_INITIAL,
   PROCHAINE_SEANCE,
+  TAUX_EVOLUTION_MENSUEL,
   TAUX_REUSSITE_GLOBAL,
   WEEKLY_AVERAGES,
 } from "./exampleData";
@@ -63,7 +65,11 @@ export default function ApprenantDashboard() {
           </div>
 
           <div className="space-y-6">
-            <CecrGauge value={CECR_GAUGE.value} />
+            <CecrGauge
+              value={computeJaugePosition(NIVEAU_INITIAL, TAUX_EVOLUTION_MENSUEL)}
+              displayValue={TAUX_EVOLUTION_MENSUEL}
+              subtitle={`Évolution du mois — départ ${PALIER_LABELS[NIVEAU_INITIAL]}`}
+            />
             <QuickActions
               prochaineSeanceTitle={PROCHAINE_SEANCE.title}
               hoursFromNow={PROCHAINE_SEANCE.hoursFromNow}
