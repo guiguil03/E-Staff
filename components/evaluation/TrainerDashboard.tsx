@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Button from "@/components/ui/Button";
-import { apiGet, apiGetBlob, apiPostAuthed, ApiError } from "@/lib/api";
+import { apiGet, apiGetBlob, apiPost } from "@/lib/api";
 
 interface Candidat {
   id: string;
@@ -23,6 +23,7 @@ interface VideoResponse {
   id: string;
   taskIndex: number;
   videoUrl: string;
+  optionKey: string | null;
   score: number | null;
   gradedAt: string | null;
 }
@@ -49,13 +50,33 @@ interface Situation {
   mission: string;
 }
 
+interface VideoTaskOption {
+  key: string;
+  role: string;
+  objectif: string;
+  introduction: string;
+  developpement: string;
+  conclusion: string;
+}
+
+interface LinguisticConstraint {
+  intro: string;
+  termes: string[];
+  minimum: number;
+}
+
 interface VideoTask {
   index: number;
   title: string;
   context: string;
-  mission: string;
+  options?: VideoTaskOption[];
+  mission?: string;
+  linguisticConstraint?: LinguisticConstraint;
+  hasReferenceVideo?: boolean;
   maxSeconds: number;
 }
+
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
 
 interface GradingCriterion {
   key: string;
@@ -81,13 +102,11 @@ const VIDEO_GRADING_LEVELS = [
   { key: "2", value: 2, label: "Excellent" },
 ] as const;
 
-const SESSION_KEY = "estaf-trainer-code";
-
+// Code formateur (x-trainer-code) retiré le 2026-08-25 à la demande du
+// client — trop de friction pour l'usage actuel (voir TrainerGuard côté
+// backend, toujours défini mais plus branché sur ces routes). La page reste
+// hors nav, accessible par URL directe uniquement.
 export default function TrainerDashboard() {
-  const [code, setCode] = useState("");
-  const [authed, setAuthed] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
-
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [situations, setSituations] = useState<Situation[]>([]);
@@ -97,86 +116,24 @@ export default function TrainerDashboard() {
   const [listError, setListError] = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem(SESSION_KEY);
-    if (stored) {
-      setCode(stored);
-      tryAuth(stored);
-    }
+    refreshList();
     apiGet<Situation[]>("/evaluation/situations").then(setSituations).catch(() => {});
     apiGet<VideoTask[]>("/evaluation/video-tasks").then(setVideoTasks).catch(() => {});
+    apiGet<GradingCriterion[]>("/evaluation/grading-criteria").then(setCriteria).catch(() => {});
+    apiGet<GradingCriterion[]>("/evaluation/video-grading-criteria")
+      .then(setVideoCriteria)
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  async function tryAuth(candidateCode: string) {
-    setAuthError(null);
-    try {
-      const list = await apiGet<Attempt[]>("/evaluation/attempts", {
-        "x-trainer-code": candidateCode,
-      });
-      setAttempts(list);
-      const grading = await apiGet<GradingCriterion[]>("/evaluation/grading-criteria", {
-        "x-trainer-code": candidateCode,
-      });
-      setCriteria(grading);
-      const videoGrading = await apiGet<GradingCriterion[]>(
-        "/evaluation/video-grading-criteria",
-        { "x-trainer-code": candidateCode }
-      );
-      setVideoCriteria(videoGrading);
-      setAuthed(true);
-      sessionStorage.setItem(SESSION_KEY, candidateCode);
-    } catch (err) {
-      setAuthError(
-        err instanceof ApiError && err.status === 401
-          ? "Code formateur invalide."
-          : "Impossible de charger les tentatives."
-      );
-      sessionStorage.removeItem(SESSION_KEY);
-    }
-  }
 
   async function refreshList() {
     try {
-      const list = await apiGet<Attempt[]>("/evaluation/attempts", {
-        "x-trainer-code": code,
-      });
+      const list = await apiGet<Attempt[]>("/evaluation/attempts");
       setAttempts(list);
+      setListError(null);
     } catch {
-      setListError("Impossible de rafraîchir la liste.");
+      setListError("Impossible de charger les tentatives.");
     }
-  }
-
-  if (!authed) {
-    return (
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          tryAuth(code);
-        }}
-        className="mx-auto max-w-sm rounded border border-white/10 bg-obsidianCard p-6"
-      >
-        <h2 className="font-display text-lg font-semibold text-white">
-          Accès formateur
-        </h2>
-        <p className="mt-2 font-sans text-xs text-white/50">
-          Accès temporaire par code partagé, en attendant le système de
-          comptes.
-        </p>
-        <input
-          type="password"
-          required
-          placeholder="Code formateur"
-          className="mt-4 w-full rounded border border-white/20 bg-obsidian px-4 py-2 text-sm text-white outline-none focus:border-accent"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-        />
-        {authError && <p className="mt-3 text-sm text-accent">{authError}</p>}
-        <div className="mt-4">
-          <Button type="submit" variant="dark">
-            Entrer
-          </Button>
-        </div>
-      </form>
-    );
   }
 
   const selected = attempts.find((a) => a.id === selectedId) ?? null;
@@ -228,7 +185,6 @@ export default function TrainerDashboard() {
             videoTasks={videoTasks}
             criteria={criteria}
             videoCriteria={videoCriteria}
-            code={code}
             onGraded={refreshList}
           />
         ) : (
@@ -241,13 +197,22 @@ export default function TrainerDashboard() {
   );
 }
 
+type CarouselItem =
+  | { type: "situation"; response: SituationResponse }
+  | { type: "video"; response: VideoResponse };
+
+// Carrousel plutôt qu'un long scroll vertical (7 rendus empilés — 5 mises
+// en situation + 2 vidéos, chacun avec lecteur média + grille de critères —
+// était bien trop long, retour client 2026-08-25). Un rendu affiché à la
+// fois, navigation précédent/suivant + pastilles cliquables (vertes une
+// fois notées) pour sauter directement à un rendu donné. La notation
+// avance automatiquement au rendu suivant après l'enregistrement d'une note.
 function AttemptDetail({
   attempt,
   situations,
   videoTasks,
   criteria,
   videoCriteria,
-  code,
   onGraded,
 }: {
   attempt: Attempt;
@@ -255,9 +220,32 @@ function AttemptDetail({
   videoTasks: VideoTask[];
   criteria: GradingCriterion[];
   videoCriteria: GradingCriterion[];
-  code: string;
   onGraded: () => void;
 }) {
+  const items: CarouselItem[] = [
+    ...attempt.situationResponses
+      .slice()
+      .sort((a, b) => a.situationIndex - b.situationIndex)
+      .map((response) => ({ type: "situation" as const, response })),
+    ...attempt.videoResponses
+      .slice()
+      .sort((a, b) => a.taskIndex - b.taskIndex)
+      .map((response) => ({ type: "video" as const, response })),
+  ];
+
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    setIndex(0);
+  }, [attempt.id]);
+
+  const current = index < items.length ? items[index] : null;
+  const gradedCount = items.filter((i) => i.response.gradedAt).length;
+
+  function handleGraded() {
+    onGraded();
+    setIndex((i) => Math.min(i + 1, items.length - 1));
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded border border-white/10 bg-obsidianCard p-4">
@@ -278,33 +266,79 @@ function AttemptDetail({
         )}
       </div>
 
-      {attempt.situationResponses
-        .slice()
-        .sort((a, b) => a.situationIndex - b.situationIndex)
-        .map((response) => (
-          <SituationGrader
-            key={response.id}
-            response={response}
-            situation={situations.find((s) => s.index === response.situationIndex)}
-            criteria={criteria}
-            code={code}
-            onGraded={onGraded}
-          />
-        ))}
+      {items.length === 0 && (
+        <p className="rounded border border-white/10 bg-obsidianCard p-4 text-sm text-white/50">
+          Aucune mise en situation ni vidéo déposée pour l&apos;instant.
+        </p>
+      )}
 
-      {attempt.videoResponses
-        .slice()
-        .sort((a, b) => a.taskIndex - b.taskIndex)
-        .map((response) => (
-          <VideoGrader
-            key={response.id}
-            response={response}
-            task={videoTasks.find((t) => t.index === response.taskIndex)}
-            criteria={videoCriteria}
-            code={code}
-            onGraded={onGraded}
-          />
-        ))}
+      {current && (
+        <>
+          <div className="flex items-center justify-between gap-3 rounded border border-white/10 bg-obsidianCard px-3 py-2.5">
+            <Button
+              variant="ghostDark"
+              onClick={() => setIndex((i) => Math.max(0, i - 1))}
+              disabled={index === 0}
+            >
+              ← Précédent
+            </Button>
+
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              {items.map((item, i) => {
+                const label =
+                  item.type === "situation"
+                    ? `S${item.response.situationIndex}`
+                    : `V${item.response.taskIndex}`;
+                const graded = Boolean(item.response.gradedAt);
+                return (
+                  <button
+                    key={item.response.id}
+                    onClick={() => setIndex(i)}
+                    className={`rounded-full border px-2 py-0.5 font-mono text-[11px] transition-colors ${
+                      i === index
+                        ? "border-accent bg-accent/10 text-accent"
+                        : graded
+                          ? "border-success/50 text-success"
+                          : "border-white/15 text-white/50 hover:border-white/30"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <Button
+              variant="ghostDark"
+              onClick={() => setIndex((i) => Math.min(items.length - 1, i + 1))}
+              disabled={index === items.length - 1}
+            >
+              Suivant →
+            </Button>
+          </div>
+          <p className="text-center font-mono text-xs text-white/40">
+            {index + 1} / {items.length} — {gradedCount} noté{gradedCount > 1 ? "s" : ""} au total
+          </p>
+
+          {current.type === "situation" ? (
+            <SituationGrader
+              key={current.response.id}
+              response={current.response}
+              situation={situations.find((s) => s.index === current.response.situationIndex)}
+              criteria={criteria}
+              onGraded={handleGraded}
+            />
+          ) : (
+            <VideoGrader
+              key={current.response.id}
+              response={current.response}
+              task={videoTasks.find((t) => t.index === current.response.taskIndex)}
+              criteria={videoCriteria}
+              onGraded={handleGraded}
+            />
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -313,13 +347,11 @@ function SituationGrader({
   response,
   situation,
   criteria,
-  code,
   onGraded,
 }: {
   response: SituationResponse;
   situation: Situation | undefined;
   criteria: GradingCriterion[];
-  code: string;
   onGraded: () => void;
 }) {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -332,9 +364,7 @@ function SituationGrader({
 
   useEffect(() => {
     let objectUrl: string | null = null;
-    apiGetBlob(`/evaluation/situation-responses/${response.id}/audio`, {
-      "x-trainer-code": code,
-    })
+    apiGetBlob(`/evaluation/situation-responses/${response.id}/audio`, {})
       .then((blob) => {
         objectUrl = URL.createObjectURL(blob);
         setAudioUrl(objectUrl);
@@ -343,17 +373,15 @@ function SituationGrader({
     return () => {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [response.id, code]);
+  }, [response.id]);
 
   async function save() {
     setSaving(true);
     setError(null);
     try {
-      await apiPostAuthed(
-        `/evaluation/situation-responses/${response.id}/grade`,
-        { criteria: levels },
-        { "x-trainer-code": code }
-      );
+      await apiPost(`/evaluation/situation-responses/${response.id}/grade`, {
+        criteria: levels,
+      });
       onGraded();
     } catch {
       setError("Échec de l'enregistrement de la note.");
@@ -455,13 +483,11 @@ function VideoGrader({
   response,
   task,
   criteria,
-  code,
   onGraded,
 }: {
   response: VideoResponse;
   task: VideoTask | undefined;
   criteria: GradingCriterion[];
-  code: string;
   onGraded: () => void;
 }) {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -474,9 +500,7 @@ function VideoGrader({
 
   useEffect(() => {
     let objectUrl: string | null = null;
-    apiGetBlob(`/evaluation/video-responses/${response.id}/video`, {
-      "x-trainer-code": code,
-    })
+    apiGetBlob(`/evaluation/video-responses/${response.id}/video`, {})
       .then((blob) => {
         objectUrl = URL.createObjectURL(blob);
         setVideoUrl(objectUrl);
@@ -485,17 +509,15 @@ function VideoGrader({
     return () => {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [response.id, code]);
+  }, [response.id]);
 
   async function save() {
     setSaving(true);
     setError(null);
     try {
-      await apiPostAuthed(
-        `/evaluation/video-responses/${response.id}/grade`,
-        { criteria: levels },
-        { "x-trainer-code": code }
-      );
+      await apiPost(`/evaluation/video-responses/${response.id}/grade`, {
+        criteria: levels,
+      });
       onGraded();
     } catch {
       setError("Échec de l'enregistrement de la note.");
@@ -513,14 +535,71 @@ function VideoGrader({
       {task && (
         <>
           <p className="mt-1 font-sans text-sm font-semibold text-white">{task.title}</p>
-          <p className="mt-2 font-sans text-xs text-white/70">
-            <span className="font-semibold text-white/90">Contexte&nbsp;: </span>
-            {task.context}
-          </p>
-          <p className="mt-1 font-sans text-xs text-white/70">
-            <span className="font-semibold text-white/90">Mission&nbsp;: </span>
-            {task.mission}
-          </p>
+          {task.hasReferenceVideo && (
+            <details className="mt-2">
+              <summary className="cursor-pointer font-mono text-[11px] uppercase tracking-widest text-accent">
+                Revoir le reportage de contexte
+              </summary>
+              <video
+                controls
+                preload="none"
+                src={`${API_URL}/evaluation/video-tasks/${task.index}/reference-video`}
+                className="mt-2 w-full rounded"
+              />
+            </details>
+          )}
+          {(() => {
+            const chosenOption = task.options?.find((o) => o.key === response.optionKey);
+            if (chosenOption) {
+              return (
+                <>
+                  <p className="mt-2 font-sans text-xs font-semibold text-accent">
+                    Option {chosenOption.key} — {chosenOption.role}
+                  </p>
+                  <p className="mt-1 font-sans text-xs italic text-white/60">
+                    {chosenOption.objectif}
+                  </p>
+                  <p className="mt-2 font-sans text-xs text-white/70">
+                    <span className="font-semibold text-white/90">Introduction&nbsp;: </span>
+                    {chosenOption.introduction}
+                  </p>
+                  <p className="mt-1 font-sans text-xs text-white/70">
+                    <span className="font-semibold text-white/90">Développement&nbsp;: </span>
+                    {chosenOption.developpement}
+                  </p>
+                  <p className="mt-1 font-sans text-xs text-white/70">
+                    <span className="font-semibold text-white/90">Conclusion&nbsp;: </span>
+                    {chosenOption.conclusion}
+                  </p>
+                  {task.linguisticConstraint && (
+                    <p className="mt-2 font-sans text-xs text-white/50">
+                      Contrainte : au moins {task.linguisticConstraint.minimum} termes parmi{" "}
+                      {task.linguisticConstraint.termes.join(" · ")}
+                    </p>
+                  )}
+                </>
+              );
+            }
+            if (task.options && !response.optionKey) {
+              return (
+                <p className="mt-2 font-sans text-xs text-accent">
+                  Rôle choisi non enregistré (dépôt antérieur à cette fonctionnalité).
+                </p>
+              );
+            }
+            return (
+              <>
+                <p className="mt-2 font-sans text-xs text-white/70">
+                  <span className="font-semibold text-white/90">Contexte&nbsp;: </span>
+                  {task.context}
+                </p>
+                <p className="mt-1 font-sans text-xs text-white/70">
+                  <span className="font-semibold text-white/90">Mission&nbsp;: </span>
+                  {task.mission}
+                </p>
+              </>
+            );
+          })()}
         </>
       )}
 

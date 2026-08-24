@@ -253,6 +253,14 @@ model VideoResponse {
   taskIndex Int // 1 ou 2, voir src/evaluation/video-tasks.ts
   videoUrl  String
 
+  // Rôle choisi par le candidat quand la tâche propose plusieurs options
+  // (ex. tâche 1 "Débat Plateau Télé" : Option A "Raphaël Molina" / Option B
+  // "Camille Lanci", voir VideoTask.options dans video-tasks.ts) — le
+  // formateur en a besoin pour juger "l'adéquation à la consigne" en
+  // sachant quel guide le candidat suivait. Null pour les tâches sans choix
+  // (ex. "Pitch de Synthèse") ou les réponses déposées avant ce champ.
+  optionKey String?
+
   score          Float? // 0 à 10
   gradedCriteria String? // JSON des critères cochés par le formateur
   gradedAt       DateTime?

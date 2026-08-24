@@ -23,7 +23,6 @@ import { ValidateContractDto } from "./dto/validate-contract.dto";
 import { SubmitPaymentReferenceDto } from "./dto/submit-payment-reference.dto";
 import { ConfirmPaymentDto } from "./dto/confirm-payment.dto";
 import { CreateGroupeDto } from "./dto/create-groupe.dto";
-import { TrainerGuard } from "../common/trainer.guard";
 import { AdminGuard } from "../common/admin.guard";
 import { FormateurGuard } from "../common/formateur.guard";
 
@@ -46,6 +45,16 @@ export class EvaluationController {
   @Get("video-tasks")
   getVideoTasks() {
     return this.service.getVideoTasks();
+  }
+
+  // Vidéo de contexte à visionner avant l'enregistrement (ex. reportage sur
+  // le sujet du débat) — publique comme le reste du parcours candidat, pas
+  // de garde : c'est un contenu diffusé à tous, pas une donnée personnelle.
+  @Get("video-tasks/:index/reference-video")
+  async streamReferenceVideo(@Param("index") index: string, @Res() res: Response) {
+    const { stream, contentType } = await this.service.getReferenceVideoStream(Number(index));
+    if (contentType) res.set("Content-Type", contentType);
+    stream.pipe(res);
   }
 
   @Get("questions")
@@ -92,12 +101,17 @@ export class EvaluationController {
         "Fichier vidéo manquant, trop volumineux (300 Mo max) ou format non supporté."
       );
     }
-    return this.service.saveVideoResponse(id, dto.taskIndex, file);
+    return this.service.saveVideoResponse(id, dto.taskIndex, file, dto.optionKey);
   }
 
-  // ---- Interface formateur (gardée) --------------------------------------
+  // ---- Interface formateur ------------------------------------------------
+  // Code formateur (TrainerGuard) retiré temporairement le 2026-08-25 à la
+  // demande du client — trop de friction pour l'usage actuel (une poignée
+  // de personnes connues). La page reste hors nav, accessible par URL
+  // directe uniquement. À réintroduire une vraie auth avant d'ouvrir l'accès
+  // plus largement (voir TrainerGuard, toujours défini dans common/, pas
+  // supprimé).
 
-  @UseGuards(TrainerGuard)
   @Get("attempts")
   listAttemptsForGrading() {
     return this.service.listAttemptsForGrading();
@@ -113,25 +127,21 @@ export class EvaluationController {
     return this.service.countAttemptsForGrading();
   }
 
-  @UseGuards(TrainerGuard)
   @Get("attempts/:id")
   getAttempt(@Param("id") id: string) {
     return this.service.getAttemptForGrading(id);
   }
 
-  @UseGuards(TrainerGuard)
   @Get("grading-criteria")
   getGradingCriteria() {
     return this.service.getGradingCriteria();
   }
 
-  @UseGuards(TrainerGuard)
   @Get("video-grading-criteria")
   getVideoGradingCriteria() {
     return this.service.getVideoGradingCriteria();
   }
 
-  @UseGuards(TrainerGuard)
   @Post("situation-responses/:id/grade")
   gradeSituationResponse(
     @Param("id") id: string,
@@ -140,13 +150,11 @@ export class EvaluationController {
     return this.service.gradeSituationResponse(id, dto.criteria);
   }
 
-  @UseGuards(TrainerGuard)
   @Post("video-responses/:id/grade")
   gradeVideoResponse(@Param("id") id: string, @Body() dto: GradeVideoDto) {
     return this.service.gradeVideoResponse(id, dto.criteria);
   }
 
-  @UseGuards(TrainerGuard)
   @Get("situation-responses/:id/audio")
   async streamAudio(@Param("id") id: string, @Res() res: Response) {
     const { stream, contentType } = await this.service.getSituationAudioStream(id);
@@ -154,7 +162,6 @@ export class EvaluationController {
     stream.pipe(res);
   }
 
-  @UseGuards(TrainerGuard)
   @Get("video-responses/:id/video")
   async streamVideo(@Param("id") id: string, @Res() res: Response) {
     const { stream, contentType } = await this.service.getVideoStream(id);

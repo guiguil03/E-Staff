@@ -1,13 +1,45 @@
 // Bloc 5 — Production Vidéo (Débat Plateau Télé & Pitch de Synthèse).
-// Contenu des consignes et grille de notation en PLACEHOLDER, en attendant
-// le barème réel de la cliente (même pattern que les banques de questions
-// lexique/oral — voir etaff-project-roadmap "Known gap"). Les 2 tâches sont
-// obligatoires (pas de choix parmi une liste, contrairement au Bloc 3).
+// La tâche 2 (Pitch de Synthèse) reste en PLACEHOLDER, en attendant le
+// barème réel de la cliente (même pattern que les banques de questions
+// lexique/oral — voir etaff-project-roadmap "Known gap"). La tâche 1
+// (Débat Plateau Télé) est le vrai contenu client, fourni le 2026-08-25 :
+// le candidat choisit un rôle (Option A ou B) avant d'enregistrer — voir
+// VideoTaskOption ci-dessous — et doit intégrer au moins 4 des 5 expressions
+// de la contrainte linguistique dans son intervention (auto-déclaratif, pas
+// vérifié automatiquement : le formateur en tient compte dans "Adéquation
+// avec la Consigne" à la correction).
+export interface VideoTaskOption {
+  key: string; // "A" | "B"
+  role: string;
+  objectif: string;
+  introduction: string; // ~30s
+  developpement: string; // ~1min30
+  conclusion: string; // ~1min
+}
+
+export interface LinguisticConstraint {
+  intro: string;
+  termes: string[];
+  minimum: number;
+}
+
 export interface VideoTask {
   index: number;
   title: string;
   context: string;
-  mission: string;
+  /** Présent uniquement pour les tâches où le candidat choisit un rôle avant d'enregistrer. */
+  options?: VideoTaskOption[];
+  /** Consigne à texte unique — utilisée seulement pour les tâches sans `options`. */
+  mission?: string;
+  linguisticConstraint?: LinguisticConstraint;
+  /**
+   * Clé S3 (bucket StorageService, voir common/storage.service.ts) d'une
+   * vidéo de contexte à visionner avant l'enregistrement (ex. reportage sur
+   * le sujet du débat) — jamais exposée telle quelle à l'API publique, voir
+   * EvaluationService.getVideoTasks qui la remplace par un simple booléen
+   * `hasReferenceVideo`. Diffusée via GET /evaluation/video-tasks/:index/reference-video.
+   */
+  referenceVideoKey?: string;
   /** Durée maximale conseillée pour l'enregistrement, en secondes. */
   maxSeconds: number;
 }
@@ -17,9 +49,44 @@ export const VIDEO_TASKS: VideoTask[] = [
     index: 1,
     title: "Débat Plateau Télé",
     context:
-      "Vous participez à un débat télévisé simulé sur l'externalisation des services (outsourcing) vers Madagascar. L'animateur vous interpelle : « Certains critiquent les centres d'appels délocalisés en affirmant qu'ils exploitent une main-d'œuvre bon marché sans réelle valeur ajoutée pour les talents locaux. Que leur répondez-vous ? »",
-    mission:
-      "Filmez votre intervention comme si vous étiez sur un plateau télé : défendez une position argumentée, avec aisance orale et une posture de communicant à l'aise face caméra.",
+      "Vous participez à une émission télévisée sur le marché des influenceurs et son encadrement. Choisissez un rôle et enregistrez une intervention vidéo de 3 minutes maximum.",
+    options: [
+      {
+        key: "A",
+        role: "Raphaël Molina (Avocat spécialisé)",
+        objectif: "Plaider pour une régulation stricte du marché et la protection des mineurs.",
+        introduction:
+          "Présentez le flou juridique qui a longtemps régné autour du statut d'influenceur.",
+        developpement:
+          "Exposez les dérives (publicité clandestine, manque de transparence) et développez la question spécifique du droit du travail et de la protection des « enfants influenceurs ».",
+        conclusion:
+          "Proposez des solutions législatives et concluez sur la responsabilité des plateformes et des parents.",
+      },
+      {
+        key: "B",
+        role: "Camille Lanci (Journaliste à la RTS)",
+        objectif: "Analyser le modèle économique du marketing d'influence et ses dérives.",
+        introduction:
+          "Dégagez l'ampleur du phénomène et la perte de vitesse des médias traditionnels face aux créateurs de contenu.",
+        developpement:
+          "Expliquez la stratégie des marques (recherche d'authenticité, proximité, ciblage) et la dépendance financière des créateurs.",
+        conclusion:
+          "Livrez une analyse critique sur l'avenir de ce marché et la sensibilisation nécessaire du public.",
+      },
+    ],
+    linguisticConstraint: {
+      intro:
+        "Pour valider votre niveau C1, vous devez intégrer au moins 4 expressions ou termes parmi la liste suivante dans votre discours :",
+      termes: [
+        "Manque de transparence / Publicité clandestine",
+        "Cadre législatif / Blâmer la régulation",
+        "Monétisation / Modèle économique",
+        "Droit à l'image / Protection des mineurs",
+        "Capitaliser sur une communauté",
+      ],
+      minimum: 4,
+    },
+    referenceVideoKey: "evaluation-references/debat-plateau-tele.mp4",
     maxSeconds: 180,
   },
   {

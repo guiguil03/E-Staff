@@ -77,8 +77,22 @@ export class EvaluationService {
     return SITUATION_GRADING_CRITERIA;
   }
 
+  // Ne renvoie jamais `referenceVideoKey` tel quel (clé de stockage interne)
+  // — remplacé par un simple booléen, le front construit l'URL de streaming
+  // à partir de l'index de la tâche (GET /video-tasks/:index/reference-video).
   getVideoTasks() {
-    return VIDEO_TASKS;
+    return VIDEO_TASKS.map(({ referenceVideoKey, ...task }) => ({
+      ...task,
+      hasReferenceVideo: Boolean(referenceVideoKey),
+    }));
+  }
+
+  async getReferenceVideoStream(taskIndex: number) {
+    const task = VIDEO_TASKS.find((t) => t.index === taskIndex);
+    if (!task?.referenceVideoKey) {
+      throw new NotFoundException("Aucune vidéo de référence pour cette tâche.");
+    }
+    return this.storage.getObjectStream(task.referenceVideoKey);
   }
 
   getVideoGradingCriteria() {
@@ -205,7 +219,8 @@ export class EvaluationService {
   async saveVideoResponse(
     attemptId: string,
     taskIndex: number,
-    file: Express.Multer.File
+    file: Express.Multer.File,
+    optionKey?: string
   ) {
     const attempt = await this.getAttemptOrThrow(attemptId);
     if (attempt.status === "en_cours") {
@@ -230,9 +245,11 @@ export class EvaluationService {
         attemptId,
         taskIndex,
         videoUrl: key,
+        optionKey,
       },
       update: {
         videoUrl: key,
+        optionKey,
         score: null,
         gradedCriteria: null,
         gradedAt: null,

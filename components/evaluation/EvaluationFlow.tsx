@@ -10,6 +10,11 @@ import { apiGet, apiPost, apiUpload, ApiError } from "@/lib/api";
 
 const REQUIRED_SITUATIONS = 5;
 
+// Vidéo de contexte diffusée en direct (Range requests natives, pas de
+// blob chargé en mémoire) — endpoint public, pas besoin de passer par
+// apiGetBlob comme pour les enregistrements des candidats.
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+
 interface QcmQuestion {
   id: string;
   prompt: string;
@@ -23,11 +28,29 @@ interface Situation {
   mission: string;
 }
 
+interface VideoTaskOption {
+  key: string;
+  role: string;
+  objectif: string;
+  introduction: string;
+  developpement: string;
+  conclusion: string;
+}
+
+interface LinguisticConstraint {
+  intro: string;
+  termes: string[];
+  minimum: number;
+}
+
 interface VideoTask {
   index: number;
   title: string;
   context: string;
-  mission: string;
+  options?: VideoTaskOption[];
+  mission?: string;
+  linguisticConstraint?: LinguisticConstraint;
+  hasReferenceVideo?: boolean;
   maxSeconds: number;
 }
 
@@ -171,6 +194,7 @@ export default function EvaluationFlow() {
   const [selectedSituations, setSelectedSituations] = useState<number[]>([]);
   const [recordingCursor, setRecordingCursor] = useState(0);
   const [videoCursor, setVideoCursor] = useState(0);
+  const [selectedOptionKey, setSelectedOptionKey] = useState<string | null>(null);
 
   useEffect(() => {
     apiGet<{ lexique: QcmQuestion[]; oral: QcmQuestion[] }>("/evaluation/questions")
@@ -259,11 +283,13 @@ export default function EvaluationFlow() {
     if (!task) return;
     const formData = new FormData();
     formData.append("taskIndex", String(task.index));
+    if (selectedOptionKey) formData.append("optionKey", selectedOptionKey);
     formData.append("video", blob, filename);
 
     try {
       await apiUpload(`/evaluation/attempts/${attemptId}/videos`, formData);
 
+      setSelectedOptionKey(null);
       if (videoCursor + 1 < videoTasks.length) {
         setVideoCursor((c) => c + 1);
       } else {
@@ -522,6 +548,51 @@ export default function EvaluationFlow() {
 
   if (step === "record-videos") {
     const task = videoTasks[videoCursor];
+    const chosenOption = task?.options?.find((o) => o.key === selectedOptionKey);
+
+    // Tâche avec choix de rôle (ex. Débat Plateau Télé) : écran de sélection
+    // tant qu'aucun rôle n'est choisi, avant même de montrer l'enregistreur.
+    if (task?.options && !chosenOption) {
+      return (
+        <div className="mx-auto max-w-lg rounded border border-white/10 bg-obsidianCard p-6">
+          <p className="font-mono text-xs uppercase tracking-widest text-accent">
+            Bloc 5 — Vidéo {videoCursor + 1} / {videoTasks.length}
+          </p>
+          <p className="mt-2 font-display text-sm font-semibold text-white">{task.title}</p>
+          <p className="mt-3 font-sans text-sm text-white/80">{task.context}</p>
+
+          {task.hasReferenceVideo && (
+            <div className="mt-4">
+              <p className="font-sans text-xs font-semibold text-white/80">
+                Regardez ce reportage avant de choisir votre rôle :
+              </p>
+              <video
+                controls
+                preload="metadata"
+                src={`${API_URL}/evaluation/video-tasks/${task.index}/reference-video`}
+                className="mt-2 w-full rounded"
+              />
+            </div>
+          )}
+
+          <div className="mt-5 space-y-3">
+            {task.options.map((option) => (
+              <button
+                key={option.key}
+                onClick={() => setSelectedOptionKey(option.key)}
+                className="w-full rounded border border-white/15 bg-obsidian px-4 py-3 text-left transition-colors hover:border-accent/60"
+              >
+                <p className="font-sans text-sm font-semibold text-white">
+                  Option {option.key} — {option.role}
+                </p>
+                <p className="mt-1 font-sans text-xs text-white/60">{option.objectif}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="mx-auto max-w-lg rounded border border-white/10 bg-obsidianCard p-6">
         <p className="font-mono text-xs uppercase tracking-widest text-accent">
@@ -530,14 +601,59 @@ export default function EvaluationFlow() {
         <p className="mt-2 font-display text-sm font-semibold text-white">
           {task?.title}
         </p>
-        <p className="mt-3 font-sans text-sm text-white/80">
-          <span className="font-semibold text-white">Contexte&nbsp;: </span>
-          {task?.context}
-        </p>
-        <p className="mt-3 font-sans text-sm text-white/80">
-          <span className="font-semibold text-white">Votre mission&nbsp;: </span>
-          {task?.mission}
-        </p>
+
+        {chosenOption ? (
+          <>
+            <button
+              onClick={() => setSelectedOptionKey(null)}
+              className="mt-2 font-sans text-xs text-accent hover:underline"
+            >
+              ← Changer de rôle
+            </button>
+            <p className="mt-3 font-sans text-sm font-semibold text-white">
+              Option {chosenOption.key} — {chosenOption.role}
+            </p>
+            <p className="mt-1 font-sans text-xs italic text-white/60">{chosenOption.objectif}</p>
+            <div className="mt-3 space-y-2 font-sans text-sm text-white/80">
+              <p>
+                <span className="font-semibold text-white">Introduction (~30s)&nbsp;: </span>
+                {chosenOption.introduction}
+              </p>
+              <p>
+                <span className="font-semibold text-white">Développement (~1min30)&nbsp;: </span>
+                {chosenOption.developpement}
+              </p>
+              <p>
+                <span className="font-semibold text-white">Conclusion (~1min)&nbsp;: </span>
+                {chosenOption.conclusion}
+              </p>
+            </div>
+            {task?.linguisticConstraint && (
+              <div className="mt-4 rounded border border-accent/30 bg-accent/5 p-3">
+                <p className="font-sans text-xs font-semibold text-white">
+                  {task.linguisticConstraint.intro}
+                </p>
+                <ul className="mt-2 space-y-1 font-sans text-xs text-white/70">
+                  {task.linguisticConstraint.termes.map((terme) => (
+                    <li key={terme}>• {terme}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="mt-3 font-sans text-sm text-white/80">
+              <span className="font-semibold text-white">Contexte&nbsp;: </span>
+              {task?.context}
+            </p>
+            <p className="mt-3 font-sans text-sm text-white/80">
+              <span className="font-semibold text-white">Votre mission&nbsp;: </span>
+              {task?.mission}
+            </p>
+          </>
+        )}
+
         {task && (
           <p className="mt-3 font-sans text-xs text-white/50">
             Enregistrement de {Math.floor(task.maxSeconds / 60)} minute
@@ -547,7 +663,7 @@ export default function EvaluationFlow() {
         <div className="mt-6">
           {task && (
             <VideoRecorder
-              key={task.index}
+              key={`${task.index}-${chosenOption?.key ?? "none"}`}
               onRecorded={handleVideoRecorded}
               maxSeconds={task.maxSeconds}
             />
