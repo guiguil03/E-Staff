@@ -23,6 +23,7 @@ interface VideoResponse {
   id: string;
   taskIndex: number;
   videoUrl: string;
+  subjectKey: string | null;
   optionKey: string | null;
   score: number | null;
   gradedAt: string | null;
@@ -65,14 +66,22 @@ interface LinguisticConstraint {
   minimum: number;
 }
 
+interface VideoTaskSubject {
+  key: string;
+  title: string;
+  context: string;
+  options: VideoTaskOption[];
+  linguisticConstraint?: LinguisticConstraint;
+  hasReferenceVideo?: boolean;
+  referenceVideoEmbedUrl?: string;
+}
+
 interface VideoTask {
   index: number;
   title: string;
   context: string;
-  options?: VideoTaskOption[];
+  subjects?: VideoTaskSubject[];
   mission?: string;
-  linguisticConstraint?: LinguisticConstraint;
-  hasReferenceVideo?: boolean;
   maxSeconds: number;
 }
 
@@ -535,24 +544,38 @@ function VideoGrader({
       {task && (
         <>
           <p className="mt-1 font-sans text-sm font-semibold text-white">{task.title}</p>
-          {task.hasReferenceVideo && (
-            <details className="mt-2">
-              <summary className="cursor-pointer font-mono text-[11px] uppercase tracking-widest text-accent">
-                Revoir le reportage de contexte
-              </summary>
-              <video
-                controls
-                preload="none"
-                src={`${API_URL}/evaluation/video-tasks/${task.index}/reference-video`}
-                className="mt-2 w-full rounded"
-              />
-            </details>
-          )}
           {(() => {
-            const chosenOption = task.options?.find((o) => o.key === response.optionKey);
-            if (chosenOption) {
+            const subject = task.subjects?.find((s) => s.key === response.subjectKey);
+            const chosenOption = subject?.options.find((o) => o.key === response.optionKey);
+
+            if (subject && chosenOption) {
               return (
                 <>
+                  <p className="mt-2 font-sans text-xs font-semibold text-white/90">
+                    Sujet : {subject.title}
+                  </p>
+                  {(subject.hasReferenceVideo || subject.referenceVideoEmbedUrl) && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer font-mono text-[11px] uppercase tracking-widest text-accent">
+                        Revoir le reportage de contexte
+                      </summary>
+                      {subject.referenceVideoEmbedUrl ? (
+                        <iframe
+                          src={subject.referenceVideoEmbedUrl}
+                          className="mt-2 aspect-video w-full rounded"
+                          allow="autoplay; fullscreen"
+                          allowFullScreen
+                        />
+                      ) : (
+                        <video
+                          controls
+                          preload="none"
+                          src={`${API_URL}/evaluation/video-tasks/${task.index}/subjects/${subject.key}/reference-video`}
+                          className="mt-2 w-full rounded"
+                        />
+                      )}
+                    </details>
+                  )}
                   <p className="mt-2 font-sans text-xs font-semibold text-accent">
                     Option {chosenOption.key} — {chosenOption.role}
                   </p>
@@ -571,19 +594,19 @@ function VideoGrader({
                     <span className="font-semibold text-white/90">Conclusion&nbsp;: </span>
                     {chosenOption.conclusion}
                   </p>
-                  {task.linguisticConstraint && (
+                  {subject.linguisticConstraint && (
                     <p className="mt-2 font-sans text-xs text-white/50">
-                      Contrainte : au moins {task.linguisticConstraint.minimum} termes parmi{" "}
-                      {task.linguisticConstraint.termes.join(" · ")}
+                      Contrainte : au moins {subject.linguisticConstraint.minimum} termes parmi{" "}
+                      {subject.linguisticConstraint.termes.join(" · ")}
                     </p>
                   )}
                 </>
               );
             }
-            if (task.options && !response.optionKey) {
+            if (task.subjects && (!response.subjectKey || !response.optionKey)) {
               return (
                 <p className="mt-2 font-sans text-xs text-accent">
-                  Rôle choisi non enregistré (dépôt antérieur à cette fonctionnalité).
+                  Sujet/rôle choisi non enregistré (dépôt antérieur à cette fonctionnalité).
                 </p>
               );
             }

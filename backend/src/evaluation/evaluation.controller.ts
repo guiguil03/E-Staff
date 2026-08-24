@@ -50,9 +50,16 @@ export class EvaluationController {
   // Vidéo de contexte à visionner avant l'enregistrement (ex. reportage sur
   // le sujet du débat) — publique comme le reste du parcours candidat, pas
   // de garde : c'est un contenu diffusé à tous, pas une donnée personnelle.
-  @Get("video-tasks/:index/reference-video")
-  async streamReferenceVideo(@Param("index") index: string, @Res() res: Response) {
-    const { stream, contentType } = await this.service.getReferenceVideoStream(Number(index));
+  @Get("video-tasks/:index/subjects/:subjectKey/reference-video")
+  async streamReferenceVideo(
+    @Param("index") index: string,
+    @Param("subjectKey") subjectKey: string,
+    @Res() res: Response
+  ) {
+    const { stream, contentType } = await this.service.getReferenceVideoStream(
+      Number(index),
+      subjectKey
+    );
     if (contentType) res.set("Content-Type", contentType);
     stream.pipe(res);
   }
@@ -101,7 +108,7 @@ export class EvaluationController {
         "Fichier vidéo manquant, trop volumineux (300 Mo max) ou format non supporté."
       );
     }
-    return this.service.saveVideoResponse(id, dto.taskIndex, file, dto.optionKey);
+    return this.service.saveVideoResponse(id, dto.taskIndex, file, dto.subjectKey, dto.optionKey);
   }
 
   // ---- Interface formateur ------------------------------------------------

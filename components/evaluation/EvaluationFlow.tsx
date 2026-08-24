@@ -43,20 +43,29 @@ interface LinguisticConstraint {
   minimum: number;
 }
 
+interface VideoTaskSubject {
+  key: string;
+  title: string;
+  context: string;
+  options: VideoTaskOption[];
+  linguisticConstraint?: LinguisticConstraint;
+  hasReferenceVideo?: boolean;
+  referenceVideoEmbedUrl?: string;
+}
+
 interface VideoTask {
   index: number;
   title: string;
   context: string;
-  options?: VideoTaskOption[];
+  subjects?: VideoTaskSubject[];
   mission?: string;
-  linguisticConstraint?: LinguisticConstraint;
-  hasReferenceVideo?: boolean;
   maxSeconds: number;
 }
 
 type Step =
   | "coordonnees"
   | "intro"
+  | "menu"
   | "lexique"
   | "oral"
   | "select-situations"
@@ -194,7 +203,17 @@ export default function EvaluationFlow() {
   const [selectedSituations, setSelectedSituations] = useState<number[]>([]);
   const [recordingCursor, setRecordingCursor] = useState(0);
   const [videoCursor, setVideoCursor] = useState(0);
+  const [selectedSubjectKey, setSelectedSubjectKey] = useState<string | null>(null);
   const [selectedOptionKey, setSelectedOptionKey] = useState<string | null>(null);
+
+  // Les 4 blocs construits sont indépendants et se font dans l'ordre choisi
+  // par le candidat depuis le menu (step "menu") — ces flags pilotent
+  // l'affichage "Terminé" de chaque tuile et l'activation du bouton final.
+  const [lexiqueSubmitted, setLexiqueSubmitted] = useState(false);
+  const [oralSubmitted, setOralSubmitted] = useState(false);
+  const [situationsDone, setSituationsDone] = useState(false);
+  const [videosDone, setVideosDone] = useState(false);
+  const allBlocksDone = lexiqueSubmitted && oralSubmitted && situationsDone && videosDone;
 
   useEffect(() => {
     apiGet<{ lexique: QcmQuestion[]; oral: QcmQuestion[] }>("/evaluation/questions")
@@ -233,20 +252,31 @@ export default function EvaluationFlow() {
     });
   }
 
-  // Les enregistrements (audio Bloc 3, vidéo Bloc 5) exigent côté back que
-  // la tentative ne soit plus "en_cours" — donc la soumission lexique/oral
-  // doit se faire ici, juste après le Bloc 4, avant de commencer les
-  // enregistrements. Il n'y a pas de second appel /submit à la fin : le
-  // parcours se termine simplement par la confirmation une fois tout envoyé.
-  async function handleOralComplete() {
+  // Bloc 1 et Bloc 4 se soumettent chacun indépendamment (voir
+  // SubmitAnswersDto côté back, qui accepte l'un ou l'autre séparément) —
+  // le candidat peut faire les 4 blocs construits dans l'ordre de son
+  // choix depuis le menu, pas de second appel groupé à la fin.
+  async function handleLexiqueSubmit() {
     if (!attemptId) return;
     setError(null);
     try {
-      await apiPost(`/evaluation/attempts/${attemptId}/submit`, {
-        lexiqueAnswers,
-        oralAnswers,
-      });
-      setStep("select-situations");
+      await apiPost(`/evaluation/attempts/${attemptId}/submit`, { lexiqueAnswers });
+      setLexiqueSubmitted(true);
+      setStep("menu");
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Une erreur est survenue à la soumission."
+      );
+    }
+  }
+
+  async function handleOralSubmit() {
+    if (!attemptId) return;
+    setError(null);
+    try {
+      await apiPost(`/evaluation/attempts/${attemptId}/submit`, { oralAnswers });
+      setOralSubmitted(true);
+      setStep("menu");
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Une erreur est survenue à la soumission."
@@ -267,8 +297,8 @@ export default function EvaluationFlow() {
       if (recordingCursor + 1 < selectedSituations.length) {
         setRecordingCursor((c) => c + 1);
       } else {
-        setVideoCursor(0);
-        setStep("record-videos");
+        setSituationsDone(true);
+        setStep("menu");
       }
     } catch (err) {
       setError(
@@ -283,17 +313,20 @@ export default function EvaluationFlow() {
     if (!task) return;
     const formData = new FormData();
     formData.append("taskIndex", String(task.index));
+    if (selectedSubjectKey) formData.append("subjectKey", selectedSubjectKey);
     if (selectedOptionKey) formData.append("optionKey", selectedOptionKey);
     formData.append("video", blob, filename);
 
     try {
       await apiUpload(`/evaluation/attempts/${attemptId}/videos`, formData);
 
+      setSelectedSubjectKey(null);
       setSelectedOptionKey(null);
       if (videoCursor + 1 < videoTasks.length) {
         setVideoCursor((c) => c + 1);
       } else {
-        setStep("confirmation");
+        setVideosDone(true);
+        setStep("menu");
       }
     } catch (err) {
       setError(
@@ -412,8 +445,9 @@ export default function EvaluationFlow() {
         <p className="mt-6 font-sans text-sm text-white/70">
           Ce test couvre pour l&apos;instant les Blocs 1, 3, 4 et 5 (80 points).{" "}
           <strong className="text-white">
-            Toutes les épreuves présentées sont obligatoires.
+            Toutes les épreuves présentées sont obligatoires
           </strong>
+          , mais vous pouvez les faire dans l&apos;ordre de votre choix.
         </p>
         <p className="mt-3 font-sans text-sm text-white/70">
           Le résultat ne vous sera pas communiqué immédiatement. Si votre dossier est retenu, vous
@@ -421,7 +455,7 @@ export default function EvaluationFlow() {
           conditions) et la marche à suivre pour finaliser votre inscription.
         </p>
         <div className="mt-6 text-center">
-          <Button variant="dark" onClick={() => setStep("lexique")}>
+          <Button variant="dark" onClick={() => setStep("menu")}>
             Commencer le test
           </Button>
         </div>
@@ -433,18 +467,120 @@ export default function EvaluationFlow() {
     return <p className="text-center text-white/60">Chargement des épreuves...</p>;
   }
 
+  if (step === "menu") {
+    const tiles: {
+      number: number;
+      title: string;
+      done: boolean;
+      onClick?: () => void;
+    }[] = [
+      {
+        number: 1,
+        title: "Lexique, Grammaire & Compréhension Écrite",
+        done: lexiqueSubmitted,
+        onClick: () => setStep("lexique"),
+      },
+      {
+        number: 3,
+        title: "Mises en situation professionnelles",
+        done: situationsDone,
+        onClick: () => setStep("select-situations"),
+      },
+      {
+        number: 4,
+        title: "Compréhension Orale (Podcasts B2 & C1)",
+        done: oralSubmitted,
+        onClick: () => setStep("oral"),
+      },
+      {
+        number: 5,
+        title: "Production Vidéo (Débat Plateau Télé & Pitch Synthèse)",
+        done: videosDone,
+        onClick: () => {
+          setVideoCursor(0);
+          setSelectedSubjectKey(null);
+          setSelectedOptionKey(null);
+          setStep("record-videos");
+        },
+      },
+    ];
+
+    return (
+      <div className="mx-auto max-w-2xl rounded border border-white/10 bg-obsidianCard p-6 sm:p-8">
+        <p className="font-mono text-xs uppercase tracking-widest text-accent">
+          Menu du test
+        </p>
+        <h2 className="mt-2 font-display text-xl font-semibold text-white">
+          Choisissez un bloc à faire
+        </h2>
+        <p className="mt-2 font-sans text-sm text-white/70">
+          Les 4 blocs sont indépendants — faites-les dans l&apos;ordre que vous
+          voulez. Vous pouvez revenir ici entre chaque bloc.
+        </p>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          {tiles.map((tile) => (
+            <button
+              key={tile.number}
+              onClick={tile.onClick}
+              className={`flex items-start gap-3 rounded border p-3 text-left transition-colors ${
+                tile.done
+                  ? "border-success/40 bg-success/5 hover:border-success/60"
+                  : "border-white/10 bg-obsidian hover:border-accent/50"
+              }`}
+            >
+              <span
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border font-mono text-xs font-bold ${
+                  tile.done ? "border-success/60 text-success" : "border-accent/40 text-accent"
+                }`}
+              >
+                {tile.done ? "✓" : tile.number}
+              </span>
+              <div>
+                <p className="font-sans text-sm font-semibold text-white">
+                  Bloc {tile.number} (20 pts)
+                </p>
+                <p className="mt-0.5 font-sans text-xs text-white/60">{tile.title}</p>
+                <p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-white/40">
+                  {tile.done ? "Terminé — modifiable" : "À faire"}
+                </p>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {error && <p className="mt-4 text-sm text-accent">{error}</p>}
+
+        <div className="mt-6 text-center">
+          <Button variant="dark" disabled={!allBlocksDone} onClick={() => setStep("confirmation")}>
+            {allBlocksDone
+              ? "Terminer et envoyer mon test"
+              : "Terminez les 4 blocs pour envoyer votre test"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (step === "lexique") {
     return (
       <div className="mx-auto max-w-lg">
+        <button
+          onClick={() => setStep("menu")}
+          className="mb-3 font-sans text-xs text-accent hover:underline"
+        >
+          ← Retour au menu
+        </button>
         <QcmBlock
           key="lexique"
           title="Bloc 1 — Lexique, Grammaire & Compréhension Écrite"
           questions={questions.lexique}
           answers={lexiqueAnswers}
           onChange={(id, v) => setLexiqueAnswers((a) => ({ ...a, [id]: v }))}
-          onNext={() => setStep("oral")}
-          nextLabel="Épreuve suivante"
+          onNext={handleLexiqueSubmit}
+          nextLabel="Valider ce bloc"
         />
+        {error && <p className="mt-4 text-sm text-accent">{error}</p>}
       </div>
     );
   }
@@ -452,14 +588,20 @@ export default function EvaluationFlow() {
   if (step === "oral") {
     return (
       <div className="mx-auto max-w-lg">
+        <button
+          onClick={() => setStep("menu")}
+          className="mb-3 font-sans text-xs text-accent hover:underline"
+        >
+          ← Retour au menu
+        </button>
         <QcmBlock
           key="oral"
           title="Bloc 4 — Compréhension Orale (Podcasts B2 & C1)"
           questions={questions.oral}
           answers={oralAnswers}
           onChange={(id, v) => setOralAnswers((a) => ({ ...a, [id]: v }))}
-          onNext={handleOralComplete}
-          nextLabel="Épreuve suivante"
+          onNext={handleOralSubmit}
+          nextLabel="Valider ce bloc"
         />
         {error && <p className="mt-4 text-sm text-accent">{error}</p>}
       </div>
@@ -469,6 +611,12 @@ export default function EvaluationFlow() {
   if (step === "select-situations") {
     return (
       <div className="mx-auto max-w-2xl rounded border border-white/10 bg-obsidianCard p-6">
+        <button
+          onClick={() => setStep("menu")}
+          className="mb-3 font-sans text-xs text-accent hover:underline"
+        >
+          ← Retour au menu
+        </button>
         <h3 className="font-display text-lg font-semibold text-white">
           Bloc 3 — Mises en situation professionnelles
         </h3>
@@ -521,6 +669,12 @@ export default function EvaluationFlow() {
     const situation = situations.find((s) => s.index === situationIndex);
     return (
       <div className="mx-auto max-w-lg rounded border border-white/10 bg-obsidianCard p-6">
+        <button
+          onClick={() => setStep("menu")}
+          className="mb-3 block font-sans text-xs text-accent hover:underline"
+        >
+          ← Retour au menu
+        </button>
         <p className="font-mono text-xs uppercase tracking-widest text-accent">
           Situation {recordingCursor + 1} / {REQUIRED_SITUATIONS}
         </p>
@@ -548,35 +702,84 @@ export default function EvaluationFlow() {
 
   if (step === "record-videos") {
     const task = videoTasks[videoCursor];
-    const chosenOption = task?.options?.find((o) => o.key === selectedOptionKey);
+    const chosenSubject = task?.subjects?.find((s) => s.key === selectedSubjectKey);
+    const chosenOption = chosenSubject?.options.find((o) => o.key === selectedOptionKey);
 
-    // Tâche avec choix de rôle (ex. Débat Plateau Télé) : écran de sélection
-    // tant qu'aucun rôle n'est choisi, avant même de montrer l'enregistreur.
-    if (task?.options && !chosenOption) {
+    // Tâche avec choix de sujet (ex. Débat Plateau Télé) : premier écran —
+    // sélection du sujet de débat, avant même le choix de rôle.
+    if (task?.subjects && !chosenSubject) {
       return (
         <div className="mx-auto max-w-lg rounded border border-white/10 bg-obsidianCard p-6">
+          <button
+            onClick={() => setStep("menu")}
+            className="mb-3 block font-sans text-xs text-accent hover:underline"
+          >
+            ← Retour au menu
+          </button>
           <p className="font-mono text-xs uppercase tracking-widest text-accent">
             Bloc 5 — Vidéo {videoCursor + 1} / {videoTasks.length}
           </p>
           <p className="mt-2 font-display text-sm font-semibold text-white">{task.title}</p>
           <p className="mt-3 font-sans text-sm text-white/80">{task.context}</p>
 
-          {task.hasReferenceVideo && (
+          <div className="mt-5 space-y-3">
+            {task.subjects.map((subject) => (
+              <button
+                key={subject.key}
+                onClick={() => setSelectedSubjectKey(subject.key)}
+                className="w-full rounded border border-white/15 bg-obsidian px-4 py-3 text-left transition-colors hover:border-accent/60"
+              >
+                <p className="font-sans text-sm font-semibold text-white">{subject.title}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // Deuxième écran — choix de rôle au sein du sujet choisi, avec la vidéo
+    // de contexte propre à ce sujet (hébergée par nous, ou intégrée en
+    // iframe depuis une source externe qui l'autorise, ex. TV5Monde).
+    if (chosenSubject && !chosenOption) {
+      return (
+        <div className="mx-auto max-w-lg rounded border border-white/10 bg-obsidianCard p-6">
+          <button
+            onClick={() => setSelectedSubjectKey(null)}
+            className="mb-3 block font-sans text-xs text-accent hover:underline"
+          >
+            ← Changer de sujet
+          </button>
+          <p className="font-mono text-xs uppercase tracking-widest text-accent">
+            Bloc 5 — Vidéo {videoCursor + 1} / {videoTasks.length}
+          </p>
+          <p className="mt-2 font-display text-sm font-semibold text-white">{chosenSubject.title}</p>
+          <p className="mt-3 font-sans text-sm text-white/80">{chosenSubject.context}</p>
+
+          {(chosenSubject.hasReferenceVideo || chosenSubject.referenceVideoEmbedUrl) && (
             <div className="mt-4">
               <p className="font-sans text-xs font-semibold text-white/80">
                 Regardez ce reportage avant de choisir votre rôle :
               </p>
-              <video
-                controls
-                preload="metadata"
-                src={`${API_URL}/evaluation/video-tasks/${task.index}/reference-video`}
-                className="mt-2 w-full rounded"
-              />
+              {chosenSubject.referenceVideoEmbedUrl ? (
+                <iframe
+                  src={chosenSubject.referenceVideoEmbedUrl}
+                  className="mt-2 aspect-video w-full rounded"
+                  allow="autoplay; fullscreen"
+                  allowFullScreen
+                />
+              ) : (
+                <video
+                  controls
+                  preload="metadata"
+                  src={`${API_URL}/evaluation/video-tasks/${task.index}/subjects/${chosenSubject.key}/reference-video`}
+                  className="mt-2 w-full rounded"
+                />
+              )}
             </div>
           )}
 
           <div className="mt-5 space-y-3">
-            {task.options.map((option) => (
+            {chosenSubject.options.map((option) => (
               <button
                 key={option.key}
                 onClick={() => setSelectedOptionKey(option.key)}
@@ -595,6 +798,12 @@ export default function EvaluationFlow() {
 
     return (
       <div className="mx-auto max-w-lg rounded border border-white/10 bg-obsidianCard p-6">
+        <button
+          onClick={() => setStep("menu")}
+          className="mb-3 block font-sans text-xs text-accent hover:underline"
+        >
+          ← Retour au menu
+        </button>
         <p className="font-mono text-xs uppercase tracking-widest text-accent">
           Bloc 5 — Vidéo {videoCursor + 1} / {videoTasks.length}
         </p>
@@ -628,13 +837,13 @@ export default function EvaluationFlow() {
                 {chosenOption.conclusion}
               </p>
             </div>
-            {task?.linguisticConstraint && (
+            {chosenSubject?.linguisticConstraint && (
               <div className="mt-4 rounded border border-accent/30 bg-accent/5 p-3">
                 <p className="font-sans text-xs font-semibold text-white">
-                  {task.linguisticConstraint.intro}
+                  {chosenSubject.linguisticConstraint.intro}
                 </p>
                 <ul className="mt-2 space-y-1 font-sans text-xs text-white/70">
-                  {task.linguisticConstraint.termes.map((terme) => (
+                  {chosenSubject.linguisticConstraint.termes.map((terme) => (
                     <li key={terme}>• {terme}</li>
                   ))}
                 </ul>
@@ -663,7 +872,7 @@ export default function EvaluationFlow() {
         <div className="mt-6">
           {task && (
             <VideoRecorder
-              key={`${task.index}-${chosenOption?.key ?? "none"}`}
+              key={`${task.index}-${chosenSubject?.key ?? "none"}-${chosenOption?.key ?? "none"}`}
               onRecorded={handleVideoRecorded}
               maxSeconds={task.maxSeconds}
             />

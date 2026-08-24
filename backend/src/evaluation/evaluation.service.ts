@@ -79,20 +79,29 @@ export class EvaluationService {
 
   // Ne renvoie jamais `referenceVideoKey` tel quel (clé de stockage interne)
   // — remplacé par un simple booléen, le front construit l'URL de streaming
-  // à partir de l'index de la tâche (GET /video-tasks/:index/reference-video).
+  // à partir de l'index de la tâche + la clé du sujet
+  // (GET /video-tasks/:index/subjects/:subjectKey/reference-video).
+  // `referenceVideoEmbedUrl` (contenu tiers, ex. TV5Monde) est en revanche
+  // renvoyée telle quelle : ce n'est pas un secret, juste une URL à mettre
+  // dans une iframe.
   getVideoTasks() {
-    return VIDEO_TASKS.map(({ referenceVideoKey, ...task }) => ({
+    return VIDEO_TASKS.map((task) => ({
       ...task,
-      hasReferenceVideo: Boolean(referenceVideoKey),
+      subjects: task.subjects?.map(({ referenceVideoKey, ...subject }) => ({
+        ...subject,
+        hasReferenceVideo: Boolean(referenceVideoKey),
+      })),
     }));
   }
 
-  async getReferenceVideoStream(taskIndex: number) {
-    const task = VIDEO_TASKS.find((t) => t.index === taskIndex);
-    if (!task?.referenceVideoKey) {
-      throw new NotFoundException("Aucune vidéo de référence pour cette tâche.");
+  async getReferenceVideoStream(taskIndex: number, subjectKey: string) {
+    const subject = VIDEO_TASKS.find((t) => t.index === taskIndex)?.subjects?.find(
+      (s) => s.key === subjectKey
+    );
+    if (!subject?.referenceVideoKey) {
+      throw new NotFoundException("Aucune vidéo de référence pour ce sujet.");
     }
-    return this.storage.getObjectStream(task.referenceVideoKey);
+    return this.storage.getObjectStream(subject.referenceVideoKey);
   }
 
   getVideoGradingCriteria() {
@@ -134,26 +143,61 @@ export class EvaluationService {
     return attempt;
   }
 
+  // Les 4 blocs construits (1 Lexique, 3 Mises en Situation, 4 Compréhension
+  // Orale, 5 Vidéo) sont indépendants et peuvent être faits dans n'importe
+  // quel ordre (décision produit 2026-08-25 — le candidat choisit son ordre
+  // depuis un menu côté front). La tentative reste "en_cours" (modifiable)
+  // tant que les 4 ne sont pas tous complets ; bascule en "soumis" dès que
+  // le dernier bloc manquant est terminé, quel qu'il soit.
+  private async maybeFinalize(attemptId: string) {
+    const attempt = await this.getAttemptOrThrow(attemptId);
+    if (attempt.status !== "en_cours") return;
+
+    const complete =
+      attempt.lexiqueAnswers !== null &&
+      attempt.oralAnswers !== null &&
+      attempt.situationResponses.length >= REQUIRED_SITUATION_COUNT &&
+      attempt.videoResponses.length >= REQUIRED_VIDEO_COUNT;
+
+    if (complete) {
+      await this.prisma.evaluationAttempt.update({
+        where: { id: attemptId },
+        data: { status: "soumis", submittedAt: new Date() },
+      });
+    }
+  }
+
+  // Accepte lexiqueAnswers et/ou oralAnswers indépendamment — le candidat
+  // peut soumettre le Bloc 1 et le Bloc 4 séparément, dans l'ordre de son
+  // choix (voir maybeFinalize). Bloqué une fois la tentative complète
+  // (status !== "en_cours") pour ne pas modifier des réponses déjà notées.
   async submitAnswers(attemptId: string, dto: SubmitAnswersDto) {
     const attempt = await this.getAttemptOrThrow(attemptId);
     if (attempt.status !== "en_cours") {
-      throw new BadRequestException("Cette tentative a déjà été soumise.");
+      throw new BadRequestException("Cette tentative est déjà complète.");
     }
 
-    const lexiqueScore = scoreQcm(LEXIQUE_QUESTIONS, dto.lexiqueAnswers);
-    const oralScore = scoreQcm(ORAL_QUESTIONS, dto.oralAnswers);
+    const data: {
+      lexiqueAnswers?: string;
+      lexiqueScore?: number;
+      oralAnswers?: string;
+      oralScore?: number;
+    } = {};
+    if (dto.lexiqueAnswers) {
+      data.lexiqueAnswers = JSON.stringify(dto.lexiqueAnswers);
+      data.lexiqueScore = scoreQcm(LEXIQUE_QUESTIONS, dto.lexiqueAnswers);
+    }
+    if (dto.oralAnswers) {
+      data.oralAnswers = JSON.stringify(dto.oralAnswers);
+      data.oralScore = scoreQcm(ORAL_QUESTIONS, dto.oralAnswers);
+    }
 
-    return this.prisma.evaluationAttempt.update({
+    const updated = await this.prisma.evaluationAttempt.update({
       where: { id: attemptId },
-      data: {
-        lexiqueAnswers: JSON.stringify(dto.lexiqueAnswers),
-        oralAnswers: JSON.stringify(dto.oralAnswers),
-        lexiqueScore,
-        oralScore,
-        status: "soumis",
-        submittedAt: new Date(),
-      },
+      data,
     });
+    await this.maybeFinalize(attemptId);
+    return updated;
   }
 
   async saveSituationAudio(
@@ -162,10 +206,8 @@ export class EvaluationService {
     file: Express.Multer.File
   ) {
     const attempt = await this.getAttemptOrThrow(attemptId);
-    if (attempt.status === "en_cours") {
-      throw new BadRequestException(
-        "Répondez d'abord aux épreuves lexique et compréhension orale."
-      );
+    if (attempt.status !== "en_cours") {
+      throw new BadRequestException("Cette tentative est déjà complète.");
     }
     const already = attempt.situationResponses.length;
     const isNew = !attempt.situationResponses.some(
@@ -185,7 +227,7 @@ export class EvaluationService {
       file.mimetype || "audio/webm"
     );
 
-    return this.prisma.situationResponse.upsert({
+    const response = await this.prisma.situationResponse.upsert({
       where: {
         attemptId_situationIndex: { attemptId, situationIndex },
       },
@@ -201,6 +243,8 @@ export class EvaluationService {
         gradedAt: null,
       },
     });
+    await this.maybeFinalize(attemptId);
+    return response;
   }
 
   async getSituationAudioStream(situationResponseId: string) {
@@ -220,13 +264,12 @@ export class EvaluationService {
     attemptId: string,
     taskIndex: number,
     file: Express.Multer.File,
+    subjectKey?: string,
     optionKey?: string
   ) {
     const attempt = await this.getAttemptOrThrow(attemptId);
-    if (attempt.status === "en_cours") {
-      throw new BadRequestException(
-        "Répondez d'abord aux épreuves lexique et compréhension orale."
-      );
+    if (attempt.status !== "en_cours") {
+      throw new BadRequestException("Cette tentative est déjà complète.");
     }
 
     const extension = path.extname(file.originalname) || ".webm";
@@ -237,7 +280,7 @@ export class EvaluationService {
       file.mimetype || "video/webm"
     );
 
-    return this.prisma.videoResponse.upsert({
+    const response = await this.prisma.videoResponse.upsert({
       where: {
         attemptId_taskIndex: { attemptId, taskIndex },
       },
@@ -245,16 +288,20 @@ export class EvaluationService {
         attemptId,
         taskIndex,
         videoUrl: key,
+        subjectKey,
         optionKey,
       },
       update: {
         videoUrl: key,
+        subjectKey,
         optionKey,
         score: null,
         gradedCriteria: null,
         gradedAt: null,
       },
     });
+    await this.maybeFinalize(attemptId);
+    return response;
   }
 
   async getVideoStream(videoResponseId: string) {

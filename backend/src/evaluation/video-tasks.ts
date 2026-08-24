@@ -2,12 +2,16 @@
 // La tâche 2 (Pitch de Synthèse) reste en PLACEHOLDER, en attendant le
 // barème réel de la cliente (même pattern que les banques de questions
 // lexique/oral — voir etaff-project-roadmap "Known gap"). La tâche 1
-// (Débat Plateau Télé) est le vrai contenu client, fourni le 2026-08-25 :
-// le candidat choisit un rôle (Option A ou B) avant d'enregistrer — voir
-// VideoTaskOption ci-dessous — et doit intégrer au moins 4 des 5 expressions
-// de la contrainte linguistique dans son intervention (auto-déclaratif, pas
-// vérifié automatiquement : le formateur en tient compte dans "Adéquation
-// avec la Consigne" à la correction).
+// (Débat Plateau Télé) est le vrai contenu client : le candidat choisit
+// d'abord un SUJET de débat (2 fournis le 2026-08-25, un 3e à venir — voir
+// VideoTaskSubject), puis un rôle (Option A ou B) au sein de ce sujet — voir
+// VideoTaskOption. Chaque sujet a sa propre contrainte linguistique (≥4
+// expressions parmi une liste propre au sujet, auto-déclaratif — le
+// formateur en tient compte dans "Adéquation avec la Consigne") et sa
+// propre vidéo de contexte, hébergée sur notre bucket (referenceVideoKey)
+// ou intégrée en iframe depuis une source externe qui l'autorise
+// explicitement (referenceVideoEmbedUrl, ex. TV5Monde — jamais réhébergée :
+// contenu pédagogique tiers, pas un fichier du client).
 export interface VideoTaskOption {
   key: string; // "A" | "B"
   role: string;
@@ -23,23 +27,32 @@ export interface LinguisticConstraint {
   minimum: number;
 }
 
+export interface VideoTaskSubject {
+  key: string;
+  title: string;
+  context: string;
+  options: VideoTaskOption[];
+  linguisticConstraint?: LinguisticConstraint;
+  /**
+   * Clé S3 (bucket StorageService) d'une vidéo de contexte hébergée par
+   * nous — jamais exposée telle quelle à l'API publique, voir
+   * EvaluationService.getVideoTasks qui la remplace par un booléen
+   * `hasReferenceVideo`. Diffusée via
+   * GET /evaluation/video-tasks/:index/subjects/:subjectKey/reference-video.
+   */
+  referenceVideoKey?: string;
+  /** URL externe intégrable en iframe (contenu tiers autorisant l'embed, ex. TV5Monde) — exposée telle quelle, ce n'est pas un secret. */
+  referenceVideoEmbedUrl?: string;
+}
+
 export interface VideoTask {
   index: number;
   title: string;
   context: string;
-  /** Présent uniquement pour les tâches où le candidat choisit un rôle avant d'enregistrer. */
-  options?: VideoTaskOption[];
-  /** Consigne à texte unique — utilisée seulement pour les tâches sans `options`. */
+  /** Présent uniquement pour les tâches où le candidat choisit d'abord un sujet, puis un rôle. */
+  subjects?: VideoTaskSubject[];
+  /** Consigne à texte unique — utilisée seulement pour les tâches sans `subjects`. */
   mission?: string;
-  linguisticConstraint?: LinguisticConstraint;
-  /**
-   * Clé S3 (bucket StorageService, voir common/storage.service.ts) d'une
-   * vidéo de contexte à visionner avant l'enregistrement (ex. reportage sur
-   * le sujet du débat) — jamais exposée telle quelle à l'API publique, voir
-   * EvaluationService.getVideoTasks qui la remplace par un simple booléen
-   * `hasReferenceVideo`. Diffusée via GET /evaluation/video-tasks/:index/reference-video.
-   */
-  referenceVideoKey?: string;
   /** Durée maximale conseillée pour l'enregistrement, en secondes. */
   maxSeconds: number;
 }
@@ -49,44 +62,97 @@ export const VIDEO_TASKS: VideoTask[] = [
     index: 1,
     title: "Débat Plateau Télé",
     context:
-      "Vous participez à une émission télévisée sur le marché des influenceurs et son encadrement. Choisissez un rôle et enregistrez une intervention vidéo de 3 minutes maximum.",
-    options: [
+      "Vous participez à une émission télévisée. Choisissez un sujet de débat, puis un rôle au sein de ce sujet, et enregistrez une intervention vidéo de 3 minutes maximum.",
+    subjects: [
       {
-        key: "A",
-        role: "Raphaël Molina (Avocat spécialisé)",
-        objectif: "Plaider pour une régulation stricte du marché et la protection des mineurs.",
-        introduction:
-          "Présentez le flou juridique qui a longtemps régné autour du statut d'influenceur.",
-        developpement:
-          "Exposez les dérives (publicité clandestine, manque de transparence) et développez la question spécifique du droit du travail et de la protection des « enfants influenceurs ».",
-        conclusion:
-          "Proposez des solutions législatives et concluez sur la responsabilité des plateformes et des parents.",
+        key: "influenceurs",
+        title: "Le marché des influenceurs et son encadrement",
+        context:
+          "Vous participez à une émission télévisée sur le marché des influenceurs et son encadrement.",
+        options: [
+          {
+            key: "A",
+            role: "Raphaël Molina (Avocat spécialisé)",
+            objectif:
+              "Plaider pour une régulation stricte du marché et la protection des mineurs.",
+            introduction:
+              "Présentez le flou juridique qui a longtemps régné autour du statut d'influenceur.",
+            developpement:
+              "Exposez les dérives (publicité clandestine, manque de transparence) et développez la question spécifique du droit du travail et de la protection des « enfants influenceurs ».",
+            conclusion:
+              "Proposez des solutions législatives et concluez sur la responsabilité des plateformes et des parents.",
+          },
+          {
+            key: "B",
+            role: "Camille Lanci (Journaliste à la RTS)",
+            objectif: "Analyser le modèle économique du marketing d'influence et ses dérives.",
+            introduction:
+              "Dégagez l'ampleur du phénomène et la perte de vitesse des médias traditionnels face aux créateurs de contenu.",
+            developpement:
+              "Expliquez la stratégie des marques (recherche d'authenticité, proximité, ciblage) et la dépendance financière des créateurs.",
+            conclusion:
+              "Livrez une analyse critique sur l'avenir de ce marché et la sensibilisation nécessaire du public.",
+          },
+        ],
+        linguisticConstraint: {
+          intro:
+            "Pour valider votre niveau C1, vous devez intégrer au moins 4 expressions ou termes parmi la liste suivante dans votre discours :",
+          termes: [
+            "Manque de transparence / Publicité clandestine",
+            "Cadre législatif / Blâmer la régulation",
+            "Monétisation / Modèle économique",
+            "Droit à l'image / Protection des mineurs",
+            "Capitaliser sur une communauté",
+          ],
+          minimum: 4,
+        },
+        referenceVideoKey: "evaluation-references/debat-plateau-tele.mp4",
       },
       {
-        key: "B",
-        role: "Camille Lanci (Journaliste à la RTS)",
-        objectif: "Analyser le modèle économique du marketing d'influence et ses dérives.",
-        introduction:
-          "Dégagez l'ampleur du phénomène et la perte de vitesse des médias traditionnels face aux créateurs de contenu.",
-        developpement:
-          "Expliquez la stratégie des marques (recherche d'authenticité, proximité, ciblage) et la dépendance financière des créateurs.",
-        conclusion:
-          "Livrez une analyse critique sur l'avenir de ce marché et la sensibilisation nécessaire du public.",
+        key: "inegalites-salariales",
+        title: "Les inégalités salariales et professionnelles",
+        context:
+          "Vous participez à une émission télévisée sur les inégalités salariales et professionnelles entre hommes et femmes.",
+        options: [
+          {
+            key: "A",
+            role: "L'Expert / L'Avocat en droit du travail",
+            objectif:
+              "Analyser les limites du cadre légal et plaider pour des sanctions ou des réformes contraignantes.",
+            introduction:
+              "Rappelez le constat chiffré des inégalités et le principe de gratuité du travail féminin en fin d'année.",
+            developpement:
+              "Expliquez pourquoi les lois actuelles sont insuffisantes et détaillez les dérives (plafond de verre, discrimination à l'embauche/promotion).",
+            conclusion:
+              "Proposez des mesures concrètes (audit obligatoire, pénalités financières) pour forcer les entreprises à réagir.",
+          },
+          {
+            key: "B",
+            role: "La Journaliste / Consultante en stratégie RH",
+            objectif:
+              "Proposer un plan d'action global pour les entreprises et changer les mentalités du monde du travail.",
+            introduction: "Posez la problématique de la parité réelle versus la parité de façade.",
+            developpement:
+              "Présentez les leviers d'action internes (transparence des grilles salariales, réévaluation de la valeur des métiers féminisés, congé paternité).",
+            conclusion:
+              "Livrez une synthèse sur les bénéfices économiques et sociaux d'une égalité salariale effective.",
+          },
+        ],
+        linguisticConstraint: {
+          intro:
+            "Pour valider votre niveau C1, vous devez intégrer au moins 4 expressions ou termes parmi la liste suivante dans votre discours :",
+          termes: [
+            "Plafond de verre / Écart de rémunération",
+            "Transparence salariale / Cadre législatif",
+            "Parité / Égalité professionnelle",
+            "Pénalités financières / Métiers féminisés",
+          ],
+          minimum: 4,
+        },
+        referenceVideoEmbedUrl:
+          "https://enseigner.tv5monde.com/fiches-pedagogiques-fle/embed/les-inegalites-salariales",
       },
     ],
-    linguisticConstraint: {
-      intro:
-        "Pour valider votre niveau C1, vous devez intégrer au moins 4 expressions ou termes parmi la liste suivante dans votre discours :",
-      termes: [
-        "Manque de transparence / Publicité clandestine",
-        "Cadre législatif / Blâmer la régulation",
-        "Monétisation / Modèle économique",
-        "Droit à l'image / Protection des mineurs",
-        "Capitaliser sur une communauté",
-      ],
-      minimum: 4,
-    },
-    referenceVideoKey: "evaluation-references/debat-plateau-tele.mp4",
     maxSeconds: 180,
   },
   {

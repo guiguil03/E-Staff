@@ -8,8 +8,13 @@ export class UploadVideoDto {
   @Max(2)
   taskIndex!: number;
 
-  // Rôle choisi par le candidat quand la tâche propose des options (voir
-  // VideoTask.options dans video-tasks.ts) — absent pour les tâches sans choix.
+  // Sujet puis rôle choisis par le candidat quand la tâche propose plusieurs
+  // sujets/options (voir VideoTask.subjects dans video-tasks.ts) — absents
+  // pour les tâches sans choix.
+  @IsOptional()
+  @IsString()
+  subjectKey?: string;
+
   @IsOptional()
   @IsString()
   optionKey?: string;
