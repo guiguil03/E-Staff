@@ -149,8 +149,12 @@ export const VIDEO_TASKS: VideoTask[] = [
           ],
           minimum: 4,
         },
-        referenceVideoEmbedUrl:
-          "https://enseigner.tv5monde.com/fiches-pedagogiques-fle/embed/les-inegalites-salariales",
+        // Remplace l'iframe TV5Monde initiale (2026-08-25) : accès instable
+        // en test (Akamai "Access Denied" sur des requêtes automatisées, pas
+        // confirmé fiable pour de vrais candidats) — le client a fourni sa
+        // propre vidéo (reportage Terriennes/TV5Monde), remuxée en MP4 sans
+        // réencodage (déjà H.264/AAC, 21 Mo) et hébergée sur notre bucket.
+        referenceVideoKey: "evaluation-references/inegalites-salariales.mp4",
       },
     ],
     maxSeconds: 180,
