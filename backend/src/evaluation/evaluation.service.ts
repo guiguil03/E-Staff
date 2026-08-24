@@ -263,6 +263,18 @@ export class EvaluationService {
     });
   }
 
+  // Compte seul (pas les tentatives complètes) — sert à signaler la file de
+  // correction des tests d'admission depuis le Cockpit Formateur
+  // (/compte/formateur), qui n'a pas le code partagé TRAINER_ACCESS_CODE et
+  // ne doit donc pas recevoir le détail complet des tentatives (audio/vidéo
+  // des candidats), juste de quoi savoir qu'il y a du travail en attente et
+  // où aller le faire (/evaluation/formateur).
+  async countAttemptsForGrading() {
+    return this.prisma.evaluationAttempt.count({
+      where: { status: { in: ["soumis", "en_correction"] } },
+    });
+  }
+
   async getAttemptForGrading(attemptId: string) {
     return this.getAttemptOrThrow(attemptId);
   }

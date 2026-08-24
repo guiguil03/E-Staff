@@ -1,6 +1,5 @@
 import Reveal from "@/components/Reveal";
 import CecrGauge from "@/components/compte-apprenant/CecrGauge";
-import type { GROUPES } from "./exampleData";
 
 const STATUT_CLASSES: Record<string, string> = {
   vert: "border-success bg-success/10 text-success",
@@ -8,9 +7,16 @@ const STATUT_CLASSES: Record<string, string> = {
   rouge: "border-teal bg-teal/10 text-teal", // pas de rouge dans la palette e-Staf
 };
 
+export interface CockpitGroupe {
+  cle: string;
+  label: string;
+  moyenne: number | null;
+  statut: "vert" | "orange" | "rouge";
+}
+
 interface TopBarProps {
   globalC1Rate: number;
-  groupes: typeof GROUPES;
+  groupes: CockpitGroupe[];
   selectedGroup: string | null;
   onSelectGroup: (key: string) => void;
 }
@@ -49,14 +55,14 @@ export default function TopBar({
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               {groupes.map((g) => (
                 <button
-                  key={g.key}
-                  onClick={() => onSelectGroup(g.key)}
+                  key={g.cle}
+                  onClick={() => onSelectGroup(g.cle)}
                   className={`rounded border-2 p-3 text-center transition-transform hover:-translate-y-0.5 ${
                     STATUT_CLASSES[g.statut]
-                  } ${selectedGroup === g.key ? "ring-2 ring-white/60" : ""}`}
+                  } ${selectedGroup === g.cle ? "ring-2 ring-white/60" : ""}`}
                 >
-                  <p className="font-display text-xl font-bold">{g.key}</p>
-                  <p className="font-mono text-xs opacity-80">{g.moyenne}/100</p>
+                  <p className="font-display text-xl font-bold">{g.cle}</p>
+                  <p className="font-mono text-xs opacity-80">{g.moyenne ?? "—"}/100</p>
                 </button>
               ))}
             </div>

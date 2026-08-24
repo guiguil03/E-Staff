@@ -1,17 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
-import { APPRENANTS } from "./exampleData";
+import { apiGet, apiPut, ApiError } from "@/lib/api";
+import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
+import { apprenantIdFromMatricule } from "./exampleData";
 
-type Statut = "vert" | "orange" | "rouge";
+type Statut = "vert" | "orange" | "rouge" | "non_defini";
 
 interface PaymentAlertsTableProps {
   onSelectApprenant: (id: string) => void;
 }
 
-function computeStatut(echeanceIso: string): { statut: Statut; daysUntil: number } {
+interface ApprenantPaiementApi {
+  matricule: string;
+  prenom: string;
+  nom: string;
+  groupeCle: string;
+  abonnementExpireAt: string | null;
+}
+
+function formateurHeaders(): HeadersInit {
+  const matricule =
+    typeof window !== "undefined" ? sessionStorage.getItem(ACCOUNT_MATRICULE_KEY) : null;
+  return matricule ? { "x-formateur-matricule": matricule } : {};
+}
+
+function computeStatut(echeanceIso: string | null): { statut: Statut; daysUntil: number | null } {
+  if (!echeanceIso) return { statut: "non_defini", daysUntil: null };
   const daysUntil = Math.ceil(
     (new Date(echeanceIso).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   );
@@ -21,44 +38,86 @@ function computeStatut(echeanceIso: string): { statut: Statut; daysUntil: number
 
 // Pas de rouge dans la palette e-Staf — le teal fait office de second
 // signal d'alerte, comme ailleurs dans l'app (assiduité, radar, etc.).
-const STATUT_STYLES: Record<
-  Statut,
-  { border: string; text: string; bg: string; action: string }
-> = {
-  rouge: { border: "border-teal", text: "text-teal", bg: "bg-teal/10", action: "Bloquer l'accès" },
-  orange: {
-    border: "border-accent",
-    text: "text-accent",
-    bg: "bg-accent/10",
-    action: "Envoyer un rappel",
-  },
-  vert: { border: "border-success", text: "text-success", bg: "bg-success/10", action: "" },
+// "non_defini" : aucune échéance encore fixée pour cet apprenant (champ
+// abonnementExpireAt nul) — statut neutre, pas assimilé à un retard.
+const STATUT_STYLES: Record<Statut, { border: string; text: string; bg: string }> = {
+  rouge: { border: "border-teal", text: "text-teal", bg: "bg-teal/10" },
+  orange: { border: "border-accent", text: "text-accent", bg: "bg-accent/10" },
+  vert: { border: "border-success", text: "text-success", bg: "bg-success/10" },
+  non_defini: { border: "border-white/20", text: "text-white/50", bg: "bg-white/5" },
 };
 
 // Widget compact "Casiers Apprenants" : un petit rectangle à menu déroulant
 // (plutôt qu'un grand tableau toujours ouvert) — l'en-tête affiche juste le
-// nombre d'apprenants par statut (rouge/orange/vert), et on ouvre le détail
-// pour consulter le casier d'un apprenant au cas par cas.
+// nombre d'apprenants par statut, et on ouvre le détail pour consulter le
+// casier d'un apprenant au cas par cas. Branché sur le vrai champ
+// Apprenant.abonnementExpireAt depuis 2026-08-24 (abonnement à date fixe,
+// saisie/mise à jour manuelle par le formateur ici même — voir
+// /cockpit/paiements et PUT /cockpit/apprenants/:matricule/abonnement).
 export default function PaymentAlertsTable({ onSelectApprenant }: PaymentAlertsTableProps) {
   const [showAll, setShowAll] = useState(false);
-  const [actioned, setActioned] = useState<Set<string>>(new Set());
+  const [apprenants, setApprenants] = useState<ApprenantPaiementApi[] | "loading" | "erreur">(
+    "loading"
+  );
+  const [editing, setEditing] = useState<string | null>(null);
+  const [dateInput, setDateInput] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const rows = APPRENANTS.map((a) => ({
-    apprenant: a,
-    ...computeStatut(a.echeanceRenouvellement),
-  })).sort((a, b) => a.daysUntil - b.daysUntil);
+  function refresh() {
+    setApprenants("loading");
+    apiGet<ApprenantPaiementApi[]>("/cockpit/paiements", formateurHeaders())
+      .then(setApprenants)
+      .catch(() => setApprenants("erreur"));
+  }
+
+  useEffect(refresh, []);
+
+  async function saveEcheance(matricule: string) {
+    if (!dateInput) return;
+    setSaving(true);
+    try {
+      await apiPut(
+        `/cockpit/apprenants/${matricule}/abonnement`,
+        { expireAt: new Date(dateInput).toISOString() },
+        formateurHeaders()
+      );
+      setEditing(null);
+      setDateInput("");
+      refresh();
+    } catch (err) {
+      // Erreur affichée simplement — pas de canal d'erreur dédié pour ce
+      // petit widget, cohérent avec le reste du cockpit.
+      alert(err instanceof ApiError ? err.message : "Erreur — réessayer.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (apprenants === "loading" || apprenants === "erreur") {
+    return (
+      <Reveal>
+        <div className="rounded border border-white/10 bg-obsidianCard p-4">
+          <h3 className="font-display text-sm font-semibold text-white">Casiers Apprenants</h3>
+          <p className="mt-2 font-sans text-xs text-white/50">
+            {apprenants === "loading" ? "Chargement..." : "Impossible de charger les casiers pour le moment."}
+          </p>
+        </div>
+      </Reveal>
+    );
+  }
+
+  const rows = apprenants
+    .map((a) => ({ apprenant: a, ...computeStatut(a.abonnementExpireAt) }))
+    .sort((a, b) => (a.daysUntil ?? Infinity) - (b.daysUntil ?? Infinity));
 
   const counts = {
     rouge: rows.filter((r) => r.statut === "rouge").length,
     orange: rows.filter((r) => r.statut === "orange").length,
     vert: rows.filter((r) => r.statut === "vert").length,
+    non_defini: rows.filter((r) => r.statut === "non_defini").length,
   };
   const atRisk = rows.filter((r) => r.statut !== "vert");
   const visible = showAll ? rows : atRisk;
-
-  function markActioned(id: string) {
-    setActioned((prev) => new Set(prev).add(id));
-  }
 
   return (
     <Reveal>
@@ -88,6 +147,11 @@ export default function PaymentAlertsTable({ onSelectApprenant }: PaymentAlertsT
             >
               {counts.vert}
             </span>
+            <span
+              className={`rounded-full border px-2 py-0.5 font-mono text-xs ${STATUT_STYLES.non_defini.border} ${STATUT_STYLES.non_defini.text} ${STATUT_STYLES.non_defini.bg}`}
+            >
+              {counts.non_defini}
+            </span>
             <svg
               width="14"
               height="14"
@@ -114,40 +178,66 @@ export default function PaymentAlertsTable({ onSelectApprenant }: PaymentAlertsT
               <tbody>
                 {visible.map(({ apprenant, statut, daysUntil }) => {
                   const style = STATUT_STYLES[statut];
-                  const done = actioned.has(apprenant.id);
+                  const isEditing = editing === apprenant.matricule;
                   return (
-                    <tr key={apprenant.id} className="border-b border-white/5">
+                    <tr key={apprenant.matricule} className="border-b border-white/5">
                       <td className="py-2 pr-2">
                         <button
-                          onClick={() => onSelectApprenant(apprenant.id)}
+                          onClick={() => onSelectApprenant(apprenantIdFromMatricule(apprenant.matricule))}
                           className="text-white transition-colors hover:text-accent"
                         >
-                          {apprenant.firstName} {apprenant.lastName}
+                          {apprenant.prenom} {apprenant.nom}
                         </button>
                       </td>
-                      <td className="py-2 pr-2 text-white/70">{apprenant.groupe}</td>
+                      <td className="py-2 pr-2 text-white/70">{apprenant.groupeCle}</td>
                       <td className="py-2 pr-2 text-white/70">
-                        {new Date(apprenant.echeanceRenouvellement).toLocaleDateString("fr-FR")}
+                        {apprenant.abonnementExpireAt
+                          ? new Date(apprenant.abonnementExpireAt).toLocaleDateString("fr-FR")
+                          : "—"}
                       </td>
                       <td className="py-2 pr-2">
                         <span
                           className={`inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] ${style.border} ${style.text} ${style.bg}`}
                         >
                           {statut === "rouge"
-                            ? `En retard (${Math.abs(daysUntil)} j)`
+                            ? `En retard (${Math.abs(daysUntil ?? 0)} j)`
                             : statut === "orange"
                               ? `Dans ${daysUntil} j`
-                              : "À jour"}
+                              : statut === "non_defini"
+                                ? "Non défini"
+                                : "À jour"}
                         </span>
                       </td>
                       <td className="py-2 text-right">
-                        {statut !== "vert" && (
+                        {isEditing ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <input
+                              type="date"
+                              value={dateInput}
+                              onChange={(e) => setDateInput(e.target.value)}
+                              className="rounded border border-white/20 bg-obsidian px-2 py-1 font-sans text-xs text-white outline-none focus:border-accent"
+                            />
+                            <Button
+                              variant="ghostDark"
+                              disabled={!dateInput || saving}
+                              onClick={() => saveEcheance(apprenant.matricule)}
+                            >
+                              Valider
+                            </Button>
+                          </div>
+                        ) : (
                           <Button
                             variant="ghostDark"
-                            disabled={done}
-                            onClick={() => markActioned(apprenant.id)}
+                            onClick={() => {
+                              setEditing(apprenant.matricule);
+                              setDateInput(
+                                apprenant.abonnementExpireAt
+                                  ? apprenant.abonnementExpireAt.slice(0, 10)
+                                  : ""
+                              );
+                            }}
                           >
-                            {done ? "Fait" : style.action}
+                            Renouveler
                           </Button>
                         )}
                       </td>

@@ -1,36 +1,60 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
-import { WEEKLY_REPORT_STATS } from "./exampleData";
+import { apiGet } from "@/lib/api";
+import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 
 interface WeeklyReportPanelProps {
   onClose: () => void;
 }
 
-const STATS_ROWS: { label: string; value: string }[] = [
-  { label: "Moyenne générale de la cohorte", value: `${WEEKLY_REPORT_STATS.moyenneGenerale}/100` },
-  {
-    label: "Évolution vs semaine N-1",
-    value: `${WEEKLY_REPORT_STATS.evolutionVsSemaineN1 >= 0 ? "+" : ""}${WEEKLY_REPORT_STATS.evolutionVsSemaineN1} pts`,
-  },
-  { label: "Groupes en baisse de tendance", value: `${WEEKLY_REPORT_STATS.groupesEnBaisse}` },
-  { label: "Taux de présence global", value: `${WEEKLY_REPORT_STATS.tauxPresenceGlobal}%` },
-  { label: "Travaux corrigés cette semaine", value: `${WEEKLY_REPORT_STATS.rendusCorriges}` },
-  { label: "Alertes de décrochage traitées", value: `${WEEKLY_REPORT_STATS.alertesDecrochageTraitees}` },
-  { label: "Nouveaux apprenants dans le Vivier C1", value: `${WEEKLY_REPORT_STATS.nouveauxVivierC1}` },
-];
+interface RapportHebdoApi {
+  moyenneGenerale: number | null;
+  tauxPresenceGlobal: number | null;
+  rendusCorriges7j: number;
+  vivierC1Total: number;
+  alertesDecrochageActuelles: number;
+}
 
-// Rapport Hebdomadaire — chiffres pré-remplis (données de la semaine) +
+function formateurHeaders(): HeadersInit {
+  const matricule =
+    typeof window !== "undefined" ? sessionStorage.getItem(ACCOUNT_MATRICULE_KEY) : null;
+  return matricule ? { "x-formateur-matricule": matricule } : {};
+}
+
+function statsRows(stats: RapportHebdoApi): { label: string; value: string }[] {
+  return [
+    { label: "Moyenne générale de la cohorte", value: `${stats.moyenneGenerale ?? "—"}/100` },
+    { label: "Taux de présence global", value: `${stats.tauxPresenceGlobal ?? "—"}%` },
+    { label: "Travaux corrigés cette semaine", value: `${stats.rendusCorriges7j}` },
+    { label: "Apprenants en alerte décrochage", value: `${stats.alertesDecrochageActuelles}` },
+    { label: "Apprenants au niveau C1 (Vivier)", value: `${stats.vivierC1Total}` },
+  ];
+}
+
+// Rapport Hebdomadaire — chiffres branchés sur les vraies données (table
+// Notation/Presence, voir /cockpit/rapport-hebdo) depuis 2026-08-24, +
 // 3 blocs qualitatifs obligatoires demandés par la cliente. Pas de vrai
 // export PDF/Excel ni d'envoi à la direction pour l'instant — le contenu
 // qualitatif reste consultable ici, honnêtement présenté comme non transmis.
+// Deux chiffres de l'ancienne maquette ("Évolution vs semaine N-1",
+// "Groupes en baisse de tendance") ont été retirés : ils nécessitent un
+// historique semaine par semaine qui n'existe pas encore côté backend
+// (aucune table de snapshot) — à construire séparément si besoin.
 export default function WeeklyReportPanel({ onClose }: WeeklyReportPanelProps) {
+  const [stats, setStats] = useState<RapportHebdoApi | "loading" | "erreur">("loading");
   const [constat, setConstat] = useState("");
   const [analyse, setAnalyse] = useState("");
   const [axes, setAxes] = useState("");
   const [sent, setSent] = useState(false);
+
+  useEffect(() => {
+    apiGet<RapportHebdoApi>("/cockpit/rapport-hebdo", formateurHeaders())
+      .then(setStats)
+      .catch(() => setStats("erreur"));
+  }, []);
 
   return (
     <Reveal>
@@ -48,12 +72,22 @@ export default function WeeklyReportPanel({ onClose }: WeeklyReportPanelProps) {
         </div>
 
         <div className="mt-4 grid gap-2 rounded border border-white/10 bg-obsidian p-4 sm:grid-cols-2">
-          {STATS_ROWS.map((row) => (
-            <div key={row.label} className="flex items-baseline justify-between gap-2">
-              <p className="font-sans text-xs text-white/60">{row.label}</p>
-              <p className="font-mono text-sm text-accent">{row.value}</p>
-            </div>
-          ))}
+          {stats === "loading" && (
+            <p className="font-sans text-xs text-white/50 sm:col-span-2">Chargement...</p>
+          )}
+          {stats === "erreur" && (
+            <p className="font-sans text-xs text-white/50 sm:col-span-2">
+              Impossible de charger les chiffres de la semaine.
+            </p>
+          )}
+          {stats !== "loading" &&
+            stats !== "erreur" &&
+            statsRows(stats).map((row) => (
+              <div key={row.label} className="flex items-baseline justify-between gap-2">
+                <p className="font-sans text-xs text-white/60">{row.label}</p>
+                <p className="font-mono text-sm text-accent">{row.value}</p>
+              </div>
+            ))}
         </div>
 
         <div className="mt-5 space-y-4">

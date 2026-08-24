@@ -122,6 +122,15 @@ export function apprenantMatricule(apprenantId: string): string {
   return `ETF-2026-${n.padStart(4, "0")}`;
 }
 
+// Inverse de apprenantMatricule — utilisé par les widgets branchés sur les
+// vrais agrégats du Cockpit (/cockpit/*, voir backend/src/cockpit/) pour
+// naviguer vers la Fiche Apprenant (/compte/formateur/apprenants/[id]), qui
+// elle reste encore sur exampleData.ts et attend un id "apprenant-N".
+export function apprenantIdFromMatricule(matricule: string): string {
+  const n = parseInt(matricule.split("-")[2] ?? "0", 10);
+  return `apprenant-${n}`;
+}
+
 function groupStatut(moyenne: number): "vert" | "orange" | "rouge" {
   if (moyenne >= 75) return "vert";
   if (moyenne >= 60) return "orange";

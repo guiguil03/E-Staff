@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Reveal from "@/components/Reveal";
-import TopBar from "./TopBar";
+import TopBar, { type CockpitGroupe } from "./TopBar";
+import AdmissionTestsCard from "./AdmissionTestsCard";
 import GroupEvolutionChart from "./GroupEvolutionChart";
 import TeachColumn from "./TeachColumn";
 import GradingQueueSummaryCard from "./GradingQueueSummaryCard";
@@ -16,8 +17,15 @@ import {
 import GroupDetailPanel from "./GroupDetailPanel";
 import WeeklyReportPanel from "./WeeklyReportPanel";
 import PaymentAlertsTable from "./PaymentAlertsTable";
-import { GLOBAL_C1_RATE, GROUPES } from "./exampleData";
+import { apiGet } from "@/lib/api";
+import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 import { useRequireRole } from "@/lib/useRequireRole";
+
+function formateurHeaders(): HeadersInit {
+  const matricule =
+    typeof window !== "undefined" ? sessionStorage.getItem(ACCOUNT_MATRICULE_KEY) : null;
+  return matricule ? { "x-formateur-matricule": matricule } : {};
+}
 
 type PanelState = { type: "group"; key: string } | { type: "report" } | null;
 
@@ -31,6 +39,18 @@ export default function FormateurDashboard() {
   const router = useRouter();
   const checked = useRequireRole("formateur");
   const [panel, setPanel] = useState<PanelState>(null);
+  const [groupes, setGroupes] = useState<CockpitGroupe[]>([]);
+  const [globalC1Rate, setGlobalC1Rate] = useState(0);
+
+  useEffect(() => {
+    if (!checked) return;
+    apiGet<CockpitGroupe[]>("/cockpit/groupes", formateurHeaders())
+      .then(setGroupes)
+      .catch(() => setGroupes([]));
+    apiGet<{ globalRate: number }>("/cockpit/vivier-c1", formateurHeaders())
+      .then((data) => setGlobalC1Rate(data.globalRate))
+      .catch(() => setGlobalC1Rate(0));
+  }, [checked]);
 
   function goToApprenant(id: string) {
     router.push(`/compte/formateur/apprenants/${id}`);
@@ -56,13 +76,15 @@ export default function FormateurDashboard() {
           </h1>
         </Reveal>
 
+        <AdmissionTestsCard />
+
         {/* Cockpit en bento : grille compacte, chaque bloc garde sa propre
             carte, séparés par un petit espace de transition (gap-3) plutôt
             que le grand espace d'origine (gap-6/space-y-6). */}
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-6">
           <TopBar
-            globalC1Rate={GLOBAL_C1_RATE}
-            groupes={GROUPES}
+            globalC1Rate={globalC1Rate}
+            groupes={groupes}
             selectedGroup={panel?.type === "group" ? panel.key : null}
             onSelectGroup={(key) => setPanel({ type: "group", key })}
           />

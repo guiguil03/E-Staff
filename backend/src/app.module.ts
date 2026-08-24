@@ -14,6 +14,7 @@ import { ForumModule } from "./forum/forum.module";
 import { NotationModule } from "./notation/notation.module";
 import { RegistrationsModule } from "./registrations/registrations.module";
 import { AccountRequestsModule } from "./account-requests/account-requests.module";
+import { CockpitModule } from "./cockpit/cockpit.module";
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { AccountRequestsModule } from "./account-requests/account-requests.modul
     NotationModule,
     RegistrationsModule,
     AccountRequestsModule,
+    CockpitModule,
   ],
   controllers: [AppController],
   providers: [AppService],

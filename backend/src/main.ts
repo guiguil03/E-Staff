@@ -9,6 +9,12 @@ async function bootstrap() {
   // exacts reçus, pas sur une re-sérialisation du JSON parsé.
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
+  // Nécessaire pour que `request.ip` reflète la vraie IP du client plutôt
+  // que celle du proxy Railway — sinon tous les visiteurs partageraient la
+  // même IP côté serveur et le rate-limiting de connexion (login-rate-limit.ts)
+  // les verrouillerait tous ensemble après quelques échecs de n'importe qui.
+  app.getHttpAdapter().getInstance().set("trust proxy", 1);
+
   app.enableCors({
     origin: process.env.CORS_ORIGIN?.split(",") ?? "http://localhost:3000",
     credentials: true,

@@ -306,6 +306,14 @@ model Apprenant {
   resetToken          String?   @unique
   resetTokenExpiresAt DateTime?
 
+  // Échéance de l'abonnement en cours (renouvellement à date fixe, décision
+  // produit du 2026-08-24) — saisie/mise à jour manuellement par le
+  // formateur (pas de facturation automatique). Null tant qu'aucune date
+  // n'a été fixée (apprenants seedés/créés avant ce champ) : le Cockpit les
+  // affiche à part, ni "à jour" ni "en retard", plutôt que de leur prêter un
+  // statut inventé.
+  abonnementExpireAt DateTime?
+
   groupeId String
   groupe   Groupe @relation(fields: [groupeId], references: [id])
 

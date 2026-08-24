@@ -25,6 +25,7 @@ import { ConfirmPaymentDto } from "./dto/confirm-payment.dto";
 import { CreateGroupeDto } from "./dto/create-groupe.dto";
 import { TrainerGuard } from "../common/trainer.guard";
 import { AdminGuard } from "../common/admin.guard";
+import { FormateurGuard } from "../common/formateur.guard";
 
 // Les vidéos sont bien plus volumineuses que l'audio — Multer bufférise en
 // mémoire (pas de config disque ici, cohérent avec l'upload audio existant),
@@ -100,6 +101,16 @@ export class EvaluationController {
   @Get("attempts")
   listAttemptsForGrading() {
     return this.service.listAttemptsForGrading();
+  }
+
+  // Compte seul, gardé par le matricule du Cockpit Formateur (pas le code
+  // formateur partagé de /evaluation/formateur) — signale la file de
+  // correction des tests d'admission depuis le Cockpit sans donner accès
+  // aux données des candidats via ce guard-là. Voir countAttemptsForGrading.
+  @UseGuards(FormateurGuard)
+  @Get("attempts-pending-count")
+  countAttemptsForGrading() {
+    return this.service.countAttemptsForGrading();
   }
 
   @UseGuards(TrainerGuard)

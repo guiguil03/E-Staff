@@ -1,5 +1,9 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
-import { APPRENANTS, GROUPES } from "./exampleData";
+import { apiGet } from "@/lib/api";
+import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 
 const SESSION_LABELS = ["S1", "S2", "S3", "S4"];
 
@@ -19,22 +23,43 @@ const LINE_STYLES = [
 
 interface Series {
   key: string;
-  points: number[]; // % par séance, une valeur par SESSION_LABELS
+  points: (number | null)[]; // % par séance, une valeur par SESSION_LABELS — null si pas encore noté
   style: (typeof LINE_STYLES)[number];
 }
 
-const SERIES: Series[] = GROUPES.map((g, i) => {
-  const membres = APPRENANTS.filter((a) => a.groupe === g.key);
-  const points = SESSION_LABELS.map((_, si) =>
-    Math.round(membres.reduce((sum, a) => sum + a.history[si].moyenne, 0) / membres.length)
-  );
-  return { key: g.key, points, style: LINE_STYLES[i % LINE_STYLES.length] };
-});
+interface EvolutionApi {
+  seances: number[];
+  series: { cle: string; points: (number | null)[] }[];
+}
 
-// Courbe d'évolution des 6 groupes sur les séances S1→S4, en % (les notes
-// brutes des grilles Oral/Écrit/Posture sont pondérées puis ramenées à un
-// pourcentage — jamais affichées en "/100" sur ce graphique).
+function formateurHeaders(): HeadersInit {
+  const matricule =
+    typeof window !== "undefined" ? sessionStorage.getItem(ACCOUNT_MATRICULE_KEY) : null;
+  return matricule ? { "x-formateur-matricule": matricule } : {};
+}
+
+// Courbe d'évolution des groupes sur les séances 1→4, en % (somme des 5
+// compétences /20 notées à cette séance, ramenée sur 100). Branchée sur la
+// vraie table Notation depuis 2026-08-24 (voir /cockpit/evolution) — un
+// point reste vide (pas de marqueur) tant que la séance correspondante n'a
+// pas ses 5 compétences notées pour au moins un apprenant du groupe.
 export default function GroupEvolutionChart() {
+  const [series, setSeries] = useState<Series[] | "loading" | "erreur">("loading");
+
+  useEffect(() => {
+    apiGet<EvolutionApi>("/cockpit/evolution", formateurHeaders())
+      .then((data) => {
+        setSeries(
+          data.series.map((s, i) => ({
+            key: s.cle,
+            points: s.points,
+            style: LINE_STYLES[i % LINE_STYLES.length],
+          }))
+        );
+      })
+      .catch(() => setSeries("erreur"));
+  }, []);
+
   const width = 1040;
   const height = 260;
   const padding = { top: 16, right: 40, bottom: 28, left: 36 };
@@ -46,14 +71,31 @@ export default function GroupEvolutionChart() {
 
   const gridTicks = [0, 25, 50, 75, 100];
 
-  // Étiquettes de fin de ligne (dernière séance) : évite les chevauchements
-  // en espaçant verticalement les groupes dont les valeurs finales sont proches.
-  const endLabels = SERIES.map((s) => ({
-    key: s.key,
-    style: s.style,
-    value: s.points[s.points.length - 1],
-    y: y(s.points[s.points.length - 1]),
-  })).sort((a, b) => a.y - b.y);
+  if (series === "loading" || series === "erreur") {
+    return (
+      <Reveal>
+        <div className="rounded border border-white/10 bg-obsidianCard p-6">
+          <h3 className="font-display text-lg font-semibold text-white">Évolution des groupes</h3>
+          <p className="mt-4 font-sans text-sm text-white/50">
+            {series === "loading" ? "Chargement..." : "Impossible de charger l'évolution pour le moment."}
+          </p>
+        </div>
+      </Reveal>
+    );
+  }
+
+  const SERIES = series;
+
+  // Étiquettes de fin de ligne (dernière séance notée) : évite les
+  // chevauchements en espaçant verticalement les groupes dont les valeurs
+  // finales sont proches. Un groupe sans aucun point noté n'a pas d'étiquette.
+  const endLabels = SERIES.map((s) => {
+    const lastIndex = [...s.points].map((v, i) => (v !== null ? i : -1)).filter((i) => i >= 0).pop();
+    if (lastIndex === undefined) return null;
+    const value = s.points[lastIndex]!;
+    return { key: s.key, style: s.style, value, y: y(value) };
+  }).filter((l): l is { key: string; style: Series["style"]; value: number; y: number } => l !== null)
+    .sort((a, b) => a.y - b.y);
 
   const MIN_GAP = 16;
   for (let i = 1; i < endLabels.length; i++) {
@@ -107,8 +149,13 @@ export default function GroupEvolutionChart() {
           ))}
 
           {SERIES.map((s) => {
-            const linePath = s.points
-              .map((v, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(v)}`)
+            // Ne relie que les points connus — un trou (séance pas encore
+            // notée) coupe la ligne plutôt que de tracer un faux 0.
+            const known = s.points
+              .map((v, i) => (v !== null ? { v, i } : null))
+              .filter((p): p is { v: number; i: number } => p !== null);
+            const linePath = known
+              .map((p, idx) => `${idx === 0 ? "M" : "L"} ${x(p.i)} ${y(p.v)}`)
               .join(" ");
             return (
               <g key={s.key}>
@@ -121,7 +168,7 @@ export default function GroupEvolutionChart() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
-                {s.points.map((v, i) => (
+                {known.map(({ v, i }) => (
                   <circle
                     key={i}
                     cx={x(i)}
@@ -188,7 +235,7 @@ export default function GroupEvolutionChart() {
                 />
               </svg>
               <span>
-                {s.key} · {s.points[s.points.length - 1]}%
+                {s.key} · {[...s.points].reverse().find((v) => v !== null) ?? "—"}%
               </span>
             </div>
           ))}
