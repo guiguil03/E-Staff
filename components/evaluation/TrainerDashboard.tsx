@@ -38,6 +38,18 @@ interface EssayResponse {
   gradedAt: string | null;
 }
 
+interface EcritOuvertResponse {
+  id: string;
+  reformulationText: string;
+  plurielTexts: string; // JSON string[3]
+  styleText: string;
+  synonymeText: string;
+  redactionText: string;
+  redactionWordCount: number;
+  score: number | null;
+  gradedAt: string | null;
+}
+
 interface Attempt {
   id: string;
   status: string;
@@ -53,6 +65,7 @@ interface Attempt {
   situationResponses: SituationResponse[];
   videoResponses: VideoResponse[];
   essayResponse: EssayResponse | null;
+  ecritOuvertResponse: EcritOuvertResponse | null;
 }
 
 interface Situation {
@@ -106,6 +119,21 @@ interface EssaySubject {
   maxWords: number;
 }
 
+interface PartieOuverteContent {
+  reformulation: { consigne: string; phrase: string; starter: string; corrige: string };
+  pluriels: { mot: string; corrige: string }[];
+  stylistique: { phrase: string; question: string; corrige: string };
+  synonyme: { phrase: string; mot: string; corrige: string };
+  redaction: { sujet: string; consignes: string[]; minWords: number; maxWords: number };
+}
+
+interface PartieOuverteCriterion {
+  key: string;
+  label: string;
+  description: string;
+  maxPoints: number;
+}
+
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
 
 interface GradingCriterion {
@@ -132,12 +160,20 @@ const VIDEO_GRADING_LEVELS = [
   { key: "2", value: 2, label: "Excellent" },
 ] as const;
 
-// Échelons du barème Bloc 2 (voir backend/src/evaluation/commentaire-argumentatif.ts).
+// Échelons de la grille officielle Bloc 2 (grille_evaluation_c1_ecrit.pdf,
+// voir backend/src/evaluation/commentaire-argumentatif.ts) — Insuffisant et
+// Moyen sont des plages (0-1 et 1,5-2,5 pts) sur le document source,
+// exposées ici en 3 valeurs espacées de 0,5 pour choisir la précision sans
+// trahir les bornes ; Bien (3) et Excellent (4) sont des valeurs fixes.
 const ESSAY_GRADING_LEVELS = [
-  { key: "1.25", value: 1.25, label: "Insuffisant" },
-  { key: "2.5", value: 2.5, label: "Passable" },
-  { key: "3.75", value: 3.75, label: "Bon" },
-  { key: "5", value: 5, label: "Excellent" },
+  { key: "0", value: 0, label: "Insuffisant", band: "Insuffisant" },
+  { key: "0.5", value: 0.5, label: "Insuffisant", band: "Insuffisant" },
+  { key: "1", value: 1, label: "Insuffisant", band: "Insuffisant" },
+  { key: "1.5", value: 1.5, label: "Moyen", band: "Moyen" },
+  { key: "2", value: 2, label: "Moyen", band: "Moyen" },
+  { key: "2.5", value: 2.5, label: "Moyen", band: "Moyen" },
+  { key: "3", value: 3, label: "Bien", band: "Bien" },
+  { key: "4", value: 4, label: "Excellent", band: "Excellent" },
 ] as const;
 
 // Code formateur (x-trainer-code) retiré le 2026-08-25 à la demande du
@@ -150,9 +186,13 @@ export default function TrainerDashboard() {
   const [situations, setSituations] = useState<Situation[]>([]);
   const [videoTasks, setVideoTasks] = useState<VideoTask[]>([]);
   const [essaySubjects, setEssaySubjects] = useState<EssaySubject[]>([]);
+  const [partieOuverteContent, setPartieOuverteContent] = useState<PartieOuverteContent | null>(
+    null
+  );
   const [criteria, setCriteria] = useState<GradingCriterion[]>([]);
   const [videoCriteria, setVideoCriteria] = useState<GradingCriterion[]>([]);
   const [essayCriteria, setEssayCriteria] = useState<GradingCriterion[]>([]);
+  const [partieOuverteCriteria, setPartieOuverteCriteria] = useState<PartieOuverteCriterion[]>([]);
   const [listError, setListError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -160,12 +200,18 @@ export default function TrainerDashboard() {
     apiGet<Situation[]>("/evaluation/situations").then(setSituations).catch(() => {});
     apiGet<VideoTask[]>("/evaluation/video-tasks").then(setVideoTasks).catch(() => {});
     apiGet<EssaySubject[]>("/evaluation/essay-subjects").then(setEssaySubjects).catch(() => {});
+    apiGet<PartieOuverteContent>("/evaluation/partie-ouverte")
+      .then(setPartieOuverteContent)
+      .catch(() => {});
     apiGet<GradingCriterion[]>("/evaluation/grading-criteria").then(setCriteria).catch(() => {});
     apiGet<GradingCriterion[]>("/evaluation/video-grading-criteria")
       .then(setVideoCriteria)
       .catch(() => {});
     apiGet<GradingCriterion[]>("/evaluation/essay-grading-criteria")
       .then(setEssayCriteria)
+      .catch(() => {});
+    apiGet<PartieOuverteCriterion[]>("/evaluation/partie-ouverte-grading-criteria")
+      .then(setPartieOuverteCriteria)
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -194,9 +240,13 @@ export default function TrainerDashboard() {
             const gradedSituations = a.situationResponses.filter((r) => r.gradedAt).length;
             const gradedVideos = a.videoResponses.filter((r) => r.gradedAt).length;
             const gradedEssay = a.essayResponse?.gradedAt ? 1 : 0;
-            const graded = gradedSituations + gradedVideos + gradedEssay;
+            const gradedPartieOuverte = a.ecritOuvertResponse?.gradedAt ? 1 : 0;
+            const graded = gradedSituations + gradedVideos + gradedEssay + gradedPartieOuverte;
             const total =
-              a.situationResponses.length + a.videoResponses.length + (a.essayResponse ? 1 : 0);
+              a.situationResponses.length +
+              a.videoResponses.length +
+              (a.essayResponse ? 1 : 0) +
+              (a.ecritOuvertResponse ? 1 : 0);
             return (
               <li key={a.id}>
                 <button
@@ -230,9 +280,11 @@ export default function TrainerDashboard() {
             situations={situations}
             videoTasks={videoTasks}
             essaySubjects={essaySubjects}
+            partieOuverteContent={partieOuverteContent}
             criteria={criteria}
             videoCriteria={videoCriteria}
             essayCriteria={essayCriteria}
+            partieOuverteCriteria={partieOuverteCriteria}
             onGraded={refreshList}
           />
         ) : (
@@ -248,7 +300,8 @@ export default function TrainerDashboard() {
 type CarouselItem =
   | { type: "situation"; response: SituationResponse }
   | { type: "video"; response: VideoResponse }
-  | { type: "essay"; response: EssayResponse };
+  | { type: "essay"; response: EssayResponse }
+  | { type: "partie-ouverte"; response: EcritOuvertResponse };
 
 // Carrousel plutôt qu'un long scroll vertical (rendus empilés — 5 mises en
 // situation + 2 vidéos + 1 essai, chacun avec son support (audio/vidéo/
@@ -262,21 +315,28 @@ function AttemptDetail({
   situations,
   videoTasks,
   essaySubjects,
+  partieOuverteContent,
   criteria,
   videoCriteria,
   essayCriteria,
+  partieOuverteCriteria,
   onGraded,
 }: {
   attempt: Attempt;
   situations: Situation[];
   videoTasks: VideoTask[];
   essaySubjects: EssaySubject[];
+  partieOuverteContent: PartieOuverteContent | null;
   criteria: GradingCriterion[];
   videoCriteria: GradingCriterion[];
   essayCriteria: GradingCriterion[];
+  partieOuverteCriteria: PartieOuverteCriterion[];
   onGraded: () => void;
 }) {
   const items: CarouselItem[] = [
+    ...(attempt.ecritOuvertResponse
+      ? [{ type: "partie-ouverte" as const, response: attempt.ecritOuvertResponse }]
+      : []),
     ...attempt.situationResponses
       .slice()
       .sort((a, b) => a.situationIndex - b.situationIndex)
@@ -346,7 +406,9 @@ function AttemptDetail({
                     ? `S${item.response.situationIndex}`
                     : item.type === "video"
                       ? `V${item.response.taskIndex}`
-                      : "E";
+                      : item.type === "essay"
+                        ? "E"
+                        : "P2";
                 const graded = Boolean(item.response.gradedAt);
                 return (
                   <button
@@ -394,12 +456,20 @@ function AttemptDetail({
               criteria={videoCriteria}
               onGraded={handleGraded}
             />
-          ) : (
+          ) : current.type === "essay" ? (
             <EssayGrader
               key={current.response.id}
               response={current.response}
               subject={essaySubjects.find((s) => s.key === current.response.subjectKey)}
               criteria={essayCriteria}
+              onGraded={handleGraded}
+            />
+          ) : (
+            <PartieOuverteGrader
+              key={current.response.id}
+              response={current.response}
+              content={partieOuverteContent}
+              criteria={partieOuverteCriteria}
               onGraded={handleGraded}
             />
           )}
@@ -856,6 +926,173 @@ function EssayGrader({
 
       <p className="mt-4 font-mono text-xs uppercase tracking-widest text-white/50">
         Score prévisionnel : {previewScore.toFixed(2)} / 20.00
+      </p>
+
+      {error && <p className="mt-2 text-xs text-accent">{error}</p>}
+
+      <div className="mt-4">
+        <Button variant="ghostDark" onClick={save} disabled={saving || !allSelected}>
+          {saving ? "Enregistrement..." : "Enregistrer la note"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Bloc 1 — Partie 2 : contrairement aux autres blocs (échelons fixes), les
+// critères ont chacun leur propre maxPoints (voir partie-ouverte.ts) — les
+// boutons de notation sont donc générés dynamiquement de 0 à maxPoints par
+// pas de 0,5 plutôt que de réutiliser une échelle commune.
+function PartieOuverteGrader({
+  response,
+  content,
+  criteria,
+  onGraded,
+}: {
+  response: EcritOuvertResponse;
+  content: PartieOuverteContent | null;
+  criteria: PartieOuverteCriterion[];
+  onGraded: () => void;
+}) {
+  const [points, setPoints] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const allSelected = criteria.every((c) => points[c.key] !== undefined);
+  const previewScore = criteria.reduce((sum, c) => sum + (points[c.key] ?? 0), 0);
+  const plurielTexts: string[] = (() => {
+    try {
+      const parsed = JSON.parse(response.plurielTexts);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  })();
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPost(`/evaluation/partie-ouverte-responses/${response.id}/grade`, {
+        criteria: points,
+      });
+      onGraded();
+    } catch {
+      setError("Échec de l'enregistrement de la note.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="rounded border border-white/10 bg-obsidianCard p-4">
+      <p className="font-mono text-xs uppercase tracking-widest text-accent">
+        Bloc 1 — Partie 2 : Questions ouvertes et rédaction
+        {response.gradedAt && ` — notée (${response.score}/10)`}
+      </p>
+
+      <div className="mt-3 space-y-3 font-sans text-sm text-white/80">
+        <div>
+          <p className="font-semibold text-white/90">Reformulation</p>
+          <p className="mt-1 rounded border border-white/10 bg-obsidian p-2">
+            {response.reformulationText || "—"}
+          </p>
+          {content && (
+            <p className="mt-1 font-mono text-[11px] text-white/40">
+              Corrigé : {content.reformulation.corrige}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <p className="font-semibold text-white/90">Pluriels</p>
+          <ul className="mt-1 space-y-1">
+            {plurielTexts.map((t, i) => (
+              <li key={i} className="rounded border border-white/10 bg-obsidian p-2">
+                {content?.pluriels[i]?.mot} → {t || "—"}
+                {content && (
+                  <span className="ml-2 font-mono text-[11px] text-white/40">
+                    (corrigé : {content.pluriels[i]?.corrige})
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div>
+          <p className="font-semibold text-white/90">Figure de style</p>
+          <p className="mt-1 rounded border border-white/10 bg-obsidian p-2">
+            {response.styleText || "—"}
+          </p>
+          {content && (
+            <p className="mt-1 font-mono text-[11px] text-white/40">
+              Corrigé : {content.stylistique.corrige}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <p className="font-semibold text-white/90">Synonyme</p>
+          <p className="mt-1 rounded border border-white/10 bg-obsidian p-2">
+            {response.synonymeText || "—"}
+          </p>
+          {content && (
+            <p className="mt-1 font-mono text-[11px] text-white/40">
+              Corrigé : {content.synonyme.corrige}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <p className="font-semibold text-white/90">
+            Rédaction ({response.redactionWordCount} mots)
+          </p>
+          <p className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap rounded border border-white/10 bg-obsidian p-2">
+            {response.redactionText || "—"}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 space-y-5">
+        {criteria.map((c) => {
+          const levelValues: number[] = [];
+          for (let v = 0; v <= c.maxPoints + 1e-9; v += 0.5) {
+            levelValues.push(Math.round(v * 2) / 2);
+          }
+          const selected = points[c.key];
+          return (
+            <div key={c.key}>
+              <p className="font-sans text-sm font-semibold text-white">{c.label}</p>
+              <p className="text-xs text-white/50">{c.description}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {levelValues.map((v) => (
+                  <label
+                    key={v}
+                    className={`cursor-pointer rounded border px-2.5 py-1.5 text-center text-xs transition-colors ${
+                      selected === v
+                        ? "border-accent bg-accent/10 text-accent"
+                        : "border-white/15 text-white/70 hover:border-white/30"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name={`${response.id}-${c.key}`}
+                      className="sr-only"
+                      checked={selected === v}
+                      onChange={() => setPoints((prev) => ({ ...prev, [c.key]: v }))}
+                    />
+                    {v.toFixed(1)}
+                  </label>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-4 font-mono text-xs uppercase tracking-widest text-white/50">
+        Score prévisionnel : {previewScore.toFixed(2)} / 10.00
       </p>
 
       {error && <p className="mt-2 text-xs text-accent">{error}</p>}

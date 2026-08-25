@@ -21,6 +21,8 @@ import { UploadVideoDto } from "./dto/upload-video.dto";
 import { GradeVideoDto } from "./dto/grade-video.dto";
 import { SubmitEssayDto } from "./dto/submit-essay.dto";
 import { GradeEssayDto } from "./dto/grade-essay.dto";
+import { SubmitPartieOuverteDto } from "./dto/submit-partie-ouverte.dto";
+import { GradePartieOuverteDto } from "./dto/grade-partie-ouverte.dto";
 import { ValidateContractDto } from "./dto/validate-contract.dto";
 import { SubmitPaymentReferenceDto } from "./dto/submit-payment-reference.dto";
 import { ConfirmPaymentDto } from "./dto/confirm-payment.dto";
@@ -76,6 +78,11 @@ export class EvaluationController {
     return this.service.getEssaySubjects();
   }
 
+  @Get("partie-ouverte")
+  getPartieOuverteContent() {
+    return this.service.getPartieOuverteContent();
+  }
+
   @Post("candidats")
   createCandidat(@Body() dto: CreateCandidatDto) {
     return this.service.createCandidat(dto);
@@ -89,6 +96,11 @@ export class EvaluationController {
   @Post("attempts/:id/essay")
   submitEssay(@Param("id") id: string, @Body() dto: SubmitEssayDto) {
     return this.service.submitEssay(id, dto);
+  }
+
+  @Post("attempts/:id/partie-ouverte")
+  submitPartieOuverte(@Param("id") id: string, @Body() dto: SubmitPartieOuverteDto) {
+    return this.service.submitPartieOuverte(id, dto);
   }
 
   @Post("attempts/:id/situations")
@@ -166,6 +178,11 @@ export class EvaluationController {
     return this.service.getEssayGradingCriteria();
   }
 
+  @Get("partie-ouverte-grading-criteria")
+  getPartieOuverteGradingCriteria() {
+    return this.service.getPartieOuverteGradingCriteria();
+  }
+
   @Post("situation-responses/:id/grade")
   gradeSituationResponse(
     @Param("id") id: string,
@@ -182,6 +199,11 @@ export class EvaluationController {
   @Post("essay-responses/:id/grade")
   gradeEssayResponse(@Param("id") id: string, @Body() dto: GradeEssayDto) {
     return this.service.gradeEssayResponse(id, dto.criteria);
+  }
+
+  @Post("partie-ouverte-responses/:id/grade")
+  gradePartieOuverte(@Param("id") id: string, @Body() dto: GradePartieOuverteDto) {
+    return this.service.gradePartieOuverte(id, dto.criteria);
   }
 
   @Get("situation-responses/:id/audio")

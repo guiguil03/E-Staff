@@ -12,6 +12,7 @@ import { StorageService } from "../common/storage.service";
 import { CreateCandidatDto } from "./dto/create-candidat.dto";
 import { SubmitAnswersDto } from "./dto/submit-answers.dto";
 import { SubmitEssayDto } from "./dto/submit-essay.dto";
+import { SubmitPartieOuverteDto } from "./dto/submit-partie-ouverte.dto";
 import { ValidateContractDto } from "./dto/validate-contract.dto";
 import { SubmitPaymentReferenceDto } from "./dto/submit-payment-reference.dto";
 import { ConfirmPaymentDto } from "./dto/confirm-payment.dto";
@@ -37,6 +38,10 @@ import {
   ESSAY_GRADING_LEVELS,
   ESSAY_SUBJECTS,
 } from "./commentaire-argumentatif";
+import {
+  PARTIE_OUVERTE_CONTENT,
+  PARTIE_OUVERTE_GRADING_CRITERIA,
+} from "./partie-ouverte";
 import { generateContractPdf } from "./contract-pdf";
 
 const ALLOWED_LEVEL_VALUES: number[] = GRADING_LEVELS.map((l) => l.value);
@@ -45,6 +50,10 @@ const ALLOWED_ESSAY_LEVEL_VALUES: number[] = ESSAY_GRADING_LEVELS.map((l) => l.v
 
 const REQUIRED_SITUATION_COUNT = 5;
 const REQUIRED_VIDEO_COUNT = 2;
+// Partie 1 (QCM) et Partie 2 (ouvert) du Bloc 1 pèsent chacune 10 pts sur
+// les 20 du bloc — voir questions.ts (scoreQcm(..., 10)) et
+// partie-ouverte.ts (PARTIE_OUVERTE_GRADING_CRITERIA, somme = 10).
+const LEXIQUE_QCM_MAX_SCORE = 10;
 
 // Nombre max d'apprenants par groupe (6 groupes A-F × 5 = 30, voir Cockpit
 // Formateur) — utilisé pour afficher les places restantes à l'admin lors de
@@ -123,6 +132,14 @@ export class EvaluationService {
     return ESSAY_GRADING_CRITERIA;
   }
 
+  getPartieOuverteContent() {
+    return PARTIE_OUVERTE_CONTENT;
+  }
+
+  getPartieOuverteGradingCriteria() {
+    return PARTIE_OUVERTE_GRADING_CRITERIA;
+  }
+
   getQuestions() {
     // On ne renvoie jamais correctChoice au front.
     const strip = (q: { id: string; prompt: string; choices: string[] }) => ({
@@ -151,6 +168,7 @@ export class EvaluationService {
         situationResponses: true,
         videoResponses: true,
         essayResponse: true,
+        ecritOuvertResponse: true,
         candidat: true,
         apprenant: true,
       },
@@ -172,6 +190,7 @@ export class EvaluationService {
 
     const complete =
       attempt.lexiqueAnswers !== null &&
+      attempt.ecritOuvertResponse !== null &&
       attempt.oralAnswers !== null &&
       attempt.situationResponses.length >= REQUIRED_SITUATION_COUNT &&
       attempt.videoResponses.length >= REQUIRED_VIDEO_COUNT &&
@@ -197,13 +216,13 @@ export class EvaluationService {
 
     const data: {
       lexiqueAnswers?: string;
-      lexiqueScore?: number;
+      lexiqueQcmScore?: number;
       oralAnswers?: string;
       oralScore?: number;
     } = {};
     if (dto.lexiqueAnswers) {
       data.lexiqueAnswers = JSON.stringify(dto.lexiqueAnswers);
-      data.lexiqueScore = scoreQcm(LEXIQUE_QUESTIONS, dto.lexiqueAnswers);
+      data.lexiqueQcmScore = scoreQcm(LEXIQUE_QUESTIONS, dto.lexiqueAnswers, LEXIQUE_QCM_MAX_SCORE);
     }
     if (dto.oralAnswers) {
       data.oralAnswers = JSON.stringify(dto.oralAnswers);
@@ -381,7 +400,7 @@ export class EvaluationService {
       const value = criteria[c.key];
       if (typeof value !== "number" || !ALLOWED_ESSAY_LEVEL_VALUES.includes(value)) {
         throw new BadRequestException(
-          `Critère "${c.label}" : merci de sélectionner un échelon valide (1.25 / 2.5 / 3.75 / 5).`
+          `Critère "${c.label}" : merci de sélectionner un échelon valide (0 / 0.5 / 1 / 1.5 / 2 / 2.5 / 3 / 4).`
         );
       }
     }
@@ -402,6 +421,75 @@ export class EvaluationService {
     return this.prisma.essayResponse.findUnique({ where: { id: essayResponseId } });
   }
 
+  // Bloc 1 — Partie 2 (questions ouvertes + rédaction), voir submitEssay
+  // pour le même principe (upsert, remise à zéro de la note si re-soumis).
+  async submitPartieOuverte(attemptId: string, dto: SubmitPartieOuverteDto) {
+    const attempt = await this.getAttemptOrThrow(attemptId);
+    if (attempt.status !== "en_cours") {
+      throw new BadRequestException("Cette tentative est déjà complète.");
+    }
+
+    const redactionWordCount = dto.redactionText.trim().split(/\s+/).filter(Boolean).length;
+
+    const response = await this.prisma.ecritOuvertResponse.upsert({
+      where: { attemptId },
+      create: {
+        attemptId,
+        reformulationText: dto.reformulationText,
+        plurielTexts: JSON.stringify(dto.plurielTexts),
+        styleText: dto.styleText,
+        synonymeText: dto.synonymeText,
+        redactionText: dto.redactionText,
+        redactionWordCount,
+      },
+      update: {
+        reformulationText: dto.reformulationText,
+        plurielTexts: JSON.stringify(dto.plurielTexts),
+        styleText: dto.styleText,
+        synonymeText: dto.synonymeText,
+        redactionText: dto.redactionText,
+        redactionWordCount,
+        score: null,
+        gradedCriteria: null,
+        gradedAt: null,
+      },
+    });
+    await this.maybeFinalize(attemptId);
+    return response;
+  }
+
+  async gradePartieOuverte(ecritOuvertResponseId: string, criteria: Record<string, number>) {
+    const response = await this.prisma.ecritOuvertResponse.findUnique({
+      where: { id: ecritOuvertResponseId },
+    });
+    if (!response) throw new NotFoundException("Réponse introuvable.");
+
+    for (const c of PARTIE_OUVERTE_GRADING_CRITERIA) {
+      const value = criteria[c.key];
+      const isValidStep = typeof value === "number" && Math.round(value * 2) === value * 2;
+      if (!isValidStep || value < 0 || value > c.maxPoints) {
+        throw new BadRequestException(
+          `Critère "${c.label}" : merci de saisir une note entre 0 et ${c.maxPoints}, par pas de 0,5.`
+        );
+      }
+    }
+
+    const score = PARTIE_OUVERTE_GRADING_CRITERIA.reduce((total, c) => total + criteria[c.key], 0);
+
+    await this.prisma.ecritOuvertResponse.update({
+      where: { id: ecritOuvertResponseId },
+      data: {
+        score,
+        gradedCriteria: JSON.stringify(criteria),
+        gradedAt: new Date(),
+      },
+    });
+
+    await this.recomputeAttemptIfComplete(response.attemptId);
+
+    return this.prisma.ecritOuvertResponse.findUnique({ where: { id: ecritOuvertResponseId } });
+  }
+
   // ---- Formateur --------------------------------------------------------
 
   async listAttemptsForGrading() {
@@ -412,6 +500,7 @@ export class EvaluationService {
         situationResponses: true,
         videoResponses: true,
         essayResponse: true,
+        ecritOuvertResponse: true,
       },
       orderBy: { submittedAt: "asc" },
     });
@@ -520,11 +609,13 @@ export class EvaluationService {
       (r) => r.gradedAt !== null
     );
     const essayGraded = attempt.essayResponse?.gradedAt !== null && attempt.essayResponse !== null;
+    const ecritOuvertGraded =
+      attempt.ecritOuvertResponse?.gradedAt !== null && attempt.ecritOuvertResponse !== null;
 
     const situationsComplete = gradedSituations.length >= REQUIRED_SITUATION_COUNT;
     const videosComplete = gradedVideos.length >= REQUIRED_VIDEO_COUNT;
 
-    if (!situationsComplete || !videosComplete || !essayGraded) {
+    if (!situationsComplete || !videosComplete || !essayGraded || !ecritOuvertGraded) {
       if (attempt.status === "soumis") {
         await this.prisma.evaluationAttempt.update({
           where: { id: attemptId },
@@ -537,8 +628,11 @@ export class EvaluationService {
     const situationsScore = gradedSituations.reduce((sum, r) => sum + (r.score ?? 0), 0);
     const videoScore = gradedVideos.reduce((sum, r) => sum + (r.score ?? 0), 0);
     const essayScore = attempt.essayResponse!.score ?? 0;
+    // lexiqueScore final = QCM (Partie 1, /10, auto-corrigé) + Partie 2
+    // (questions ouvertes + rédaction, /10, notée par le formateur).
+    const lexiqueScore = (attempt.lexiqueQcmScore ?? 0) + (attempt.ecritOuvertResponse!.score ?? 0);
     const totalScore = computeTotalScore([
-      attempt.lexiqueScore,
+      lexiqueScore,
       attempt.oralScore,
       situationsScore,
       videoScore,
@@ -549,6 +643,7 @@ export class EvaluationService {
     await this.prisma.evaluationAttempt.update({
       where: { id: attemptId },
       data: {
+        lexiqueScore,
         situationsScore,
         videoScore,
         essayScore,

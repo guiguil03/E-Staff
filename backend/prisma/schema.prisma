@@ -170,9 +170,16 @@ model EvaluationAttempt {
   lexiqueAnswers String?
   oralAnswers    String?
 
-  // Scores /20 par épreuve. lexiqueScore et oralScore calculés
-  // automatiquement à la soumission ; situationsScore/videoScore/essayScore
-  // alimentés par le formateur au fur et à mesure de la correction.
+  // Scores /20 par épreuve. Le Bloc 1 (lexiqueScore) est désormais composite
+  // (2026-08-25) : Partie 1 = QCM (lexiqueQcmScore, /10, calculé
+  // automatiquement à la soumission des réponses) + Partie 2 = questions
+  // ouvertes/rédaction (voir EcritOuvertResponse, /10, notée par le
+  // formateur) — lexiqueScore = lexiqueQcmScore + EcritOuvertResponse.score,
+  // rempli seulement une fois la Partie 2 corrigée (même logique que
+  // situationsScore/videoScore/essayScore, alimentés au fur et à mesure de
+  // la correction). oralScore reste calculé automatiquement à la soumission
+  // (Bloc 4 encore un QCM pur).
+  lexiqueQcmScore Float?
   lexiqueScore    Float?
   oralScore       Float?
   situationsScore Float?
@@ -220,9 +227,10 @@ model EvaluationAttempt {
 
   createdAt DateTime @default(now())
 
-  situationResponses SituationResponse[]
-  videoResponses     VideoResponse[]
-  essayResponse      EssayResponse?
+  situationResponses  SituationResponse[]
+  videoResponses      VideoResponse[]
+  essayResponse       EssayResponse?
+  ecritOuvertResponse EcritOuvertResponse?
 }
 
 // Une réponse audio à une des 10 situations professionnelles (le candidat
@@ -292,6 +300,31 @@ model EssayResponse {
 
   score          Float? // 0 à 20
   gradedCriteria String? // JSON des critères cochés par le formateur
+  gradedAt       DateTime?
+
+  createdAt DateTime @default(now())
+}
+
+// Bloc 1 — "Partie 2" (questions ouvertes + rédaction, 10 pts sur les 20 du
+// bloc — voir LEXIQUE_QUESTIONS/scoreQcm pour la "Partie 1", QCM auto-
+// corrigé, 10 pts). Une seule ligne par tentative comme EssayResponse : le
+// candidat répond en une fois à tous les exercices (reformulation, 3
+// pluriels, figure de style, synonyme, rédaction 150-200 mots), notés
+// globalement par le formateur — voir src/evaluation/partie-ouverte.ts.
+model EcritOuvertResponse {
+  id        String            @id @default(cuid())
+  attemptId String            @unique
+  attempt   EvaluationAttempt @relation(fields: [attemptId], references: [id])
+
+  reformulationText String
+  plurielTexts      String // JSON string[3]
+  styleText         String
+  synonymeText      String
+  redactionText     String
+  redactionWordCount Int
+
+  score          Float? // 0 à 10
+  gradedCriteria String? // JSON des critères notés par le formateur
   gradedAt       DateTime?
 
   createdAt DateTime @default(now())

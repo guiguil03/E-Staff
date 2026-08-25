@@ -72,11 +72,20 @@ interface EssaySubject {
   maxWords: number;
 }
 
+interface PartieOuverteContent {
+  reformulation: { consigne: string; phrase: string; starter: string };
+  pluriels: { mot: string }[];
+  stylistique: { phrase: string; question: string };
+  synonyme: { phrase: string; mot: string };
+  redaction: { sujet: string; consignes: string[]; minWords: number; maxWords: number };
+}
+
 type Step =
   | "coordonnees"
   | "intro"
   | "menu"
   | "lexique"
+  | "partie-ouverte"
   | "oral"
   | "select-situations"
   | "record-situations"
@@ -209,6 +218,9 @@ export default function EvaluationFlow() {
   const [situations, setSituations] = useState<Situation[]>([]);
   const [videoTasks, setVideoTasks] = useState<VideoTask[]>([]);
   const [essaySubjects, setEssaySubjects] = useState<EssaySubject[]>([]);
+  const [partieOuverteContent, setPartieOuverteContent] = useState<PartieOuverteContent | null>(
+    null
+  );
   const [lexiqueAnswers, setLexiqueAnswers] = useState<Record<string, string>>({});
   const [oralAnswers, setOralAnswers] = useState<Record<string, string>>({});
   const [selectedSituations, setSelectedSituations] = useState<number[]>([]);
@@ -218,6 +230,11 @@ export default function EvaluationFlow() {
   const [selectedOptionKey, setSelectedOptionKey] = useState<string | null>(null);
   const [selectedEssaySubjectKey, setSelectedEssaySubjectKey] = useState<string | null>(null);
   const [essayText, setEssayText] = useState("");
+  const [reformulationText, setReformulationText] = useState("");
+  const [plurielTexts, setPlurielTexts] = useState(["", "", ""]);
+  const [styleText, setStyleText] = useState("");
+  const [synonymeText, setSynonymeText] = useState("");
+  const [redactionText, setRedactionText] = useState("");
 
   // Les 5 blocs construits sont indépendants et se font dans l'ordre choisi
   // par le candidat depuis le menu (step "menu") — ces flags pilotent
@@ -243,6 +260,9 @@ export default function EvaluationFlow() {
     apiGet<EssaySubject[]>("/evaluation/essay-subjects")
       .then(setEssaySubjects)
       .catch(() => setError("Impossible de charger les sujets de commentaire argumenté."));
+    apiGet<PartieOuverteContent>("/evaluation/partie-ouverte")
+      .then(setPartieOuverteContent)
+      .catch(() => setError("Impossible de charger la partie 2 du Bloc 1."));
   }, []);
 
   async function handleCoordonneesSubmit(e: FormEvent) {
@@ -279,6 +299,28 @@ export default function EvaluationFlow() {
     setError(null);
     try {
       await apiPost(`/evaluation/attempts/${attemptId}/submit`, { lexiqueAnswers });
+      // Le Bloc 1 QCM enchaîne directement sur la Partie 2 (questions
+      // ouvertes) — lexiqueSubmitted ne passe à true qu'une fois les deux
+      // parties envoyées (voir handlePartieOuverteSubmit).
+      setStep("partie-ouverte");
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Une erreur est survenue à la soumission."
+      );
+    }
+  }
+
+  async function handlePartieOuverteSubmit() {
+    if (!attemptId) return;
+    setError(null);
+    try {
+      await apiPost(`/evaluation/attempts/${attemptId}/partie-ouverte`, {
+        reformulationText,
+        plurielTexts,
+        styleText,
+        synonymeText,
+        redactionText,
+      });
       setLexiqueSubmitted(true);
       setStep("menu");
     } catch (err) {
@@ -625,9 +667,151 @@ export default function EvaluationFlow() {
           answers={lexiqueAnswers}
           onChange={(id, v) => setLexiqueAnswers((a) => ({ ...a, [id]: v }))}
           onNext={handleLexiqueSubmit}
-          nextLabel="Valider ce bloc"
+          nextLabel="Continuer vers la partie 2"
         />
         {error && <p className="mt-4 text-sm text-accent">{error}</p>}
+      </div>
+    );
+  }
+
+  if (step === "partie-ouverte") {
+    if (!partieOuverteContent) {
+      return <p className="text-center text-white/60">Chargement de la partie 2...</p>;
+    }
+    const redactionWordCount = redactionText.trim().split(/\s+/).filter(Boolean).length;
+    const redactionWordCountOk =
+      redactionWordCount >= partieOuverteContent.redaction.minWords &&
+      redactionWordCount <= partieOuverteContent.redaction.maxWords;
+    const partieOuverteComplete =
+      reformulationText.trim().length > 0 &&
+      plurielTexts.every((t) => t.trim().length > 0) &&
+      styleText.trim().length > 0 &&
+      synonymeText.trim().length > 0 &&
+      redactionText.trim().length > 0;
+
+    return (
+      <div className="mx-auto max-w-2xl rounded border border-white/10 bg-obsidianCard p-6">
+        <button
+          onClick={() => setStep("menu")}
+          className="mb-3 block font-sans text-xs text-accent hover:underline"
+        >
+          ← Retour au menu
+        </button>
+        <p className="font-mono text-xs uppercase tracking-widest text-accent">
+          Bloc 1 — Partie 2 : Questions ouvertes et rédaction
+        </p>
+
+        <div className="mt-6">
+          <h3 className="font-display text-base font-semibold text-white">
+            Exercice 1 — Reformulation & Inversion
+          </h3>
+          <p className="mt-2 font-sans text-sm text-white/80">
+            {partieOuverteContent.reformulation.consigne}
+          </p>
+          <p className="mt-2 font-sans text-sm italic text-white/60">
+            « {partieOuverteContent.reformulation.phrase} »
+          </p>
+          <div className="mt-3 flex items-start gap-2">
+            <span className="mt-2 shrink-0 font-sans text-sm text-white/80">
+              {partieOuverteContent.reformulation.starter}
+            </span>
+            <textarea
+              value={reformulationText}
+              onChange={(e) => setReformulationText(e.target.value)}
+              rows={2}
+              className="w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
+            />
+          </div>
+
+          <p className="mt-5 font-sans text-sm text-white/80">
+            Mettez les termes suivants au pluriel :
+          </p>
+          <div className="mt-2 space-y-2">
+            {partieOuverteContent.pluriels.map((p, i) => (
+              <div key={p.mot} className="flex items-center gap-2">
+                <span className="w-40 shrink-0 font-sans text-sm text-white/70">{p.mot} →</span>
+                <input
+                  value={plurielTexts[i]}
+                  onChange={(e) =>
+                    setPlurielTexts((arr) => arr.map((t, idx) => (idx === i ? e.target.value : t)))
+                  }
+                  className="w-full rounded border border-white/20 bg-obsidian px-3 py-1.5 font-sans text-sm text-white outline-none focus:border-accent"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6 border-t border-white/10 pt-6">
+          <h3 className="font-display text-base font-semibold text-white">
+            Exercice 2 — Stylistique
+          </h3>
+          <p className="mt-2 font-sans text-sm italic text-white/60">
+            {partieOuverteContent.stylistique.phrase}
+          </p>
+          <p className="mt-2 font-sans text-sm text-white/80">
+            {partieOuverteContent.stylistique.question}
+          </p>
+          <input
+            value={styleText}
+            onChange={(e) => setStyleText(e.target.value)}
+            className="mt-2 w-full rounded border border-white/20 bg-obsidian px-3 py-1.5 font-sans text-sm text-white outline-none focus:border-accent"
+          />
+
+          <p className="mt-5 font-sans text-sm text-white/80">
+            Proposez un synonyme soutenu pour remplacer le mot «&nbsp;
+            {partieOuverteContent.synonyme.mot}&nbsp;» dans la phrase&nbsp;:
+          </p>
+          <p className="mt-1 font-sans text-sm italic text-white/60">
+            {partieOuverteContent.synonyme.phrase}
+          </p>
+          <input
+            value={synonymeText}
+            onChange={(e) => setSynonymeText(e.target.value)}
+            className="mt-2 w-full rounded border border-white/20 bg-obsidian px-3 py-1.5 font-sans text-sm text-white outline-none focus:border-accent"
+          />
+        </div>
+
+        <div className="mt-6 border-t border-white/10 pt-6">
+          <h3 className="font-display text-base font-semibold text-white">
+            Exercice 3 — Expression écrite argumentée
+          </h3>
+          <p className="mt-2 font-sans text-sm text-white/80">
+            {partieOuverteContent.redaction.sujet}
+          </p>
+          <ul className="mt-2 list-inside list-disc font-sans text-xs text-white/60">
+            {partieOuverteContent.redaction.consignes.map((c) => (
+              <li key={c}>{c}</li>
+            ))}
+          </ul>
+          <textarea
+            value={redactionText}
+            onChange={(e) => setRedactionText(e.target.value)}
+            rows={10}
+            placeholder="Rédigez votre réponse ici..."
+            className="mt-3 w-full rounded border border-white/20 bg-obsidian px-4 py-3 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
+          />
+          <p
+            className={`mt-2 font-mono text-xs ${
+              redactionWordCountOk ? "text-success" : "text-white/50"
+            }`}
+          >
+            {redactionWordCount} mots (entre {partieOuverteContent.redaction.minWords} et{" "}
+            {partieOuverteContent.redaction.maxWords} attendus)
+          </p>
+        </div>
+
+        {error && <p className="mt-4 text-sm text-accent">{error}</p>}
+
+        <div className="mt-6">
+          <Button
+            variant="dark"
+            onClick={handlePartieOuverteSubmit}
+            disabled={!partieOuverteComplete}
+          >
+            Valider ce bloc
+          </Button>
+        </div>
       </div>
     );
   }
