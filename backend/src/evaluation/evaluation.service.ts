@@ -909,6 +909,7 @@ export class EvaluationService {
       id: g.id,
       cle: g.cle,
       label: g.label,
+      typeCours: g.typeCours,
       placesRestantes: Math.max(0, MAX_APPRENANTS_PAR_GROUPE - g._count.apprenants),
     }));
   }

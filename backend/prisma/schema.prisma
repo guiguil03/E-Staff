@@ -349,6 +349,13 @@ model Groupe {
   formateurId String?
   formateur   Formateur? @relation(fields: [formateurId], references: [id])
 
+  // Offre/programme suivi par ce groupe (ex. "DELF/DALF", "TEF Canada",
+  // "DFP Affaires", "FOL", "Studio Métier — Closer"...) — texte libre,
+  // pas d'enum fermé tant que le catalogue réel des offres n'est pas
+  // stabilisé côté produit. Nullable : les 6 groupes A-F existants n'ont pas
+  // ce type renseigné (seedés avant ce champ).
+  typeCours String?
+
   apprenants Apprenant[]
   seances    Seance[]
 }

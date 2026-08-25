@@ -236,6 +236,17 @@ export class RhService {
     });
   }
 
+  async updateGroupeTypeCours(groupeId: string, typeCours: string | null) {
+    const groupe = await this.prisma.groupe.findUnique({
+      where: { id: groupeId },
+    });
+    if (!groupe) throw new NotFoundException('Groupe introuvable.');
+    return this.prisma.groupe.update({
+      where: { id: groupeId },
+      data: { typeCours },
+    });
+  }
+
   // Comparatif réel — moyenne des groupes que chaque formateur encadre
   // (réutilise le calcul de moyenne du Cockpit Formateur, voir
   // CockpitService.getGroupes). Un formateur sans groupe assigné, ou dont
@@ -272,5 +283,53 @@ export class RhService {
         moyenne,
       };
     });
+  }
+
+  // ---- Cycle complet — vue unifiée recrutement -> formation -> production -
+  // Une ligne par candidat, du dépôt de sa candidature jusqu'à son statut
+  // actuel — assemble ce qui existe déjà (EvaluationAttempt, Apprenant,
+  // Groupe, Formateur) plutôt que d'inventer un nouveau modèle. La colonne
+  // "production" reste explicitement vide (pas de module de staffing
+  // client — voir agentsEnProductionActive dans getVueEnsemble) : la ligne
+  // existe pour montrer où ce candidat s'arrête dans le cycle aujourd'hui,
+  // pas pour prétendre savoir où il travaille.
+  async getCycleComplet() {
+    const attempts = await this.prisma.evaluationAttempt.findMany({
+      include: {
+        candidat: true,
+        apprenant: { include: { groupe: { include: { formateur: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return attempts.map((a) => ({
+      attemptId: a.id,
+      candidat: {
+        firstName: a.candidat.firstName,
+        lastName: a.candidat.lastName,
+        email: a.candidat.email,
+        phone: a.candidat.phone,
+      },
+      coordonneesRecuesLe: a.candidat.createdAt,
+      testStatut: a.status,
+      testSoumisLe: a.submittedAt,
+      totalScore: a.totalScore,
+      tier: a.tier,
+      contratEnvoyeLe: a.contractSentAt,
+      paiementConfirmeLe: a.paymentConfirmedAt,
+      paiementReference: a.paymentReference,
+      apprenant: a.apprenant
+        ? {
+            matricule: a.apprenant.matricule,
+            groupeLabel: a.apprenant.groupe.label,
+            typeCours: a.apprenant.groupe.typeCours,
+            formateurNom: a.apprenant.groupe.formateur
+              ? `${a.apprenant.groupe.formateur.prenom} ${a.apprenant.groupe.formateur.nom}`
+              : null,
+          }
+        : null,
+      // Bientôt disponible — voir note ci-dessus.
+      production: null as null,
+    }));
   }
 }

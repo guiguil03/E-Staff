@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
-import { apiGet, apiPostAuthed } from "@/lib/api";
+import { apiGet, apiPostAuthed, apiPut } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 
 interface GroupeAvecPlaces {
   id: string;
   cle: string;
   label: string;
+  typeCours: string | null;
   placesRestantes: number;
 }
 
@@ -30,11 +31,17 @@ export default function GroupesPanel() {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [typeCoursDrafts, setTypeCoursDrafts] = useState<Record<string, string>>({});
 
   function refresh() {
     setGroupes("loading");
     apiGet<GroupeAvecPlaces[]>("/evaluation/groupes-avec-places", adminHeaders())
-      .then(setGroupes)
+      .then((list) => {
+        setGroupes(list);
+        setTypeCoursDrafts(
+          Object.fromEntries(list.map((g) => [g.id, g.typeCours ?? ""]))
+        );
+      })
       .catch(() => setGroupes("erreur"));
   }
 
@@ -58,6 +65,16 @@ export default function GroupesPanel() {
       setStatus("error");
       setError("Erreur — vérifiez que la clé n'est pas déjà utilisée.");
     }
+  }
+
+  async function saveTypeCours(groupeId: string) {
+    const value = typeCoursDrafts[groupeId]?.trim() ?? "";
+    await apiPut(
+      `/rh/groupes/${groupeId}/type-cours`,
+      { typeCours: value || null },
+      adminHeaders()
+    );
+    refresh();
   }
 
   return (
@@ -113,19 +130,30 @@ export default function GroupesPanel() {
           </div>
         )}
 
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {groupes === "loading" && <p className="font-sans text-sm text-white/50">Chargement...</p>}
           {groupes === "erreur" && (
             <p className="font-sans text-sm text-white/50">Erreur de chargement.</p>
           )}
           {Array.isArray(groupes) &&
             groupes.map((g) => (
-              <span
+              <div
                 key={g.id}
-                className="rounded border border-white/10 bg-obsidian px-3 py-2 font-mono text-xs text-white/70"
+                className="rounded border border-white/10 bg-obsidian px-3 py-2"
               >
-                {g.label} · {g.placesRestantes} place{g.placesRestantes > 1 ? "s" : ""}
-              </span>
+                <p className="font-mono text-xs text-white/70">
+                  {g.label} · {g.placesRestantes} place{g.placesRestantes > 1 ? "s" : ""}
+                </p>
+                <input
+                  value={typeCoursDrafts[g.id] ?? ""}
+                  onChange={(e) =>
+                    setTypeCoursDrafts((d) => ({ ...d, [g.id]: e.target.value }))
+                  }
+                  onBlur={() => saveTypeCours(g.id)}
+                  placeholder="Type de cours (ex. DELF/DALF, TEF Canada...)"
+                  className="mt-1.5 w-full rounded border border-white/15 bg-obsidianCard px-2 py-1 font-sans text-xs text-white placeholder:text-white/30 outline-none focus:border-accent"
+                />
+              </div>
             ))}
         </div>
       </div>

@@ -7,6 +7,7 @@ import { useRequireRole } from "@/lib/useRequireRole";
 
 const NAV_ITEMS = [
   { href: "/compte/admin", label: "Vue d'ensemble", icon: "◈" },
+  { href: "/compte/admin/cycle", label: "Cycle complet", icon: "⟲" },
   { href: "/compte/admin/recrutement", label: "Recrutement", icon: "✦" },
   { href: "/compte/admin/academie", label: "Académie & Vagues", icon: "❖" },
   { href: "/compte/admin/partenaires", label: "Partenaires", icon: "◎" },

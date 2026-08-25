@@ -1,11 +1,15 @@
 name: CI
 
-# Verification-only : Railway (backend) et Vercel (frontend) redeploient deja
-# automatiquement sur chaque push a main, independamment de ce workflow. Le
-# but ici n'est pas de bloquer ce deploiement (pas de process de PR sur ce
-# projet, tout part directement sur main) mais d'avoir une verification
-# automatique et visible (check vert/rouge sur le commit) qui ne depende pas
-# de quelqu'un qui pense a lancer `npm run build` localement avant de push.
+# Railway (backend) et Vercel (frontend) redeploient automatiquement sur
+# chaque push a main, independamment de ce workflow — pas de process de PR
+# sur ce projet, tout part directement sur main. Le blocage reel se fait
+# desormais au niveau du build lui-meme : les deux package.json ont un script
+# "prebuild" (jest / vitest run) qui s'execute automatiquement avant "build"
+# (convention npm) et fait echouer la commande si un test casse — Railway et
+# Vercel executent tous deux `npm run build`, donc un test casse = pas de
+# build = pas de deploiement, sans avoir besoin de gate GitHub Actions.
+# Ce workflow CI reste utile en parallele pour avoir un check vert/rouge
+# visible sur chaque commit/PR sans attendre le déploiement.
 on:
   push:
     branches: [main]

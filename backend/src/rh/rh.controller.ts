@@ -13,6 +13,7 @@ import { UpsertReunionDto } from './dto/upsert-reunion.dto';
 import { UpdateConnecteurStatutDto } from './dto/update-connecteur-statut.dto';
 import { UpsertFormateurDto } from './dto/upsert-formateur.dto';
 import { AssignFormateurDto } from './dto/assign-formateur.dto';
+import { UpdateTypeCoursDto } from './dto/update-type-cours.dto';
 
 @Controller('rh')
 @UseGuards(AdminGuard)
@@ -85,5 +86,15 @@ export class RhController {
   @Get('performance-formateurs')
   getPerformanceFormateurs() {
     return this.service.getPerformanceFormateurs();
+  }
+
+  @Put('groupes/:id/type-cours')
+  updateGroupeTypeCours(@Param('id') id: string, @Body() dto: UpdateTypeCoursDto) {
+    return this.service.updateGroupeTypeCours(id, dto.typeCours ?? null);
+  }
+
+  @Get('cycle-complet')
+  getCycleComplet() {
+    return this.service.getCycleComplet();
   }
 }
