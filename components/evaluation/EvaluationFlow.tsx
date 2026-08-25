@@ -62,6 +62,16 @@ interface VideoTask {
   maxSeconds: number;
 }
 
+interface EssaySubject {
+  key: string;
+  domain: string;
+  title: string;
+  texte: string;
+  consigne: string;
+  minWords: number;
+  maxWords: number;
+}
+
 type Step =
   | "coordonnees"
   | "intro"
@@ -71,20 +81,20 @@ type Step =
   | "select-situations"
   | "record-situations"
   | "record-videos"
+  | "essay"
   | "confirmation";
 
 const initialCoordonnees = { firstName: "", lastName: "", email: "", phone: "" };
 
-// Architecture officielle du test (100 pts, 5 blocs de 20 pts). Blocs 1, 3,
-// 4 et 5 sont construits — le Bloc 2 (Commentaire Argumentatif) n'existe pas
-// encore côté produit (voir mémoire de session 2026-08-04).
+// Architecture officielle du test (100 pts, 5 blocs de 20 pts) — les 5 blocs
+// sont désormais tous construits (Bloc 2 ajouté le 2026-08-25).
 const EVALUATION_BLOCKS = [
   {
     number: 1,
     title: "Fondamentaux, Grammaire, Lexique & Compréhension Écrite",
     available: true,
   },
-  { number: 2, title: "Commentaire Argumentatif", available: false },
+  { number: 2, title: "Commentaire Argumentatif", available: true },
   {
     number: 3,
     title: "10 Mises en Situation Orales (Enregistrements audio)",
@@ -198,6 +208,7 @@ export default function EvaluationFlow() {
   } | null>(null);
   const [situations, setSituations] = useState<Situation[]>([]);
   const [videoTasks, setVideoTasks] = useState<VideoTask[]>([]);
+  const [essaySubjects, setEssaySubjects] = useState<EssaySubject[]>([]);
   const [lexiqueAnswers, setLexiqueAnswers] = useState<Record<string, string>>({});
   const [oralAnswers, setOralAnswers] = useState<Record<string, string>>({});
   const [selectedSituations, setSelectedSituations] = useState<number[]>([]);
@@ -205,15 +216,19 @@ export default function EvaluationFlow() {
   const [videoCursor, setVideoCursor] = useState(0);
   const [selectedSubjectKey, setSelectedSubjectKey] = useState<string | null>(null);
   const [selectedOptionKey, setSelectedOptionKey] = useState<string | null>(null);
+  const [selectedEssaySubjectKey, setSelectedEssaySubjectKey] = useState<string | null>(null);
+  const [essayText, setEssayText] = useState("");
 
-  // Les 4 blocs construits sont indépendants et se font dans l'ordre choisi
+  // Les 5 blocs construits sont indépendants et se font dans l'ordre choisi
   // par le candidat depuis le menu (step "menu") — ces flags pilotent
   // l'affichage "Terminé" de chaque tuile et l'activation du bouton final.
   const [lexiqueSubmitted, setLexiqueSubmitted] = useState(false);
   const [oralSubmitted, setOralSubmitted] = useState(false);
   const [situationsDone, setSituationsDone] = useState(false);
   const [videosDone, setVideosDone] = useState(false);
-  const allBlocksDone = lexiqueSubmitted && oralSubmitted && situationsDone && videosDone;
+  const [essayDone, setEssayDone] = useState(false);
+  const allBlocksDone =
+    lexiqueSubmitted && oralSubmitted && situationsDone && videosDone && essayDone;
 
   useEffect(() => {
     apiGet<{ lexique: QcmQuestion[]; oral: QcmQuestion[] }>("/evaluation/questions")
@@ -225,6 +240,9 @@ export default function EvaluationFlow() {
     apiGet<VideoTask[]>("/evaluation/video-tasks")
       .then(setVideoTasks)
       .catch(() => setError("Impossible de charger les tâches vidéo."));
+    apiGet<EssaySubject[]>("/evaluation/essay-subjects")
+      .then(setEssaySubjects)
+      .catch(() => setError("Impossible de charger les sujets de commentaire argumenté."));
   }, []);
 
   async function handleCoordonneesSubmit(e: FormEvent) {
@@ -331,6 +349,25 @@ export default function EvaluationFlow() {
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Échec de l'envoi de la vidéo."
+      );
+    }
+  }
+
+  async function handleEssaySubmit() {
+    if (!attemptId || !selectedEssaySubjectKey) return;
+    setError(null);
+    try {
+      await apiPost(`/evaluation/attempts/${attemptId}/essay`, {
+        subjectKey: selectedEssaySubjectKey,
+        text: essayText,
+      });
+      setEssayDone(true);
+      setSelectedEssaySubjectKey(null);
+      setEssayText("");
+      setStep("menu");
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Échec de l'envoi du commentaire argumenté."
       );
     }
   }
@@ -443,7 +480,7 @@ export default function EvaluationFlow() {
         </div>
 
         <p className="mt-6 font-sans text-sm text-white/70">
-          Ce test couvre pour l&apos;instant les Blocs 1, 3, 4 et 5 (80 points).{" "}
+          Ce test couvre les 5 blocs (100 points).{" "}
           <strong className="text-white">
             Toutes les épreuves présentées sont obligatoires
           </strong>
@@ -479,6 +516,16 @@ export default function EvaluationFlow() {
         title: "Lexique, Grammaire & Compréhension Écrite",
         done: lexiqueSubmitted,
         onClick: () => setStep("lexique"),
+      },
+      {
+        number: 2,
+        title: "Commentaire Argumentatif",
+        done: essayDone,
+        onClick: () => {
+          setSelectedEssaySubjectKey(null);
+          setEssayText("");
+          setStep("essay");
+        },
       },
       {
         number: 3,
@@ -555,7 +602,7 @@ export default function EvaluationFlow() {
           <Button variant="dark" disabled={!allBlocksDone} onClick={() => setStep("confirmation")}>
             {allBlocksDone
               ? "Terminer et envoyer mon test"
-              : "Terminez les 4 blocs pour envoyer votre test"}
+              : "Terminez les 5 blocs pour envoyer votre test"}
           </Button>
         </div>
       </div>
@@ -879,6 +926,95 @@ export default function EvaluationFlow() {
           )}
         </div>
         {error && <p className="mt-4 text-sm text-accent">{error}</p>}
+      </div>
+    );
+  }
+
+  if (step === "essay") {
+    const chosenEssaySubject = essaySubjects.find((s) => s.key === selectedEssaySubjectKey);
+
+    // Écran de choix du sujet (le candidat en choisit UN parmi les 3).
+    if (!chosenEssaySubject) {
+      return (
+        <div className="mx-auto max-w-lg rounded border border-white/10 bg-obsidianCard p-6">
+          <button
+            onClick={() => setStep("menu")}
+            className="mb-3 block font-sans text-xs text-accent hover:underline"
+          >
+            ← Retour au menu
+          </button>
+          <p className="font-mono text-xs uppercase tracking-widest text-accent">
+            Bloc 2 — Commentaire Argumentatif
+          </p>
+          <p className="mt-2 font-sans text-sm text-white/80">
+            Choisissez un sujet parmi les {essaySubjects.length} proposés.
+          </p>
+
+          <div className="mt-5 space-y-3">
+            {essaySubjects.map((subject) => (
+              <button
+                key={subject.key}
+                onClick={() => setSelectedEssaySubjectKey(subject.key)}
+                className="w-full rounded border border-white/15 bg-obsidian px-4 py-3 text-left transition-colors hover:border-accent/60"
+              >
+                <p className="font-mono text-[11px] uppercase tracking-widest text-white/40">
+                  {subject.domain}
+                </p>
+                <p className="mt-1 font-sans text-sm font-semibold text-white">{subject.title}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    const wordCount = essayText.trim().split(/\s+/).filter(Boolean).length;
+    const wordCountOk =
+      wordCount >= chosenEssaySubject.minWords && wordCount <= chosenEssaySubject.maxWords;
+
+    return (
+      <div className="mx-auto max-w-2xl rounded border border-white/10 bg-obsidianCard p-6">
+        <button
+          onClick={() => setSelectedEssaySubjectKey(null)}
+          className="mb-3 block font-sans text-xs text-accent hover:underline"
+        >
+          ← Changer de sujet
+        </button>
+        <p className="font-mono text-xs uppercase tracking-widest text-accent">
+          Bloc 2 — {chosenEssaySubject.domain}
+        </p>
+        <p className="mt-2 font-display text-base font-semibold text-white">
+          {chosenEssaySubject.title}
+        </p>
+        <p className="mt-3 whitespace-pre-line font-sans text-sm italic text-white/70">
+          {chosenEssaySubject.texte}
+        </p>
+        <p className="mt-3 font-sans text-sm text-white/80">
+          <span className="font-semibold text-white">Consigne&nbsp;: </span>
+          {chosenEssaySubject.consigne}
+        </p>
+
+        <textarea
+          value={essayText}
+          onChange={(e) => setEssayText(e.target.value)}
+          rows={14}
+          placeholder="Rédigez votre essai ici..."
+          className="mt-4 w-full rounded border border-white/20 bg-obsidian px-4 py-3 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
+        />
+        <p
+          className={`mt-2 font-mono text-xs ${wordCountOk ? "text-success" : "text-white/50"}`}
+        >
+          {wordCount} mots (entre {chosenEssaySubject.minWords} et {chosenEssaySubject.maxWords}{" "}
+          attendus)
+        </p>
+
+        {error && <p className="mt-4 text-sm text-accent">{error}</p>}
+
+        <div className="mt-4">
+          <Button variant="dark" onClick={handleEssaySubmit} disabled={essayText.trim().length === 0}>
+            Valider ce bloc
+          </Button>
+        </div>
       </div>
     );
   }

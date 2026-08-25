@@ -19,6 +19,8 @@ import { UploadSituationDto } from "./dto/upload-situation.dto";
 import { GradeSituationDto } from "./dto/grade-situation.dto";
 import { UploadVideoDto } from "./dto/upload-video.dto";
 import { GradeVideoDto } from "./dto/grade-video.dto";
+import { SubmitEssayDto } from "./dto/submit-essay.dto";
+import { GradeEssayDto } from "./dto/grade-essay.dto";
 import { ValidateContractDto } from "./dto/validate-contract.dto";
 import { SubmitPaymentReferenceDto } from "./dto/submit-payment-reference.dto";
 import { ConfirmPaymentDto } from "./dto/confirm-payment.dto";
@@ -69,6 +71,11 @@ export class EvaluationController {
     return this.service.getQuestions();
   }
 
+  @Get("essay-subjects")
+  getEssaySubjects() {
+    return this.service.getEssaySubjects();
+  }
+
   @Post("candidats")
   createCandidat(@Body() dto: CreateCandidatDto) {
     return this.service.createCandidat(dto);
@@ -77,6 +84,11 @@ export class EvaluationController {
   @Post("attempts/:id/submit")
   submitAnswers(@Param("id") id: string, @Body() dto: SubmitAnswersDto) {
     return this.service.submitAnswers(id, dto);
+  }
+
+  @Post("attempts/:id/essay")
+  submitEssay(@Param("id") id: string, @Body() dto: SubmitEssayDto) {
+    return this.service.submitEssay(id, dto);
   }
 
   @Post("attempts/:id/situations")
@@ -149,6 +161,11 @@ export class EvaluationController {
     return this.service.getVideoGradingCriteria();
   }
 
+  @Get("essay-grading-criteria")
+  getEssayGradingCriteria() {
+    return this.service.getEssayGradingCriteria();
+  }
+
   @Post("situation-responses/:id/grade")
   gradeSituationResponse(
     @Param("id") id: string,
@@ -160,6 +177,11 @@ export class EvaluationController {
   @Post("video-responses/:id/grade")
   gradeVideoResponse(@Param("id") id: string, @Body() dto: GradeVideoDto) {
     return this.service.gradeVideoResponse(id, dto.criteria);
+  }
+
+  @Post("essay-responses/:id/grade")
+  gradeEssayResponse(@Param("id") id: string, @Body() dto: GradeEssayDto) {
+    return this.service.gradeEssayResponse(id, dto.criteria);
   }
 
   @Get("situation-responses/:id/audio")

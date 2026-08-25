@@ -29,6 +29,15 @@ interface VideoResponse {
   gradedAt: string | null;
 }
 
+interface EssayResponse {
+  id: string;
+  subjectKey: string;
+  text: string;
+  wordCount: number;
+  score: number | null;
+  gradedAt: string | null;
+}
+
 interface Attempt {
   id: string;
   status: string;
@@ -36,12 +45,14 @@ interface Attempt {
   oralScore: number | null;
   situationsScore: number | null;
   videoScore: number | null;
+  essayScore: number | null;
   totalScore: number | null;
   tier: string | null;
   submittedAt: string | null;
   candidat: Candidat;
   situationResponses: SituationResponse[];
   videoResponses: VideoResponse[];
+  essayResponse: EssayResponse | null;
 }
 
 interface Situation {
@@ -85,6 +96,16 @@ interface VideoTask {
   maxSeconds: number;
 }
 
+interface EssaySubject {
+  key: string;
+  domain: string;
+  title: string;
+  texte: string;
+  consigne: string;
+  minWords: number;
+  maxWords: number;
+}
+
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
 
 interface GradingCriterion {
@@ -111,6 +132,14 @@ const VIDEO_GRADING_LEVELS = [
   { key: "2", value: 2, label: "Excellent" },
 ] as const;
 
+// Échelons du barème Bloc 2 (voir backend/src/evaluation/commentaire-argumentatif.ts).
+const ESSAY_GRADING_LEVELS = [
+  { key: "1.25", value: 1.25, label: "Insuffisant" },
+  { key: "2.5", value: 2.5, label: "Passable" },
+  { key: "3.75", value: 3.75, label: "Bon" },
+  { key: "5", value: 5, label: "Excellent" },
+] as const;
+
 // Code formateur (x-trainer-code) retiré le 2026-08-25 à la demande du
 // client — trop de friction pour l'usage actuel (voir TrainerGuard côté
 // backend, toujours défini mais plus branché sur ces routes). La page reste
@@ -120,17 +149,23 @@ export default function TrainerDashboard() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [situations, setSituations] = useState<Situation[]>([]);
   const [videoTasks, setVideoTasks] = useState<VideoTask[]>([]);
+  const [essaySubjects, setEssaySubjects] = useState<EssaySubject[]>([]);
   const [criteria, setCriteria] = useState<GradingCriterion[]>([]);
   const [videoCriteria, setVideoCriteria] = useState<GradingCriterion[]>([]);
+  const [essayCriteria, setEssayCriteria] = useState<GradingCriterion[]>([]);
   const [listError, setListError] = useState<string | null>(null);
 
   useEffect(() => {
     refreshList();
     apiGet<Situation[]>("/evaluation/situations").then(setSituations).catch(() => {});
     apiGet<VideoTask[]>("/evaluation/video-tasks").then(setVideoTasks).catch(() => {});
+    apiGet<EssaySubject[]>("/evaluation/essay-subjects").then(setEssaySubjects).catch(() => {});
     apiGet<GradingCriterion[]>("/evaluation/grading-criteria").then(setCriteria).catch(() => {});
     apiGet<GradingCriterion[]>("/evaluation/video-grading-criteria")
       .then(setVideoCriteria)
+      .catch(() => {});
+    apiGet<GradingCriterion[]>("/evaluation/essay-grading-criteria")
+      .then(setEssayCriteria)
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -158,8 +193,10 @@ export default function TrainerDashboard() {
           {attempts.map((a) => {
             const gradedSituations = a.situationResponses.filter((r) => r.gradedAt).length;
             const gradedVideos = a.videoResponses.filter((r) => r.gradedAt).length;
-            const graded = gradedSituations + gradedVideos;
-            const total = a.situationResponses.length + a.videoResponses.length;
+            const gradedEssay = a.essayResponse?.gradedAt ? 1 : 0;
+            const graded = gradedSituations + gradedVideos + gradedEssay;
+            const total =
+              a.situationResponses.length + a.videoResponses.length + (a.essayResponse ? 1 : 0);
             return (
               <li key={a.id}>
                 <button
@@ -192,8 +229,10 @@ export default function TrainerDashboard() {
             attempt={selected}
             situations={situations}
             videoTasks={videoTasks}
+            essaySubjects={essaySubjects}
             criteria={criteria}
             videoCriteria={videoCriteria}
+            essayCriteria={essayCriteria}
             onGraded={refreshList}
           />
         ) : (
@@ -208,27 +247,33 @@ export default function TrainerDashboard() {
 
 type CarouselItem =
   | { type: "situation"; response: SituationResponse }
-  | { type: "video"; response: VideoResponse };
+  | { type: "video"; response: VideoResponse }
+  | { type: "essay"; response: EssayResponse };
 
-// Carrousel plutôt qu'un long scroll vertical (7 rendus empilés — 5 mises
-// en situation + 2 vidéos, chacun avec lecteur média + grille de critères —
-// était bien trop long, retour client 2026-08-25). Un rendu affiché à la
-// fois, navigation précédent/suivant + pastilles cliquables (vertes une
-// fois notées) pour sauter directement à un rendu donné. La notation
-// avance automatiquement au rendu suivant après l'enregistrement d'une note.
+// Carrousel plutôt qu'un long scroll vertical (rendus empilés — 5 mises en
+// situation + 2 vidéos + 1 essai, chacun avec son support (audio/vidéo/
+// texte) + grille de critères — était bien trop long, retour client
+// 2026-08-25). Un rendu affiché à la fois, navigation précédent/suivant +
+// pastilles cliquables (vertes une fois notées) pour sauter directement à
+// un rendu donné. La notation avance automatiquement au rendu suivant après
+// l'enregistrement d'une note.
 function AttemptDetail({
   attempt,
   situations,
   videoTasks,
+  essaySubjects,
   criteria,
   videoCriteria,
+  essayCriteria,
   onGraded,
 }: {
   attempt: Attempt;
   situations: Situation[];
   videoTasks: VideoTask[];
+  essaySubjects: EssaySubject[];
   criteria: GradingCriterion[];
   videoCriteria: GradingCriterion[];
+  essayCriteria: GradingCriterion[];
   onGraded: () => void;
 }) {
   const items: CarouselItem[] = [
@@ -240,6 +285,7 @@ function AttemptDetail({
       .slice()
       .sort((a, b) => a.taskIndex - b.taskIndex)
       .map((response) => ({ type: "video" as const, response })),
+    ...(attempt.essayResponse ? [{ type: "essay" as const, response: attempt.essayResponse }] : []),
   ];
 
   const [index, setIndex] = useState(0);
@@ -262,10 +308,11 @@ function AttemptDetail({
           {attempt.candidat.firstName} {attempt.candidat.lastName}
         </p>
         <p className="text-xs text-white/50">{attempt.candidat.email}</p>
-        <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-white/80 sm:grid-cols-4">
+        <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-white/80 sm:grid-cols-5">
           <p>Lexique : {attempt.lexiqueScore ?? "—"}/20</p>
-          <p>Oral : {attempt.oralScore ?? "—"}/20</p>
+          <p>Essai : {attempt.essayScore ?? "—"}/20</p>
           <p>Situations : {attempt.situationsScore ?? "—"}/20</p>
+          <p>Oral : {attempt.oralScore ?? "—"}/20</p>
           <p>Vidéo : {attempt.videoScore ?? "—"}/20</p>
         </div>
         {attempt.totalScore !== null && (
@@ -297,7 +344,9 @@ function AttemptDetail({
                 const label =
                   item.type === "situation"
                     ? `S${item.response.situationIndex}`
-                    : `V${item.response.taskIndex}`;
+                    : item.type === "video"
+                      ? `V${item.response.taskIndex}`
+                      : "E";
                 const graded = Boolean(item.response.gradedAt);
                 return (
                   <button
@@ -337,12 +386,20 @@ function AttemptDetail({
               criteria={criteria}
               onGraded={handleGraded}
             />
-          ) : (
+          ) : current.type === "video" ? (
             <VideoGrader
               key={current.response.id}
               response={current.response}
               task={videoTasks.find((t) => t.index === current.response.taskIndex)}
               criteria={videoCriteria}
+              onGraded={handleGraded}
+            />
+          ) : (
+            <EssayGrader
+              key={current.response.id}
+              response={current.response}
+              subject={essaySubjects.find((s) => s.key === current.response.subjectKey)}
+              criteria={essayCriteria}
               onGraded={handleGraded}
             />
           )}
@@ -680,6 +737,125 @@ function VideoGrader({
 
       <p className="mt-4 font-mono text-xs uppercase tracking-widest text-white/50">
         Score prévisionnel : {previewScore.toFixed(2)} / 10.00
+      </p>
+
+      {error && <p className="mt-2 text-xs text-accent">{error}</p>}
+
+      <div className="mt-4">
+        <Button variant="ghostDark" onClick={save} disabled={saving || !allSelected}>
+          {saving ? "Enregistrement..." : "Enregistrer la note"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function EssayGrader({
+  response,
+  subject,
+  criteria,
+  onGraded,
+}: {
+  response: EssayResponse;
+  subject: EssaySubject | undefined;
+  criteria: GradingCriterion[];
+  onGraded: () => void;
+}) {
+  const [levels, setLevels] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const allSelected = criteria.every((c) => levels[c.key] !== undefined);
+  const previewScore = criteria.reduce((sum, c) => sum + (levels[c.key] ?? 0), 0);
+  const wordCountOk =
+    subject && response.wordCount >= subject.minWords && response.wordCount <= subject.maxWords;
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPost(`/evaluation/essay-responses/${response.id}/grade`, {
+        criteria: levels,
+      });
+      onGraded();
+    } catch {
+      setError("Échec de l'enregistrement de la note.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="rounded border border-white/10 bg-obsidianCard p-4">
+      <p className="font-mono text-xs uppercase tracking-widest text-accent">
+        Commentaire Argumentatif
+        {response.gradedAt && ` — noté (${response.score}/20)`}
+      </p>
+      {subject && (
+        <>
+          <p className="mt-1 font-sans text-sm font-semibold text-white">
+            {subject.domain} — {subject.title}
+          </p>
+          <p className="mt-2 font-sans text-xs italic text-white/60">{subject.texte}</p>
+        </>
+      )}
+      <p className={`mt-2 font-mono text-[11px] ${wordCountOk ? "text-success" : "text-accent"}`}>
+        {response.wordCount} mots
+        {subject && ` (attendu : ${subject.minWords}-${subject.maxWords})`}
+      </p>
+
+      <div className="mt-3 max-h-64 overflow-y-auto whitespace-pre-wrap rounded border border-white/10 bg-obsidian p-3 font-sans text-sm text-white/80">
+        {response.text}
+      </div>
+
+      <div className="mt-5 space-y-5">
+        {criteria.map((c) => {
+          const selectedKey =
+            levels[c.key] !== undefined
+              ? ESSAY_GRADING_LEVELS.find((l) => l.value === levels[c.key])?.key
+              : undefined;
+          return (
+            <div key={c.key}>
+              <p className="font-sans text-sm font-semibold text-white">{c.label}</p>
+              <p className="text-xs text-white/50">{c.description}</p>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {ESSAY_GRADING_LEVELS.map((level) => (
+                  <label
+                    key={level.key}
+                    className={`cursor-pointer rounded border px-2 py-1.5 text-center text-xs transition-colors ${
+                      selectedKey === level.key
+                        ? "border-accent bg-accent/10 text-accent"
+                        : "border-white/15 text-white/70 hover:border-white/30"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name={`${response.id}-${c.key}`}
+                      className="sr-only"
+                      checked={selectedKey === level.key}
+                      onChange={() =>
+                        setLevels((prev) => ({ ...prev, [c.key]: level.value }))
+                      }
+                    />
+                    {level.label}
+                    <span className="block font-mono text-[10px] text-white/50">
+                      {level.value.toFixed(2)} pt
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {selectedKey && (
+                <p className="mt-2 font-sans text-xs italic text-white/60">
+                  {c.descriptors[selectedKey]}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-4 font-mono text-xs uppercase tracking-widest text-white/50">
+        Score prévisionnel : {previewScore.toFixed(2)} / 20.00
       </p>
 
       {error && <p className="mt-2 text-xs text-accent">{error}</p>}

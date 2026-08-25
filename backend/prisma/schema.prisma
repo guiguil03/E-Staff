@@ -171,17 +171,19 @@ model EvaluationAttempt {
   oralAnswers    String?
 
   // Scores /20 par épreuve. lexiqueScore et oralScore calculés
-  // automatiquement à la soumission ; situationsScore/videoScore alimentés
-  // par le formateur au fur et à mesure de la correction.
+  // automatiquement à la soumission ; situationsScore/videoScore/essayScore
+  // alimentés par le formateur au fur et à mesure de la correction.
   lexiqueScore    Float?
   oralScore       Float?
   situationsScore Float?
   videoScore      Float?
+  essayScore      Float?
 
   // Score global /100 et palier — calculés une fois toutes les épreuves
-  // notées (voir src/evaluation/scoring.ts). Tant que seules 4 des 5
-  // épreuves prévues par le cahier des charges sont implémentées, le calcul
-  // se fait au prorata des épreuves définies (voir README du module).
+  // notées (voir src/evaluation/scoring.ts). Les 5 blocs du cahier des
+  // charges sont désormais tous implémentés (Bloc 2 "Commentaire
+  // Argumentatif" ajouté le 2026-08-25) ; computeTotalScore reste au
+  // prorata des scores définis par sécurité, mais couvre maintenant les 5.
   totalScore Float?
   // "refuse" | "formation_b1" | "niveau_b2" | "niveau_c1" | "placement_direct"
   tier String?
@@ -220,6 +222,7 @@ model EvaluationAttempt {
 
   situationResponses SituationResponse[]
   videoResponses     VideoResponse[]
+  essayResponse      EssayResponse?
 }
 
 // Une réponse audio à une des 10 situations professionnelles (le candidat
@@ -270,6 +273,28 @@ model VideoResponse {
   createdAt DateTime @default(now())
 
   @@unique([attemptId, taskIndex])
+}
+
+// Le Bloc 2 (Commentaire Argumentatif, contenu client fourni le 2026-08-25) :
+// le candidat choisit UN sujet parmi 3 et rédige un essai argumenté (400-500
+// mots) directement en texte — pas de fichier, contrairement aux Blocs 3/5.
+// Une seule ligne par tentative (contrairement à SituationResponse/
+// VideoResponse qui en admettent plusieurs), d'où le champ unique sur
+// attemptId plutôt que sur (attemptId, subjectKey).
+model EssayResponse {
+  id        String            @id @default(cuid())
+  attemptId String            @unique
+  attempt   EvaluationAttempt @relation(fields: [attemptId], references: [id])
+
+  subjectKey String // voir src/evaluation/commentaire-argumentatif.ts
+  text       String
+  wordCount  Int
+
+  score          Float? // 0 à 20
+  gradedCriteria String? // JSON des critères cochés par le formateur
+  gradedAt       DateTime?
+
+  createdAt DateTime @default(now())
 }
 
 // ---------------------------------------------------------------------------

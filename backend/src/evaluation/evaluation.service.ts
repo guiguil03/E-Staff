@@ -11,6 +11,7 @@ import { EmailService } from "../common/email.service";
 import { StorageService } from "../common/storage.service";
 import { CreateCandidatDto } from "./dto/create-candidat.dto";
 import { SubmitAnswersDto } from "./dto/submit-answers.dto";
+import { SubmitEssayDto } from "./dto/submit-essay.dto";
 import { ValidateContractDto } from "./dto/validate-contract.dto";
 import { SubmitPaymentReferenceDto } from "./dto/submit-payment-reference.dto";
 import { ConfirmPaymentDto } from "./dto/confirm-payment.dto";
@@ -31,10 +32,16 @@ import {
   VIDEO_GRADING_LEVELS,
   VIDEO_TASKS,
 } from "./video-tasks";
+import {
+  ESSAY_GRADING_CRITERIA,
+  ESSAY_GRADING_LEVELS,
+  ESSAY_SUBJECTS,
+} from "./commentaire-argumentatif";
 import { generateContractPdf } from "./contract-pdf";
 
 const ALLOWED_LEVEL_VALUES: number[] = GRADING_LEVELS.map((l) => l.value);
 const ALLOWED_VIDEO_LEVEL_VALUES: number[] = VIDEO_GRADING_LEVELS.map((l) => l.value);
+const ALLOWED_ESSAY_LEVEL_VALUES: number[] = ESSAY_GRADING_LEVELS.map((l) => l.value);
 
 const REQUIRED_SITUATION_COUNT = 5;
 const REQUIRED_VIDEO_COUNT = 2;
@@ -108,6 +115,14 @@ export class EvaluationService {
     return VIDEO_GRADING_CRITERIA;
   }
 
+  getEssaySubjects() {
+    return ESSAY_SUBJECTS;
+  }
+
+  getEssayGradingCriteria() {
+    return ESSAY_GRADING_CRITERIA;
+  }
+
   getQuestions() {
     // On ne renvoie jamais correctChoice au front.
     const strip = (q: { id: string; prompt: string; choices: string[] }) => ({
@@ -135,6 +150,7 @@ export class EvaluationService {
       include: {
         situationResponses: true,
         videoResponses: true,
+        essayResponse: true,
         candidat: true,
         apprenant: true,
       },
@@ -143,12 +159,13 @@ export class EvaluationService {
     return attempt;
   }
 
-  // Les 4 blocs construits (1 Lexique, 3 Mises en Situation, 4 Compréhension
-  // Orale, 5 Vidéo) sont indépendants et peuvent être faits dans n'importe
-  // quel ordre (décision produit 2026-08-25 — le candidat choisit son ordre
-  // depuis un menu côté front). La tentative reste "en_cours" (modifiable)
-  // tant que les 4 ne sont pas tous complets ; bascule en "soumis" dès que
-  // le dernier bloc manquant est terminé, quel qu'il soit.
+  // Les 5 blocs construits (1 Lexique, 2 Commentaire Argumentatif, 3 Mises
+  // en Situation, 4 Compréhension Orale, 5 Vidéo) sont indépendants et
+  // peuvent être faits dans n'importe quel ordre (décision produit
+  // 2026-08-25 — le candidat choisit son ordre depuis un menu côté front).
+  // La tentative reste "en_cours" (modifiable) tant que les 5 ne sont pas
+  // tous complets ; bascule en "soumis" dès que le dernier bloc manquant
+  // est terminé, quel qu'il soit.
   private async maybeFinalize(attemptId: string) {
     const attempt = await this.getAttemptOrThrow(attemptId);
     if (attempt.status !== "en_cours") return;
@@ -157,7 +174,8 @@ export class EvaluationService {
       attempt.lexiqueAnswers !== null &&
       attempt.oralAnswers !== null &&
       attempt.situationResponses.length >= REQUIRED_SITUATION_COUNT &&
-      attempt.videoResponses.length >= REQUIRED_VIDEO_COUNT;
+      attempt.videoResponses.length >= REQUIRED_VIDEO_COUNT &&
+      attempt.essayResponse !== null;
 
     if (complete) {
       await this.prisma.evaluationAttempt.update({
@@ -317,12 +335,84 @@ export class EvaluationService {
     }
   }
 
+  // Une seule ligne par tentative (upsert sur attemptId, pas sur
+  // attemptId+subjectKey) : le candidat choisit UN sujet parmi les 3 et
+  // peut re-soumettre (change d'avis, corrige) tant que la tentative n'est
+  // pas complète — la re-soumission remplace le sujet et le texte précédents.
+  async submitEssay(attemptId: string, dto: SubmitEssayDto) {
+    const attempt = await this.getAttemptOrThrow(attemptId);
+    if (attempt.status !== "en_cours") {
+      throw new BadRequestException("Cette tentative est déjà complète.");
+    }
+    if (!ESSAY_SUBJECTS.some((s) => s.key === dto.subjectKey)) {
+      throw new BadRequestException("Sujet inconnu.");
+    }
+
+    const wordCount = dto.text.trim().split(/\s+/).filter(Boolean).length;
+
+    const response = await this.prisma.essayResponse.upsert({
+      where: { attemptId },
+      create: {
+        attemptId,
+        subjectKey: dto.subjectKey,
+        text: dto.text,
+        wordCount,
+      },
+      update: {
+        subjectKey: dto.subjectKey,
+        text: dto.text,
+        wordCount,
+        score: null,
+        gradedCriteria: null,
+        gradedAt: null,
+      },
+    });
+    await this.maybeFinalize(attemptId);
+    return response;
+  }
+
+  async gradeEssayResponse(essayResponseId: string, criteria: Record<string, number>) {
+    const response = await this.prisma.essayResponse.findUnique({
+      where: { id: essayResponseId },
+    });
+    if (!response) throw new NotFoundException("Réponse introuvable.");
+
+    for (const c of ESSAY_GRADING_CRITERIA) {
+      const value = criteria[c.key];
+      if (typeof value !== "number" || !ALLOWED_ESSAY_LEVEL_VALUES.includes(value)) {
+        throw new BadRequestException(
+          `Critère "${c.label}" : merci de sélectionner un échelon valide (1.25 / 2.5 / 3.75 / 5).`
+        );
+      }
+    }
+
+    const score = ESSAY_GRADING_CRITERIA.reduce((total, c) => total + criteria[c.key], 0);
+
+    await this.prisma.essayResponse.update({
+      where: { id: essayResponseId },
+      data: {
+        score,
+        gradedCriteria: JSON.stringify(criteria),
+        gradedAt: new Date(),
+      },
+    });
+
+    await this.recomputeAttemptIfComplete(response.attemptId);
+
+    return this.prisma.essayResponse.findUnique({ where: { id: essayResponseId } });
+  }
+
   // ---- Formateur --------------------------------------------------------
 
   async listAttemptsForGrading() {
     return this.prisma.evaluationAttempt.findMany({
       where: { status: { in: ["soumis", "en_correction"] } },
-      include: { candidat: true, situationResponses: true, videoResponses: true },
+      include: {
+        candidat: true,
+        situationResponses: true,
+        videoResponses: true,
+        essayResponse: true,
+      },
       orderBy: { submittedAt: "asc" },
     });
   }
@@ -429,11 +519,12 @@ export class EvaluationService {
     const gradedVideos = attempt.videoResponses.filter(
       (r) => r.gradedAt !== null
     );
+    const essayGraded = attempt.essayResponse?.gradedAt !== null && attempt.essayResponse !== null;
 
     const situationsComplete = gradedSituations.length >= REQUIRED_SITUATION_COUNT;
     const videosComplete = gradedVideos.length >= REQUIRED_VIDEO_COUNT;
 
-    if (!situationsComplete || !videosComplete) {
+    if (!situationsComplete || !videosComplete || !essayGraded) {
       if (attempt.status === "soumis") {
         await this.prisma.evaluationAttempt.update({
           where: { id: attemptId },
@@ -445,11 +536,13 @@ export class EvaluationService {
 
     const situationsScore = gradedSituations.reduce((sum, r) => sum + (r.score ?? 0), 0);
     const videoScore = gradedVideos.reduce((sum, r) => sum + (r.score ?? 0), 0);
+    const essayScore = attempt.essayResponse!.score ?? 0;
     const totalScore = computeTotalScore([
       attempt.lexiqueScore,
       attempt.oralScore,
       situationsScore,
       videoScore,
+      essayScore,
     ]);
     const tier = totalScore === null ? null : computeTier(totalScore);
 
@@ -458,6 +551,7 @@ export class EvaluationService {
       data: {
         situationsScore,
         videoScore,
+        essayScore,
         totalScore,
         tier,
         status: "corrige",
