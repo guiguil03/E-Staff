@@ -141,7 +141,7 @@ export class EvaluationService {
   }
 
   getQuestions() {
-    // On ne renvoie jamais correctChoice au front.
+    // On ne renvoie jamais correctChoice au front (parcours candidat).
     const strip = (q: { id: string; prompt: string; choices: string[] }) => ({
       id: q.id,
       prompt: q.prompt,
@@ -150,6 +150,16 @@ export class EvaluationService {
     return {
       lexique: LEXIQUE_QUESTIONS.map(strip),
       oral: ORAL_QUESTIONS.map(strip),
+    };
+  }
+
+  // Variante formateur — inclut correctChoice, pour afficher le corrigé du
+  // QCM (auto-corrigé) dans l'écran de correction, à côté des blocs notés
+  // manuellement. Jamais utilisée par le parcours candidat (voir getQuestions).
+  getQuestionsWithAnswerKey() {
+    return {
+      lexique: LEXIQUE_QUESTIONS,
+      oral: ORAL_QUESTIONS,
     };
   }
 

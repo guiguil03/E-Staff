@@ -9,6 +9,15 @@ interface Candidat {
   firstName: string;
   lastName: string;
   email: string;
+  phone: string;
+  createdAt: string;
+}
+
+interface QcmQuestion {
+  id: string;
+  prompt: string;
+  choices: string[];
+  correctChoice: string;
 }
 
 interface SituationResponse {
@@ -53,6 +62,9 @@ interface EcritOuvertResponse {
 interface Attempt {
   id: string;
   status: string;
+  lexiqueAnswers: string | null;
+  oralAnswers: string | null;
+  lexiqueQcmScore: number | null;
   lexiqueScore: number | null;
   oralScore: number | null;
   situationsScore: number | null;
@@ -67,6 +79,26 @@ interface Attempt {
   essayResponse: EssayResponse | null;
   ecritOuvertResponse: EcritOuvertResponse | null;
 }
+
+const STATUS_LABELS: Record<string, string> = {
+  en_cours: "En cours",
+  soumis: "Soumis",
+  en_correction: "En correction",
+  corrige: "Corrigé",
+  rejete: "Non retenu",
+  valide_pret_envoi: "Contrat prêt à envoyer",
+  contrat_envoye: "Contrat envoyé",
+  en_attente_paiement: "En attente de paiement",
+  active: "Actif (inscrit)",
+};
+
+const TIER_LABELS: Record<string, string> = {
+  refuse: "Refusé",
+  formation_b1: "Formation B1",
+  niveau_b2: "Niveau B2",
+  niveau_c1: "Niveau C1",
+  placement_direct: "Placement direct",
+};
 
 interface Situation {
   index: number;
@@ -193,6 +225,9 @@ export default function TrainerDashboard() {
   const [videoCriteria, setVideoCriteria] = useState<GradingCriterion[]>([]);
   const [essayCriteria, setEssayCriteria] = useState<GradingCriterion[]>([]);
   const [partieOuverteCriteria, setPartieOuverteCriteria] = useState<PartieOuverteCriterion[]>([]);
+  const [questions, setQuestions] = useState<{ lexique: QcmQuestion[]; oral: QcmQuestion[] } | null>(
+    null
+  );
   const [listError, setListError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -200,6 +235,9 @@ export default function TrainerDashboard() {
     apiGet<Situation[]>("/evaluation/situations").then(setSituations).catch(() => {});
     apiGet<VideoTask[]>("/evaluation/video-tasks").then(setVideoTasks).catch(() => {});
     apiGet<EssaySubject[]>("/evaluation/essay-subjects").then(setEssaySubjects).catch(() => {});
+    apiGet<{ lexique: QcmQuestion[]; oral: QcmQuestion[] }>("/evaluation/questions-corrigees")
+      .then(setQuestions)
+      .catch(() => {});
     apiGet<PartieOuverteContent>("/evaluation/partie-ouverte")
       .then(setPartieOuverteContent)
       .catch(() => {});
@@ -261,7 +299,7 @@ export default function TrainerDashboard() {
                     {a.candidat.firstName} {a.candidat.lastName}
                   </span>
                   <span className="block text-xs text-white/50">
-                    {a.status} — {graded}/{total} notées
+                    {STATUS_LABELS[a.status] ?? a.status} — {graded}/{total} notées
                   </span>
                 </button>
               </li>
@@ -281,6 +319,7 @@ export default function TrainerDashboard() {
             videoTasks={videoTasks}
             essaySubjects={essaySubjects}
             partieOuverteContent={partieOuverteContent}
+            questions={questions}
             criteria={criteria}
             videoCriteria={videoCriteria}
             essayCriteria={essayCriteria}
@@ -298,10 +337,23 @@ export default function TrainerDashboard() {
 }
 
 type CarouselItem =
+  | { type: "qcm"; qcmType: "lexique" | "oral" }
   | { type: "situation"; response: SituationResponse }
   | { type: "video"; response: VideoResponse }
   | { type: "essay"; response: EssayResponse }
   | { type: "partie-ouverte"; response: EcritOuvertResponse };
+
+// Les items "qcm" (auto-corrigés à la soumission, voir scoreQcm côté back)
+// n'ont pas de `.response` — ces deux helpers évitent de spécialiser chaque
+// site qui lisait auparavant item.response.id / .gradedAt directement.
+function itemKey(item: CarouselItem): string {
+  return item.type === "qcm" ? `qcm-${item.qcmType}` : item.response.id;
+}
+function itemIsGraded(item: CarouselItem): boolean {
+  // Un QCM est "noté" dès la soumission (correction automatique) — jamais en
+  // attente de correction manuelle.
+  return item.type === "qcm" ? true : Boolean(item.response.gradedAt);
+}
 
 // Carrousel plutôt qu'un long scroll vertical (rendus empilés — 5 mises en
 // situation + 2 vidéos + 1 essai, chacun avec son support (audio/vidéo/
@@ -316,6 +368,7 @@ function AttemptDetail({
   videoTasks,
   essaySubjects,
   partieOuverteContent,
+  questions,
   criteria,
   videoCriteria,
   essayCriteria,
@@ -327,25 +380,31 @@ function AttemptDetail({
   videoTasks: VideoTask[];
   essaySubjects: EssaySubject[];
   partieOuverteContent: PartieOuverteContent | null;
+  questions: { lexique: QcmQuestion[]; oral: QcmQuestion[] } | null;
   criteria: GradingCriterion[];
   videoCriteria: GradingCriterion[];
   essayCriteria: GradingCriterion[];
   partieOuverteCriteria: PartieOuverteCriterion[];
   onGraded: () => void;
 }) {
+  // Ordre = celui du test réel (Bloc 1 à 5), montrant aussi les parties
+  // auto-corrigées (QCM) — pas seulement ce qui reste à noter à la main —
+  // pour que le formateur voie l'intégralité de la copie d'un coup d'œil.
   const items: CarouselItem[] = [
+    ...(attempt.lexiqueAnswers ? [{ type: "qcm" as const, qcmType: "lexique" as const }] : []),
     ...(attempt.ecritOuvertResponse
       ? [{ type: "partie-ouverte" as const, response: attempt.ecritOuvertResponse }]
       : []),
+    ...(attempt.essayResponse ? [{ type: "essay" as const, response: attempt.essayResponse }] : []),
     ...attempt.situationResponses
       .slice()
       .sort((a, b) => a.situationIndex - b.situationIndex)
       .map((response) => ({ type: "situation" as const, response })),
+    ...(attempt.oralAnswers ? [{ type: "qcm" as const, qcmType: "oral" as const }] : []),
     ...attempt.videoResponses
       .slice()
       .sort((a, b) => a.taskIndex - b.taskIndex)
       .map((response) => ({ type: "video" as const, response })),
-    ...(attempt.essayResponse ? [{ type: "essay" as const, response: attempt.essayResponse }] : []),
   ];
 
   const [index, setIndex] = useState(0);
@@ -354,7 +413,7 @@ function AttemptDetail({
   }, [attempt.id]);
 
   const current = index < items.length ? items[index] : null;
-  const gradedCount = items.filter((i) => i.response.gradedAt).length;
+  const gradedCount = items.filter(itemIsGraded).length;
 
   function handleGraded() {
     onGraded();
@@ -364,11 +423,30 @@ function AttemptDetail({
   return (
     <div className="space-y-4">
       <div className="rounded border border-white/10 bg-obsidianCard p-4">
-        <p className="font-display text-lg font-semibold text-white">
-          {attempt.candidat.firstName} {attempt.candidat.lastName}
-        </p>
-        <p className="text-xs text-white/50">{attempt.candidat.email}</p>
-        <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-white/80 sm:grid-cols-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="font-display text-lg font-semibold text-white">
+              {attempt.candidat.firstName} {attempt.candidat.lastName}
+            </p>
+            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 font-mono text-xs text-white/50">
+              <span>{attempt.candidat.email}</span>
+              <span>{attempt.candidat.phone}</span>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="rounded-full border border-accent/40 px-2.5 py-1 font-mono text-[11px] uppercase tracking-widest text-accent">
+              {STATUS_LABELS[attempt.status] ?? attempt.status}
+            </span>
+            <p className="mt-1 font-mono text-[11px] text-white/40">
+              Inscrit le{" "}
+              {new Date(attempt.candidat.createdAt).toLocaleDateString("fr-FR")}
+              {attempt.submittedAt &&
+                ` · Soumis le ${new Date(attempt.submittedAt).toLocaleDateString("fr-FR")}`}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-3 text-sm text-white/80 sm:grid-cols-5">
           <p>Lexique : {attempt.lexiqueScore ?? "—"}/20</p>
           <p>Essai : {attempt.essayScore ?? "—"}/20</p>
           <p>Situations : {attempt.situationsScore ?? "—"}/20</p>
@@ -377,7 +455,7 @@ function AttemptDetail({
         </div>
         {attempt.totalScore !== null && (
           <p className="mt-2 text-sm text-accent">
-            Total : {attempt.totalScore}/100 — {attempt.tier}
+            Total : {attempt.totalScore}/100 — {(attempt.tier && TIER_LABELS[attempt.tier]) ?? attempt.tier ?? "—"}
           </p>
         )}
       </div>
@@ -408,11 +486,15 @@ function AttemptDetail({
                       ? `V${item.response.taskIndex}`
                       : item.type === "essay"
                         ? "E"
-                        : "P2";
-                const graded = Boolean(item.response.gradedAt);
+                        : item.type === "partie-ouverte"
+                          ? "P2"
+                          : item.qcmType === "lexique"
+                            ? "QCM1"
+                            : "QCM4";
+                const graded = itemIsGraded(item);
                 return (
                   <button
-                    key={item.response.id}
+                    key={itemKey(item)}
                     onClick={() => setIndex(i)}
                     className={`rounded-full border px-2 py-0.5 font-mono text-[11px] transition-colors ${
                       i === index
@@ -440,7 +522,18 @@ function AttemptDetail({
             {index + 1} / {items.length} — {gradedCount} noté{gradedCount > 1 ? "s" : ""} au total
           </p>
 
-          {current.type === "situation" ? (
+          {current.type === "qcm" ? (
+            <QcmReview
+              key={itemKey(current)}
+              qcmType={current.qcmType}
+              bank={current.qcmType === "lexique" ? questions?.lexique : questions?.oral}
+              answersJson={
+                current.qcmType === "lexique" ? attempt.lexiqueAnswers : attempt.oralAnswers
+              }
+              score={current.qcmType === "lexique" ? attempt.lexiqueQcmScore : attempt.oralScore}
+              maxScore={current.qcmType === "lexique" ? 10 : 20}
+            />
+          ) : current.type === "situation" ? (
             <SituationGrader
               key={current.response.id}
               response={current.response}
@@ -475,6 +568,96 @@ function AttemptDetail({
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// Lecture seule — les QCM (Bloc 1 Partie 1 et Bloc 4) sont notés
+// automatiquement à la soumission (voir scoreQcm côté back), rien à
+// corriger ici. Affiché quand même dans le carrousel pour que le formateur
+// voie l'intégralité de la copie, pas seulement les blocs à noter à la main.
+function QcmReview({
+  qcmType,
+  bank,
+  answersJson,
+  score,
+  maxScore,
+}: {
+  qcmType: "lexique" | "oral";
+  bank: QcmQuestion[] | undefined;
+  answersJson: string | null;
+  score: number | null;
+  maxScore: number;
+}) {
+  const answers: Record<string, string> = (() => {
+    if (!answersJson) return {};
+    try {
+      const parsed = JSON.parse(answersJson);
+      return typeof parsed === "object" && parsed !== null ? parsed : {};
+    } catch {
+      return {};
+    }
+  })();
+
+  if (!bank || bank.length === 0) {
+    return (
+      <div className="rounded border border-white/10 bg-obsidianCard p-4">
+        <p className="text-sm text-white/50">Chargement du corrigé...</p>
+      </div>
+    );
+  }
+
+  const correctCount = bank.filter((q) => answers[q.id] === q.correctChoice).length;
+
+  return (
+    <div className="rounded border border-white/10 bg-obsidianCard p-4">
+      <p className="font-mono text-xs uppercase tracking-widest text-accent">
+        {qcmType === "lexique"
+          ? "Bloc 1 — Partie 1 : QCM Lexique & Grammaire"
+          : "Bloc 4 — Compréhension Orale (QCM)"}{" "}
+        — auto-corrigé
+      </p>
+      <p className="mt-1 font-mono text-[11px] text-white/50">
+        {correctCount}/{bank.length} bonnes réponses — {score ?? "—"}/{maxScore}
+      </p>
+
+      <div className="mt-4 space-y-4">
+        {bank.map((q, i) => {
+          const candidateAnswer = answers[q.id];
+          return (
+            <div key={q.id} className="rounded border border-white/10 bg-obsidian p-3">
+              <p className="font-sans text-sm text-white/90">
+                {i + 1}. {q.prompt}
+              </p>
+              <div className="mt-2 space-y-1">
+                {q.choices.map((choice) => {
+                  const isCandidateChoice = choice === candidateAnswer;
+                  const isCorrectChoice = choice === q.correctChoice;
+                  return (
+                    <p
+                      key={choice}
+                      className={`rounded px-2 py-1 font-sans text-xs ${
+                        isCorrectChoice
+                          ? "bg-success/10 text-success"
+                          : isCandidateChoice
+                            ? "bg-accent/10 text-accent"
+                            : "text-white/50"
+                      }`}
+                    >
+                      {isCandidateChoice ? "→ " : ""}
+                      {choice}
+                      {isCorrectChoice ? " ✓" : isCandidateChoice ? " ✗" : ""}
+                    </p>
+                  );
+                })}
+              </div>
+              {!candidateAnswer && (
+                <p className="mt-1 font-mono text-[11px] text-white/40">Sans réponse</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -7,5 +7,6 @@ import { CockpitService } from "./cockpit.service";
   imports: [PrismaModule],
   controllers: [CockpitController],
   providers: [CockpitService],
+  exports: [CockpitService],
 })
 export class CockpitModule {}

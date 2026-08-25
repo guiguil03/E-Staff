@@ -163,6 +163,11 @@ export class EvaluationController {
     return this.service.getAttemptForGrading(id);
   }
 
+  @Get("questions-corrigees")
+  getQuestionsWithAnswerKey() {
+    return this.service.getQuestionsWithAnswerKey();
+  }
+
   @Get("grading-criteria")
   getGradingCriteria() {
     return this.service.getGradingCriteria();

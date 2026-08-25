@@ -15,6 +15,7 @@ import { NotationModule } from "./notation/notation.module";
 import { RegistrationsModule } from "./registrations/registrations.module";
 import { AccountRequestsModule } from "./account-requests/account-requests.module";
 import { CockpitModule } from "./cockpit/cockpit.module";
+import { RhModule } from "./rh/rh.module";
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { CockpitModule } from "./cockpit/cockpit.module";
     RegistrationsModule,
     AccountRequestsModule,
     CockpitModule,
+    RhModule,
   ],
   controllers: [AppController],
   providers: [AppService],

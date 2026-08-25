@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
 import RhShell from "@/components/compte-admin/RhShell";
-import VueEnsemblePanel from "@/components/compte-admin/VueEnsemblePanel";
+import ReunionsPanel from "@/components/compte-admin/ReunionsPanel";
 
 export const metadata: Metadata = {
-  title: "Portail RH — e-Staf",
+  title: "Réunions — Portail RH — e-Staf",
   robots: { index: false, follow: false },
 };
 
 export default function Page() {
   return (
     <RhShell
-      title="Vue d'ensemble"
-      subtitle="Talents, vagues de production et pilotage global."
+      title="Réunions"
+      subtitle="Convoquez une réunion pour l'équipe interne, les partenaires, ou les deux."
     >
-      <VueEnsemblePanel />
+      <ReunionsPanel />
     </RhShell>
   );
 }

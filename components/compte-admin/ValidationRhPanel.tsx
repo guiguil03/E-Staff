@@ -12,11 +12,24 @@ interface PendingAttempt {
   candidat: { firstName: string; lastName: string; email: string };
   tier: string | null;
   totalScore: number | null;
+  lexiqueScore: number | null;
+  oralScore: number | null;
+  situationsScore: number | null;
+  videoScore: number | null;
+  essayScore: number | null;
   gradedAt: string | null;
   contractDuree: string | null;
   contractFrais: string | null;
   contractConditions: string | null;
 }
+
+const BLOC_LABELS: { key: keyof PendingAttempt; label: string }[] = [
+  { key: "lexiqueScore", label: "Bloc 1 — Lexique & questions ouvertes" },
+  { key: "essayScore", label: "Bloc 2 — Commentaire argumentatif" },
+  { key: "situationsScore", label: "Bloc 3 — Mises en situation" },
+  { key: "oralScore", label: "Bloc 4 — Compréhension orale" },
+  { key: "videoScore", label: "Bloc 5 — Production vidéo" },
+];
 
 function adminHeaders(): HeadersInit {
   const matricule =
@@ -161,7 +174,28 @@ export default function ValidationRhPanel({ onChange }: ValidationRhPanelProps) 
 
                   {openId === a.id && (
                     <div className="mt-2 rounded border border-accent/30 bg-obsidian p-4">
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      <p className="font-mono text-xs uppercase tracking-widest text-white/50">
+                        Résultat du test (corrigé par le formateur)
+                      </p>
+                      <div className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                        {BLOC_LABELS.map(({ key, label }) => {
+                          const score = a[key] as number | null;
+                          return (
+                            <div key={key} className="flex items-center justify-between gap-2">
+                              <span className="font-sans text-xs text-white/60">{label}</span>
+                              <span className="shrink-0 font-mono text-xs text-white/80">
+                                {score ?? "—"}/20
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="mt-2 font-mono text-xs text-accent">
+                        Total : {a.totalScore ?? "—"}/100 —{" "}
+                        {a.tier === "refuse" ? "Non retenu (suggéré)" : (a.tier ?? "—")}
+                      </p>
+
+                      <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 sm:grid-cols-2">
                         <div>
                           <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
                             Durée

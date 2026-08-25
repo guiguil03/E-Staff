@@ -1,0 +1,89 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
+import { AdminGuard } from '../common/admin.guard';
+import { RhService } from './rh.service';
+import { UpsertReunionDto } from './dto/upsert-reunion.dto';
+import { UpdateConnecteurStatutDto } from './dto/update-connecteur-statut.dto';
+import { UpsertFormateurDto } from './dto/upsert-formateur.dto';
+import { AssignFormateurDto } from './dto/assign-formateur.dto';
+
+@Controller('rh')
+@UseGuards(AdminGuard)
+export class RhController {
+  constructor(private readonly service: RhService) {}
+
+  @Get('vue-ensemble')
+  getVueEnsemble() {
+    return this.service.getVueEnsemble();
+  }
+
+  @Get('registre')
+  getRegistre() {
+    return this.service.getRegistre();
+  }
+
+  @Get('partenaires')
+  getPartenaires() {
+    return this.service.getPartenaires();
+  }
+
+  @Put('partenaires/:id/statut')
+  updatePartenaireStatut(
+    @Param('id') id: string,
+    @Body() dto: UpdateConnecteurStatutDto,
+  ) {
+    return this.service.updatePartenaireStatut(id, dto.status);
+  }
+
+  @Get('reunions')
+  listReunions() {
+    return this.service.listReunions();
+  }
+
+  @Post('reunions')
+  createReunion(@Body() dto: UpsertReunionDto) {
+    return this.service.createReunion(dto);
+  }
+
+  @Put('reunions/:id')
+  updateReunion(@Param('id') id: string, @Body() dto: UpsertReunionDto) {
+    return this.service.updateReunion(id, dto);
+  }
+
+  @Post('reunions/:id/annuler')
+  cancelReunion(@Param('id') id: string) {
+    return this.service.cancelReunion(id);
+  }
+
+  @Get('formateurs')
+  listFormateurs() {
+    return this.service.listFormateurs();
+  }
+
+  @Post('formateurs')
+  createFormateur(@Body() dto: UpsertFormateurDto) {
+    return this.service.createFormateur(dto);
+  }
+
+  @Put('formateurs/:id')
+  updateFormateur(@Param('id') id: string, @Body() dto: UpsertFormateurDto) {
+    return this.service.updateFormateur(id, dto);
+  }
+
+  @Put('groupes/:id/formateur')
+  assignFormateur(@Param('id') id: string, @Body() dto: AssignFormateurDto) {
+    return this.service.assignFormateur(id, dto.formateurId ?? null);
+  }
+
+  @Get('performance-formateurs')
+  getPerformanceFormateurs() {
+    return this.service.getPerformanceFormateurs();
+  }
+}

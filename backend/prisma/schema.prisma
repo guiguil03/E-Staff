@@ -344,6 +344,11 @@ model Groupe {
   cle   String @unique // "A".."F"
   label String // "Groupe A"
 
+  // Formateur en charge de ce groupe — nullable, un groupe peut ne pas
+  // (encore) avoir de formateur assigné (voir RhService.assignFormateur).
+  formateurId String?
+  formateur   Formateur? @relation(fields: [formateurId], references: [id])
+
   apprenants Apprenant[]
   seances    Seance[]
 }
@@ -354,6 +359,8 @@ model Formateur {
   prenom    String
   nom       String
   email     String
+
+  groupes Groupe[]
 }
 
 model Apprenant {
@@ -502,4 +509,38 @@ model ForumLive {
   dailyRoomUrl  String?
 
   createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Portail RH — réunions convoquées par la RH (équipe interne, partenaires,
+// ou les deux) — voir rh.module.ts. Distinct de ForumLive (diffusion publique
+// grand public) et de Seance (cours pédagogique programmé) : une réunion RH
+// est un rendez-vous interne/partenaires, pas de salle vidéo intégrée pour
+// l'instant (juste planification + suivi), le lien de visio se met dans
+// `lieu` si besoin (Meet/Zoom externe).
+// ---------------------------------------------------------------------------
+
+model Reunion {
+  id String @id @default(cuid())
+
+  titre       String
+  description String?
+
+  // "equipe" | "partenaires" | "tous" — qui est convoqué.
+  audience String
+
+  // Liste libre de noms/e-mails invités, JSON-encodée (String[]) — pas de
+  // répertoire Partenaire/Équipe structuré à ce stade, la RH saisit les
+  // participants à la main.
+  participants String @default("[]")
+
+  startAt      DateTime
+  dureeMinutes Int      @default(60)
+  lieu         String? // présentiel ou lien de visio externe
+
+  // "planifiee" | "annulee"
+  statut String @default("planifiee")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
