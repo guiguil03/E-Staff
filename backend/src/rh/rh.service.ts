@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CockpitService } from '../cockpit/cockpit.service';
+import { NotationService } from '../notation/notation.service';
 import { UpsertReunionDto } from './dto/upsert-reunion.dto';
 import { UpsertFormateurDto } from './dto/upsert-formateur.dto';
 
@@ -33,6 +34,7 @@ export class RhService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cockpit: CockpitService,
+    private readonly notation: NotationService,
   ) {}
 
   // ---- Vue d'ensemble -----------------------------------------------------
@@ -247,6 +249,47 @@ export class RhService {
     });
   }
 
+  async updateVagueDates(
+    groupeId: string,
+    dateDebut: Date | null,
+    dateFin: Date | null,
+  ) {
+    const groupe = await this.prisma.groupe.findUnique({
+      where: { id: groupeId },
+    });
+    if (!groupe) throw new NotFoundException('Groupe introuvable.');
+    return this.prisma.groupe.update({
+      where: { id: groupeId },
+      data: { dateDebut, dateFin },
+    });
+  }
+
+  // Vue "Vagues" enrichie — chaque groupe avec ses dates, son type de
+  // cours, son formateur et son vrai taux de réussite (voir
+  // CockpitService.getTauxReussiteParGroupe). Remplace la simple liste de
+  // chips A-F par une vraie table de pilotage.
+  async getVagues() {
+    const [groupes, tauxReussiteParGroupe] = await Promise.all([
+      this.prisma.groupe.findMany({
+        include: { formateur: true, _count: { select: { apprenants: true } } },
+        orderBy: { cle: 'asc' },
+      }),
+      this.cockpit.getTauxReussiteParGroupe(),
+    ]);
+
+    return groupes.map((g) => ({
+      id: g.id,
+      cle: g.cle,
+      label: g.label,
+      typeCours: g.typeCours,
+      dateDebut: g.dateDebut,
+      dateFin: g.dateFin,
+      formateurNom: g.formateur ? `${g.formateur.prenom} ${g.formateur.nom}` : null,
+      apprenantsCount: g._count.apprenants,
+      tauxReussite: tauxReussiteParGroupe.get(g.cle) ?? 0,
+    }));
+  }
+
   // Comparatif réel — moyenne des groupes que chaque formateur encadre
   // (réutilise le calcul de moyenne du Cockpit Formateur, voir
   // CockpitService.getGroupes). Un formateur sans groupe assigné, ou dont
@@ -331,5 +374,108 @@ export class RhService {
       // Bientôt disponible — voir note ci-dessus.
       production: null as null,
     }));
+  }
+
+  // ---- Casiers avec historique ---------------------------------------------
+  // Fiches détaillées par entité — réutilisent des données déjà tracées
+  // (notations, présences) plutôt que d'introduire un journal d'audit
+  // séparé. Pour Formateur/Partenaire, il n'existe aujourd'hui aucun
+  // historique des changements (réaffectation de groupe, changement de
+  // statut) — seul l'état actuel est tracé en base, donc ces deux casiers
+  // montrent l'état actuel + ce qui EST réellement historisé (vagues
+  // encadrées, candidature), pas un faux journal d'événements.
+
+  async getApprenantCasier(matricule: string) {
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { matricule },
+      include: {
+        groupe: { include: { formateur: true } },
+        evaluationAttempt: { include: { candidat: true } },
+      },
+    });
+    if (!apprenant) throw new NotFoundException('Apprenant introuvable.');
+
+    const [notationsParSeance, presences] = await Promise.all([
+      this.notation.listApprenantNotations(matricule),
+      this.prisma.presence.findMany({
+        where: { apprenantId: apprenant.id },
+        include: { seance: true },
+        orderBy: { joinedAt: 'asc' },
+      }),
+    ]);
+
+    return {
+      matricule: apprenant.matricule,
+      prenom: apprenant.prenom,
+      nom: apprenant.nom,
+      email: apprenant.email,
+      groupeLabel: apprenant.groupe.label,
+      typeCours: apprenant.groupe.typeCours,
+      formateurNom: apprenant.groupe.formateur
+        ? `${apprenant.groupe.formateur.prenom} ${apprenant.groupe.formateur.nom}`
+        : null,
+      abonnementExpireAt: apprenant.abonnementExpireAt,
+      admission: apprenant.evaluationAttempt
+        ? {
+            totalScore: apprenant.evaluationAttempt.totalScore,
+            tier: apprenant.evaluationAttempt.tier,
+            gradedAt: apprenant.evaluationAttempt.gradedAt,
+          }
+        : null,
+      historiqueNotations: notationsParSeance,
+      historiquePresences: presences.map((p) => ({
+        seanceNumero: p.seance.numero,
+        joinedAt: p.joinedAt,
+        leftAt: p.leftAt,
+        dureeSecondes: p.dureeSecondes,
+      })),
+    };
+  }
+
+  async getFormateurCasier(id: string) {
+    const formateur = await this.prisma.formateur.findUnique({
+      where: { id },
+      include: { groupes: { include: { _count: { select: { apprenants: true } } } } },
+    });
+    if (!formateur) throw new NotFoundException('Formateur introuvable.');
+
+    const tauxParGroupe = await this.cockpit.getTauxReussiteParGroupe();
+
+    return {
+      matricule: formateur.matricule,
+      prenom: formateur.prenom,
+      nom: formateur.nom,
+      email: formateur.email,
+      vagues: formateur.groupes.map((g) => ({
+        label: g.label,
+        typeCours: g.typeCours,
+        dateDebut: g.dateDebut,
+        dateFin: g.dateFin,
+        apprenantsCount: g._count.apprenants,
+        tauxReussite: tauxParGroupe.get(g.cle) ?? 0,
+      })),
+    };
+  }
+
+  async getPartenaireCasier(id: string) {
+    const connecteur = await this.prisma.connecteur.findUnique({ where: { id } });
+    if (!connecteur) throw new NotFoundException('Partenaire introuvable.');
+
+    return {
+      firstName: connecteur.firstName,
+      lastName: connecteur.lastName,
+      email: connecteur.email,
+      phone: connecteur.phone,
+      activityType: connecteur.activityType,
+      clientCount: connecteur.clientCount,
+      soughtRoles: JSON.parse(connecteur.soughtRoles) as string[],
+      cvVolume: connecteur.cvVolume,
+      budgetPerAgent: connecteur.budgetPerAgent,
+      presentationMode: connecteur.presentationMode,
+      paymentChannel: connecteur.paymentChannel,
+      opportunityTiming: connecteur.opportunityTiming,
+      status: connecteur.status,
+      candidatureRecueLe: connecteur.createdAt,
+    };
   }
 }

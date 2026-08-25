@@ -356,6 +356,13 @@ model Groupe {
   // ce type renseigné (seedés avant ce champ).
   typeCours String?
 
+  // Dates de la vague — saisies manuellement par la RH (pas de règle
+  // automatique de calcul, une vague peut être décalée). dateFin sert aussi
+  // à distinguer une vague active d'une vague clôturée (voir
+  // RhService.getVagues) une fois cette notion introduite côté UI.
+  dateDebut DateTime?
+  dateFin   DateTime?
+
   apprenants Apprenant[]
   seances    Seance[]
 }

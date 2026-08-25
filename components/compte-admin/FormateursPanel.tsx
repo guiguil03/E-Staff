@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
 import { apiGet, apiPostAuthed, apiPut } from "@/lib/api";
@@ -184,9 +185,12 @@ export default function FormateursPanel() {
           <div className="mt-4 space-y-2">
             {formateurs.map((f) => (
               <div key={f.id} className="rounded border border-white/10 bg-obsidian px-4 py-3">
-                <p className="font-sans text-sm text-white">
+                <Link
+                  href={`/compte/admin/formateurs/${f.id}`}
+                  className="block font-sans text-sm text-white hover:text-accent hover:underline"
+                >
                   {f.prenom} {f.nom}
-                </p>
+                </Link>
                 <p className="font-mono text-[11px] text-white/40">
                   {f.matricule} · {f.email}
                 </p>

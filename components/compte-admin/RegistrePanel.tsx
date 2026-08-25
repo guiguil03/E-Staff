@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import Reveal from "@/components/Reveal";
 import { apiGet } from "@/lib/api";
 import { adminHeaders } from "./adminHeaders";
@@ -83,7 +84,11 @@ export default function RegistrePanel() {
                     key={r.matricule}
                     className="border-b border-white/5 font-sans text-sm text-white/80 hover:bg-white/5"
                   >
-                    <td className="py-2.5 pr-4 font-mono text-xs text-accent">{r.matricule}</td>
+                    <td className="py-2.5 pr-4 font-mono text-xs text-accent">
+                      <Link href={`/compte/admin/apprenants/${r.matricule}`} className="hover:underline">
+                        {r.matricule}
+                      </Link>
+                    </td>
                     <td className="py-2.5 pr-4">
                       {r.prenom} {r.nom}
                     </td>

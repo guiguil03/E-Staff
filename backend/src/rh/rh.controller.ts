@@ -14,6 +14,7 @@ import { UpdateConnecteurStatutDto } from './dto/update-connecteur-statut.dto';
 import { UpsertFormateurDto } from './dto/upsert-formateur.dto';
 import { AssignFormateurDto } from './dto/assign-formateur.dto';
 import { UpdateTypeCoursDto } from './dto/update-type-cours.dto';
+import { UpdateVagueDatesDto } from './dto/update-vague-dates.dto';
 
 @Controller('rh')
 @UseGuards(AdminGuard)
@@ -96,5 +97,34 @@ export class RhController {
   @Get('cycle-complet')
   getCycleComplet() {
     return this.service.getCycleComplet();
+  }
+
+  @Put('groupes/:id/dates')
+  updateVagueDates(@Param('id') id: string, @Body() dto: UpdateVagueDatesDto) {
+    return this.service.updateVagueDates(
+      id,
+      dto.dateDebut ? new Date(dto.dateDebut) : null,
+      dto.dateFin ? new Date(dto.dateFin) : null,
+    );
+  }
+
+  @Get('vagues')
+  getVagues() {
+    return this.service.getVagues();
+  }
+
+  @Get('apprenants/:matricule/casier')
+  getApprenantCasier(@Param('matricule') matricule: string) {
+    return this.service.getApprenantCasier(matricule);
+  }
+
+  @Get('formateurs/:id/casier')
+  getFormateurCasier(@Param('id') id: string) {
+    return this.service.getFormateurCasier(id);
+  }
+
+  @Get('partenaires/:id/casier')
+  getPartenaireCasier(@Param('id') id: string) {
+    return this.service.getPartenaireCasier(id);
   }
 }

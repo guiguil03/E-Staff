@@ -188,6 +188,32 @@ export class CockpitService {
     return { globalRate, apprenants: vivier };
   }
 
+  // Taux de réussite PAR groupe — même seuil/logique que getVivierC1
+  // (moyenneGlobale >= 75 à la séance la plus avancée entièrement notée),
+  // mais agrégé groupe par groupe plutôt que sur la cohorte entière. Sert à
+  // la vue "Vagues" du Portail RH (voir RhService.getVagues) : une vague
+  // avec 0% n'a simplement pas encore d'apprenant noté à ce niveau, pas une
+  // vague en échec.
+  async getTauxReussiteParGroupe(): Promise<Map<string, number>> {
+    const { apprenants, notations } = await this.loadRaw();
+    const scoresParApprenant = this.buildScoresParApprenant(notations);
+
+    const parGroupe = new Map<string, { total: number; reussis: number }>();
+    for (const a of apprenants) {
+      const entry = parGroupe.get(a.groupe.cle) ?? { total: 0, reussis: 0 };
+      entry.total += 1;
+      const moyenne = this.moyenneGlobale(scoresParApprenant.get(a.id));
+      if (moyenne !== null && moyenne >= VIVIER_C1_THRESHOLD) entry.reussis += 1;
+      parGroupe.set(a.groupe.cle, entry);
+    }
+
+    const result = new Map<string, number>();
+    for (const [cle, { total, reussis }] of parGroupe) {
+      result.set(cle, total > 0 ? Math.round((reussis / total) * 100) : 0);
+    }
+    return result;
+  }
+
   async getGroupeDetail(cle: string) {
     const { apprenants: tousApprenants, notations, seancesPassees, presences } = await this.loadRaw();
     const apprenants = tousApprenants.filter((a) => a.groupe.cle === cle);

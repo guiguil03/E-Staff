@@ -4,45 +4,68 @@ import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
 import { apiGet, apiPostAuthed, apiPut } from "@/lib/api";
-import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
+import { adminHeaders } from "./adminHeaders";
 
-interface GroupeAvecPlaces {
+interface Vague {
   id: string;
   cle: string;
   label: string;
   typeCours: string | null;
-  placesRestantes: number;
-}
-
-function adminHeaders(): HeadersInit {
-  const matricule =
-    typeof window !== "undefined" ? sessionStorage.getItem(ACCOUNT_MATRICULE_KEY) : null;
-  return matricule ? { "x-admin-matricule": matricule } : {};
+  dateDebut: string | null;
+  dateFin: string | null;
+  formateurNom: string | null;
+  apprenantsCount: number;
+  tauxReussite: number;
 }
 
 const emptyForm = { cle: "", label: "" };
 
-// Les groupes A-F sont figés en base au lancement (seed) — ce panneau
-// permet d'en ajouter d'autres sans intervention manuelle en base une fois
-// le recrutement plus rapide que prévu (voir brainstorm 2026-08-09).
+function toDateInputValue(iso: string | null): string {
+  if (!iso) return "";
+  return iso.slice(0, 10);
+}
+
+function tauxColor(taux: number): string {
+  if (taux >= 60) return "text-success";
+  if (taux >= 30) return "text-accent";
+  return "text-white/50";
+}
+
+// Vue "Vagues de formation" — chaque groupe A-F (et au-delà) avec son type
+// de cours, ses dates, son formateur et son vrai taux de réussite (voir
+// RhService.getVagues + CockpitService.getTauxReussiteParGroupe). Remplace
+// l'ancienne simple liste de chips A-F par une vraie table de pilotage —
+// la création de groupe reste identique (voir brainstorm 2026-08-09), seule
+// la partie affichage/édition change.
 export default function GroupesPanel() {
-  const [groupes, setGroupes] = useState<GroupeAvecPlaces[] | "loading" | "erreur">("loading");
+  const [vagues, setVagues] = useState<Vague[] | "loading" | "erreur">("loading");
   const [form, setForm] = useState(emptyForm);
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
-  const [typeCoursDrafts, setTypeCoursDrafts] = useState<Record<string, string>>({});
+  const [drafts, setDrafts] = useState<Record<string, { typeCours: string; dateDebut: string; dateFin: string }>>(
+    {}
+  );
 
   function refresh() {
-    setGroupes("loading");
-    apiGet<GroupeAvecPlaces[]>("/evaluation/groupes-avec-places", adminHeaders())
+    setVagues("loading");
+    apiGet<Vague[]>("/rh/vagues", adminHeaders())
       .then((list) => {
-        setGroupes(list);
-        setTypeCoursDrafts(
-          Object.fromEntries(list.map((g) => [g.id, g.typeCours ?? ""]))
+        setVagues(list);
+        setDrafts(
+          Object.fromEntries(
+            list.map((v) => [
+              v.id,
+              {
+                typeCours: v.typeCours ?? "",
+                dateDebut: toDateInputValue(v.dateDebut),
+                dateFin: toDateInputValue(v.dateFin),
+              },
+            ])
+          )
         );
       })
-      .catch(() => setGroupes("erreur"));
+      .catch(() => setVagues("erreur"));
   }
 
   useEffect(refresh, []);
@@ -67,11 +90,21 @@ export default function GroupesPanel() {
     }
   }
 
-  async function saveTypeCours(groupeId: string) {
-    const value = typeCoursDrafts[groupeId]?.trim() ?? "";
+  async function saveTypeCours(vagueId: string) {
+    const value = drafts[vagueId]?.typeCours.trim() ?? "";
+    await apiPut(`/rh/groupes/${vagueId}/type-cours`, { typeCours: value || null }, adminHeaders());
+    refresh();
+  }
+
+  async function saveDates(vagueId: string) {
+    const d = drafts[vagueId];
+    if (!d) return;
     await apiPut(
-      `/rh/groupes/${groupeId}/type-cours`,
-      { typeCours: value || null },
+      `/rh/groupes/${vagueId}/dates`,
+      {
+        dateDebut: d.dateDebut ? new Date(d.dateDebut).toISOString() : null,
+        dateFin: d.dateFin ? new Date(d.dateFin).toISOString() : null,
+      },
       adminHeaders()
     );
     refresh();
@@ -81,7 +114,7 @@ export default function GroupesPanel() {
     <Reveal delay={40}>
       <div className="rounded border border-white/10 bg-obsidianCard p-6">
         <div className="flex items-center justify-between">
-          <h3 className="font-display text-base font-semibold text-white">Groupes</h3>
+          <h3 className="font-display text-base font-semibold text-white">Vagues de formation</h3>
           <button
             onClick={() => setOpen((o) => !o)}
             className="font-mono text-xs uppercase tracking-widest text-accent hover:underline"
@@ -130,32 +163,89 @@ export default function GroupesPanel() {
           </div>
         )}
 
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {groupes === "loading" && <p className="font-sans text-sm text-white/50">Chargement...</p>}
-          {groupes === "erreur" && (
-            <p className="font-sans text-sm text-white/50">Erreur de chargement.</p>
-          )}
-          {Array.isArray(groupes) &&
-            groupes.map((g) => (
-              <div
-                key={g.id}
-                className="rounded border border-white/10 bg-obsidian px-3 py-2"
-              >
-                <p className="font-mono text-xs text-white/70">
-                  {g.label} · {g.placesRestantes} place{g.placesRestantes > 1 ? "s" : ""}
-                </p>
-                <input
-                  value={typeCoursDrafts[g.id] ?? ""}
-                  onChange={(e) =>
-                    setTypeCoursDrafts((d) => ({ ...d, [g.id]: e.target.value }))
-                  }
-                  onBlur={() => saveTypeCours(g.id)}
-                  placeholder="Type de cours (ex. DELF/DALF, TEF Canada...)"
-                  className="mt-1.5 w-full rounded border border-white/15 bg-obsidianCard px-2 py-1 font-sans text-xs text-white placeholder:text-white/30 outline-none focus:border-accent"
-                />
-              </div>
-            ))}
-        </div>
+        {vagues === "loading" && (
+          <p className="mt-4 font-sans text-sm text-white/50">Chargement...</p>
+        )}
+        {vagues === "erreur" && (
+          <p className="mt-4 font-sans text-sm text-white/50">Erreur de chargement.</p>
+        )}
+
+        {Array.isArray(vagues) && (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[900px] border-collapse text-left">
+              <thead>
+                <tr className="border-b border-white/10 font-mono text-[11px] uppercase tracking-widest text-white/40">
+                  <th className="py-2 pr-4">Vague</th>
+                  <th className="py-2 pr-4">Type de cours</th>
+                  <th className="py-2 pr-4">Début</th>
+                  <th className="py-2 pr-4">Fin</th>
+                  <th className="py-2 pr-4">Formateur</th>
+                  <th className="py-2 pr-4">Taux de réussite</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vagues.map((v) => (
+                  <tr key={v.id} className="border-b border-white/5">
+                    <td className="py-2.5 pr-4 font-sans text-sm text-white">
+                      {v.label}
+                      <span className="ml-1.5 font-mono text-[11px] text-white/40">
+                        ({v.apprenantsCount})
+                      </span>
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      <input
+                        value={drafts[v.id]?.typeCours ?? ""}
+                        onChange={(e) =>
+                          setDrafts((d) => ({
+                            ...d,
+                            [v.id]: { ...d[v.id], typeCours: e.target.value },
+                          }))
+                        }
+                        onBlur={() => saveTypeCours(v.id)}
+                        placeholder="DELF/DALF, TEF..."
+                        className="w-40 rounded border border-white/15 bg-obsidian px-2 py-1 font-sans text-xs text-white placeholder:text-white/30 outline-none focus:border-accent"
+                      />
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      <input
+                        type="date"
+                        value={drafts[v.id]?.dateDebut ?? ""}
+                        onChange={(e) =>
+                          setDrafts((d) => ({
+                            ...d,
+                            [v.id]: { ...d[v.id], dateDebut: e.target.value },
+                          }))
+                        }
+                        onBlur={() => saveDates(v.id)}
+                        className="rounded border border-white/15 bg-obsidian px-2 py-1 font-mono text-xs text-white outline-none focus:border-accent"
+                      />
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      <input
+                        type="date"
+                        value={drafts[v.id]?.dateFin ?? ""}
+                        onChange={(e) =>
+                          setDrafts((d) => ({
+                            ...d,
+                            [v.id]: { ...d[v.id], dateFin: e.target.value },
+                          }))
+                        }
+                        onBlur={() => saveDates(v.id)}
+                        className="rounded border border-white/15 bg-obsidian px-2 py-1 font-mono text-xs text-white outline-none focus:border-accent"
+                      />
+                    </td>
+                    <td className="py-2.5 pr-4 font-sans text-xs text-white/60">
+                      {v.formateurNom ?? "—"}
+                    </td>
+                    <td className={`py-2.5 pr-4 font-mono text-xs ${tauxColor(v.tauxReussite)}`}>
+                      {v.tauxReussite}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </Reveal>
   );

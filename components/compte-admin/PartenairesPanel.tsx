@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import Reveal from "@/components/Reveal";
 import { apiGet, apiPut } from "@/lib/api";
 import { adminHeaders } from "./adminHeaders";
@@ -81,9 +82,12 @@ export default function PartenairesPanel() {
                 className="flex flex-wrap items-center justify-between gap-3 rounded border border-white/10 bg-obsidian px-4 py-3"
               >
                 <div>
-                  <p className="font-sans text-sm text-white">
+                  <Link
+                    href={`/compte/admin/partenaires/${p.id}`}
+                    className="block font-sans text-sm text-white hover:text-accent hover:underline"
+                  >
                     {p.firstName} {p.lastName}
-                  </p>
+                  </Link>
                   <p className="font-mono text-[11px] text-white/40">
                     {p.activityType} · {p.clientCount} clients · {p.email}
                   </p>
