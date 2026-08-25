@@ -30,6 +30,15 @@ interface Presence {
   dureeSecondes: number | null;
 }
 
+interface MissionHistorique {
+  clientNom: string;
+  role: string;
+  dateDebut: string;
+  dateFin: string | null;
+  superviseurNom: string | null;
+  qualityScore: number | null;
+}
+
 interface ApprenantCasier {
   matricule: string;
   prenom: string;
@@ -42,6 +51,7 @@ interface ApprenantCasier {
   admission: { totalScore: number | null; tier: string | null; gradedAt: string | null } | null;
   historiqueNotations: SeanceNotations[];
   historiquePresences: Presence[];
+  historiqueMissions: MissionHistorique[];
 }
 
 const COMPETENCY_LABELS = Object.fromEntries(COMPETENCY_DEFS.map((c) => [c.key, c.label]));
@@ -102,6 +112,37 @@ export default function ApprenantCasierPanel({ matricule }: { matricule: string 
           )}
         </div>
       </Reveal>
+
+      {casier.historiqueMissions.length > 0 && (
+        <Reveal delay={20}>
+          <div className="rounded border border-white/10 bg-obsidianCard p-6">
+            <h3 className="font-display text-base font-semibold text-white">
+              Historique des missions (Production)
+            </h3>
+            <div className="mt-4 space-y-2">
+              {casier.historiqueMissions.map((m, i) => (
+                <div key={i} className="rounded border border-white/10 bg-obsidian p-3">
+                  <p className="font-sans text-sm text-white">
+                    {m.clientNom}
+                    {m.dateFin === null && (
+                      <span className="ml-2 font-mono text-[10px] uppercase tracking-widest text-success">
+                        Active
+                      </span>
+                    )}
+                  </p>
+                  <p className="mt-0.5 font-mono text-[11px] text-white/50">
+                    {m.role} · {m.superviseurNom ?? "Sans superviseur"}
+                  </p>
+                  <p className="mt-0.5 font-mono text-[11px] text-white/40">
+                    {fmtDate(m.dateDebut)} → {fmtDate(m.dateFin)}
+                    {m.qualityScore !== null && ` · QS ${m.qualityScore}/5`}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Reveal>
+      )}
 
       <Reveal delay={40}>
         <div className="rounded border border-white/10 bg-obsidianCard p-6">

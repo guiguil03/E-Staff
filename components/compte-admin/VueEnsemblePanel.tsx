@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
 import { apiGet } from "@/lib/api";
+import ComparativeBarChart from "./ComparativeBarChart";
 import { adminHeaders } from "./adminHeaders";
 
 interface VueEnsemble {
@@ -21,6 +22,14 @@ interface PerformanceFormateur {
   nom: string;
   groupes: string[];
   moyenne: number | null;
+}
+
+interface PerformanceSuperviseur {
+  matricule: string;
+  prenom: string;
+  nom: string;
+  agentsActifs: number;
+  qualityScoreMoyen: number | null;
 }
 
 function KpiCard({
@@ -42,17 +51,17 @@ function KpiCard({
 }
 
 // Vue d'ensemble du Portail RH — KPIs réels calculés côté back (voir
-// RhService.getVueEnsemble) + un panneau "statistiques comparatives" qui
-// distingue honnêtement ce qui est déjà mesurable (partenaires, via
-// Connecteur) de ce qui ne l'est pas encore (formateurs/superviseurs : aucun
-// modèle d'affectation formateur↔groupe ni de rôle superviseur en base
-// aujourd'hui) — même discipline que le reste du projet : jamais de chiffre
-// inventé, un "bientôt disponible" explicite plutôt qu'un faux zéro qui
-// prétendrait mesurer quelque chose.
+// RhService.getVueEnsemble + ProductionService pour Agents/Superviseurs
+// depuis le module Production, phase 4, 2026-08-26) — jamais de chiffre
+// inventé : un "0" réel (aucune donnée pour l'instant) plutôt qu'un
+// "bientôt disponible" une fois que la donnée existe réellement en base.
 export default function VueEnsemblePanel() {
   const [data, setData] = useState<VueEnsemble | "loading" | "erreur">("loading");
   const [performanceFormateurs, setPerformanceFormateurs] = useState<
     PerformanceFormateur[] | "loading" | "erreur"
+  >("loading");
+  const [performanceSuperviseurs, setPerformanceSuperviseurs] = useState<
+    PerformanceSuperviseur[] | "loading" | "erreur"
   >("loading");
 
   useEffect(() => {
@@ -62,6 +71,9 @@ export default function VueEnsemblePanel() {
     apiGet<PerformanceFormateur[]>("/rh/performance-formateurs", adminHeaders())
       .then(setPerformanceFormateurs)
       .catch(() => setPerformanceFormateurs("erreur"));
+    apiGet<PerformanceSuperviseur[]>("/production/performance-superviseurs", adminHeaders())
+      .then(setPerformanceSuperviseurs)
+      .catch(() => setPerformanceSuperviseurs("erreur"));
   }, []);
 
   if (data === "loading") return <p className="font-sans text-sm text-white/50">Chargement...</p>;
@@ -76,11 +88,7 @@ export default function VueEnsemblePanel() {
         </h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard label="Talents en vivier (C1)" value={data.talentsEnVivier} />
-          <KpiCard
-            label="Agents en production active"
-            value={data.agentsEnProductionActive}
-            note="Nécessite le futur module de staffing client"
-          />
+          <KpiCard label="Agents en production active" value={data.agentsEnProductionActive} />
           <KpiCard label="Vagues de production en formation" value={data.vaguesEnFormation} />
           <KpiCard label="Recrutements en cours" value={data.recrutementsEnCours} />
         </div>
@@ -108,21 +116,13 @@ export default function VueEnsemblePanel() {
               </p>
             )}
             {Array.isArray(performanceFormateurs) && performanceFormateurs.length > 0 && (
-              <div className="mt-3 space-y-2">
-                {performanceFormateurs.map((f) => (
-                  <div key={f.matricule} className="flex items-center justify-between gap-2">
-                    <span className="font-sans text-xs text-white/70">
-                      {f.prenom} {f.nom}
-                      {f.groupes.length > 0 && (
-                        <span className="text-white/40"> ({f.groupes.join(", ")})</span>
-                      )}
-                    </span>
-                    <span className="shrink-0 font-mono text-xs text-accent">
-                      {f.moyenne ?? "—"}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <ComparativeBarChart
+                data={performanceFormateurs.map((f) => ({
+                  label: `${f.prenom} ${f.nom.charAt(0)}.`,
+                  value: f.moyenne,
+                }))}
+                maxValue={100}
+              />
             )}
             <a
               href="/compte/admin/academie"
@@ -133,11 +133,34 @@ export default function VueEnsemblePanel() {
           </div>
           <div className="rounded border border-white/10 bg-obsidianCard p-5">
             <p className="font-sans text-sm font-semibold text-white">Performance des superviseurs</p>
-            <p className="mt-1 font-mono text-[11px] text-white/40">Stabilité de la QS</p>
-            <p className="mt-4 font-sans text-xs text-white/50">
-              Bientôt disponible — le rôle Superviseur n&apos;a pas encore de compte/données
-              associées (module futur, voir cahier des charges).
-            </p>
+            <p className="mt-1 font-mono text-[11px] text-white/40">Qualité de Service moyenne (/5)</p>
+            {performanceSuperviseurs === "loading" && (
+              <p className="mt-4 font-sans text-xs text-white/50">Chargement...</p>
+            )}
+            {performanceSuperviseurs === "erreur" && (
+              <p className="mt-4 font-sans text-xs text-white/50">Erreur de chargement.</p>
+            )}
+            {Array.isArray(performanceSuperviseurs) && performanceSuperviseurs.length === 0 && (
+              <p className="mt-4 font-sans text-xs text-white/50">
+                Aucun superviseur enregistré pour l&apos;instant.
+              </p>
+            )}
+            {Array.isArray(performanceSuperviseurs) && performanceSuperviseurs.length > 0 && (
+              <ComparativeBarChart
+                data={performanceSuperviseurs.map((s) => ({
+                  label: `${s.prenom} ${s.nom.charAt(0)}.`,
+                  value: s.qualityScoreMoyen,
+                }))}
+                maxValue={5}
+                valueSuffix="/5"
+              />
+            )}
+            <a
+              href="/compte/admin/production"
+              className="mt-3 inline-block font-mono text-[11px] uppercase tracking-widest text-accent hover:underline"
+            >
+              Gérer la Production →
+            </a>
           </div>
           <div className="rounded border border-white/10 bg-obsidianCard p-5">
             <p className="font-sans text-sm font-semibold text-white">Performance des partenaires</p>

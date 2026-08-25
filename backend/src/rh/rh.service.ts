@@ -45,6 +45,7 @@ export class RhService {
       groupesAvecApprenants,
       recrutementsEnCours,
       connecteurs,
+      agentsEnProductionActive,
     ] = await Promise.all([
       this.prisma.apprenant.findMany({ include: { evaluationAttempt: true } }),
       this.prisma.apprenant.findMany({
@@ -55,6 +56,7 @@ export class RhService {
         where: { status: { in: STATUTS_RECRUTEMENT_EN_COURS } },
       }),
       this.prisma.connecteur.findMany({ select: { status: true } }),
+      this.prisma.mission.count({ where: { dateFin: null } }),
     ]);
 
     const talentsEnVivier = apprenants.filter(
@@ -69,7 +71,7 @@ export class RhService {
 
     return {
       talentsEnVivier,
-      agentsEnProductionActive: 0, // nécessite le futur module de staffing client — voir note frontend
+      agentsEnProductionActive,
       vaguesEnFormation: groupesAvecApprenants.length,
       recrutementsEnCours,
       apprenantsTotal: apprenants.length,
@@ -82,22 +84,35 @@ export class RhService {
 
   async getRegistre() {
     const apprenants = await this.prisma.apprenant.findMany({
-      include: { groupe: true, evaluationAttempt: true },
+      include: {
+        groupe: true,
+        evaluationAttempt: true,
+        missions: {
+          include: { contrat: true },
+          orderBy: { dateDebut: 'desc' },
+          take: 1,
+        },
+      },
       orderBy: { matricule: 'asc' },
     });
 
     return apprenants.map((a) => {
       const tier = a.evaluationAttempt?.tier ?? null;
+      const derniereMission = a.missions[0];
+      const enProduction = derniereMission && derniereMission.dateFin === null;
       return {
         matricule: a.matricule,
         prenom: a.prenom,
         nom: a.nom,
         email: a.email,
-        statut:
-          tier && TIERS_VIVIER.includes(tier) ? 'Certifié' : 'En Formation',
+        statut: enProduction
+          ? 'En Production'
+          : tier && TIERS_VIVIER.includes(tier)
+            ? 'Certifié'
+            : 'En Formation',
         formation: a.groupe.label,
         dateAdmission: a.evaluationAttempt?.gradedAt ?? null,
-        derniereMissionClient: null as string | null, // pas de module de staffing pour l'instant
+        derniereMissionClient: derniereMission?.contrat.clientNom ?? null,
       };
     });
   }
@@ -330,17 +345,25 @@ export class RhService {
 
   // ---- Cycle complet — vue unifiée recrutement -> formation -> production -
   // Une ligne par candidat, du dépôt de sa candidature jusqu'à son statut
-  // actuel — assemble ce qui existe déjà (EvaluationAttempt, Apprenant,
-  // Groupe, Formateur) plutôt que d'inventer un nouveau modèle. La colonne
-  // "production" reste explicitement vide (pas de module de staffing
-  // client — voir agentsEnProductionActive dans getVueEnsemble) : la ligne
-  // existe pour montrer où ce candidat s'arrête dans le cycle aujourd'hui,
-  // pas pour prétendre savoir où il travaille.
+  // actuel — assemble EvaluationAttempt, Apprenant, Groupe, Formateur et
+  // (depuis le module Production, 2026-08-26) sa mission active le cas
+  // échéant. "production" reste null pour un apprenant sans mission active
+  // (encore en formation, ou en pause entre deux missions) — jamais un
+  // statut inventé.
   async getCycleComplet() {
     const attempts = await this.prisma.evaluationAttempt.findMany({
       include: {
         candidat: true,
-        apprenant: { include: { groupe: { include: { formateur: true } } } },
+        apprenant: {
+          include: {
+            groupe: { include: { formateur: true } },
+            missions: {
+              where: { dateFin: null },
+              include: { contrat: true, superviseur: true },
+              take: 1,
+            },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -371,9 +394,138 @@ export class RhService {
               : null,
           }
         : null,
-      // Bientôt disponible — voir note ci-dessus.
-      production: null as null,
+      production: a.apprenant?.missions[0]
+        ? {
+            clientNom: a.apprenant.missions[0].contrat.clientNom,
+            role: a.apprenant.missions[0].role,
+            depuisLe: a.apprenant.missions[0].dateDebut,
+            superviseurNom: a.apprenant.missions[0].superviseur
+              ? `${a.apprenant.missions[0].superviseur.prenom} ${a.apprenant.missions[0].superviseur.nom}`
+              : null,
+          }
+        : null,
     }));
+  }
+
+  // Fiche détail d'une personne, depuis le Cycle complet — union de tout ce
+  // qui existe sur elle (test bloc par bloc, contrat, paiement, et si elle
+  // est devenue apprenant : formation + historique + production) en une
+  // seule page, plutôt que de forcer la RH à recouper 3 casiers séparés.
+  // Contrairement à getApprenantCasier (clé = matricule, apprenant déjà
+  // créé), celle-ci part de l'EvaluationAttempt : elle marche aussi pour un
+  // candidat encore en tout début de pipeline, sans compte Apprenant.
+  async getPersonneCasier(attemptId: string) {
+    const attempt = await this.prisma.evaluationAttempt.findUnique({
+      where: { id: attemptId },
+      include: {
+        candidat: true,
+        apprenant: {
+          include: {
+            groupe: { include: { formateur: true } },
+            missions: {
+              include: { contrat: true, superviseur: true },
+              orderBy: { dateDebut: 'desc' },
+            },
+          },
+        },
+      },
+    });
+    if (!attempt) throw new NotFoundException('Tentative introuvable.');
+
+    let formation: {
+      matricule: string;
+      groupeLabel: string;
+      typeCours: string | null;
+      formateurNom: string | null;
+      abonnementExpireAt: Date | null;
+      historiqueNotations: Awaited<ReturnType<NotationService['listApprenantNotations']>>;
+      historiquePresences: {
+        seanceNumero: number;
+        joinedAt: Date;
+        leftAt: Date | null;
+        dureeSecondes: number | null;
+      }[];
+    } | null = null;
+    let production: {
+      clientNom: string;
+      role: string;
+      dateDebut: Date;
+      dateFin: Date | null;
+      superviseurNom: string | null;
+      qualityScore: number | null;
+    }[] = [];
+
+    if (attempt.apprenant) {
+      const [notationsParSeance, presences] = await Promise.all([
+        this.notation.listApprenantNotations(attempt.apprenant.matricule),
+        this.prisma.presence.findMany({
+          where: { apprenantId: attempt.apprenant.id },
+          include: { seance: true },
+          orderBy: { joinedAt: 'asc' },
+        }),
+      ]);
+
+      formation = {
+        matricule: attempt.apprenant.matricule,
+        groupeLabel: attempt.apprenant.groupe.label,
+        typeCours: attempt.apprenant.groupe.typeCours,
+        formateurNom: attempt.apprenant.groupe.formateur
+          ? `${attempt.apprenant.groupe.formateur.prenom} ${attempt.apprenant.groupe.formateur.nom}`
+          : null,
+        abonnementExpireAt: attempt.apprenant.abonnementExpireAt,
+        historiqueNotations: notationsParSeance,
+        historiquePresences: presences.map((p) => ({
+          seanceNumero: p.seance.numero,
+          joinedAt: p.joinedAt,
+          leftAt: p.leftAt,
+          dureeSecondes: p.dureeSecondes,
+        })),
+      };
+
+      production = attempt.apprenant.missions.map((m) => ({
+        clientNom: m.contrat.clientNom,
+        role: m.role,
+        dateDebut: m.dateDebut,
+        dateFin: m.dateFin,
+        superviseurNom: m.superviseur ? `${m.superviseur.prenom} ${m.superviseur.nom}` : null,
+        qualityScore: m.qualityScore,
+      }));
+    }
+
+    return {
+      attemptId: attempt.id,
+      candidat: {
+        firstName: attempt.candidat.firstName,
+        lastName: attempt.candidat.lastName,
+        email: attempt.candidat.email,
+        phone: attempt.candidat.phone,
+        coordonneesRecuesLe: attempt.candidat.createdAt,
+      },
+      test: {
+        statut: attempt.status,
+        submittedAt: attempt.submittedAt,
+        gradedAt: attempt.gradedAt,
+        lexiqueScore: attempt.lexiqueScore,
+        oralScore: attempt.oralScore,
+        situationsScore: attempt.situationsScore,
+        videoScore: attempt.videoScore,
+        essayScore: attempt.essayScore,
+        totalScore: attempt.totalScore,
+        tier: attempt.tier,
+      },
+      contrat: {
+        duree: attempt.contractDuree,
+        frais: attempt.contractFrais,
+        conditions: attempt.contractConditions,
+        envoyeLe: attempt.contractSentAt,
+      },
+      paiement: {
+        reference: attempt.paymentReference,
+        confirmeLe: attempt.paymentConfirmedAt,
+      },
+      formation,
+      production,
+    };
   }
 
   // ---- Casiers avec historique ---------------------------------------------
@@ -391,6 +543,10 @@ export class RhService {
       include: {
         groupe: { include: { formateur: true } },
         evaluationAttempt: { include: { candidat: true } },
+        missions: {
+          include: { contrat: true, superviseur: true },
+          orderBy: { dateDebut: 'desc' },
+        },
       },
     });
     if (!apprenant) throw new NotFoundException('Apprenant introuvable.');
@@ -428,6 +584,14 @@ export class RhService {
         joinedAt: p.joinedAt,
         leftAt: p.leftAt,
         dureeSecondes: p.dureeSecondes,
+      })),
+      historiqueMissions: apprenant.missions.map((m) => ({
+        clientNom: m.contrat.clientNom,
+        role: m.role,
+        dateDebut: m.dateDebut,
+        dateFin: m.dateFin,
+        superviseurNom: m.superviseur ? `${m.superviseur.prenom} ${m.superviseur.nom}` : null,
+        qualityScore: m.qualityScore,
       })),
     };
   }

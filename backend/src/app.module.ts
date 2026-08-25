@@ -16,6 +16,7 @@ import { RegistrationsModule } from "./registrations/registrations.module";
 import { AccountRequestsModule } from "./account-requests/account-requests.module";
 import { CockpitModule } from "./cockpit/cockpit.module";
 import { RhModule } from "./rh/rh.module";
+import { ProductionModule } from "./production/production.module";
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { RhModule } from "./rh/rh.module";
     AccountRequestsModule,
     CockpitModule,
     RhModule,
+    ProductionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

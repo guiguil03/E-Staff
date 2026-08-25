@@ -46,6 +46,8 @@ model EntrepriseProjet {
   // "nouveau" | "contacte" | "qualifie" | "converti"
   status    String   @default("nouveau")
   createdAt DateTime @default(now())
+
+  contratsB2B ContratB2B[]
 }
 
 // ---------------------------------------------------------------------------
@@ -412,6 +414,12 @@ model Apprenant {
   // applicable (pipeline post-test) — absent pour les apprenants seedés/
   // créés manuellement.
   evaluationAttempt EvaluationAttempt?
+
+  // Missions de production (voir Mission) — un apprenant diplômé peut
+  // enchaîner plusieurs missions dans le temps (dateFin renseignée = mission
+  // terminée) ; la mission avec dateFin=null (s'il y en a une) est la
+  // mission active actuelle.
+  missions Mission[]
 }
 
 // Horaire réel d'une des 12 séances d'un groupe. startAt reste nullable :
@@ -557,4 +565,88 @@ model Reunion {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Production — staffing des agents diplômés chez les clients B2B (Portail
+// RH, phase 4, 2026-08-26). Distinct de la Formation (Groupe/Seance/
+// Notation) : une Mission ne démarre qu'une fois l'apprenant sorti du cursus
+// académique, sur un ContratB2B réel, sous la supervision d'un Superviseur.
+// ---------------------------------------------------------------------------
+
+model Superviseur {
+  id        String @id @default(cuid())
+  matricule String @unique
+  prenom    String
+  nom       String
+  email     String
+
+  missions Mission[]
+}
+
+model ContratB2B {
+  id String @id @default(cuid())
+
+  clientNom String
+
+  // Lien optionnel vers le lead d'origine (formulaire "Proposer un projet
+  // d'externalisation") — nullable, un contrat peut être créé directement
+  // par la RH sans être passé par ce formulaire.
+  entrepriseProjetId String?
+  entrepriseProjet   EntrepriseProjet? @relation(fields: [entrepriseProjetId], references: [id])
+
+  description String?
+  dateDebut   DateTime
+  dateFin     DateTime?
+
+  // "actif" | "termine" | "suspendu"
+  statut String @default("actif")
+
+  // Montant facturé par mois — devise non modélisée séparément (Ar par
+  // défaut, comme le reste du produit), nullable tant que le tarif n'est
+  // pas encore négocié/saisi.
+  tarifMensuel Float?
+
+  missions Mission[]
+  factures Facture[]
+
+  createdAt DateTime @default(now())
+}
+
+model Mission {
+  id String @id @default(cuid())
+
+  apprenantId String
+  apprenant   Apprenant @relation(fields: [apprenantId], references: [id])
+
+  contratId String
+  contrat   ContratB2B @relation(fields: [contratId], references: [id])
+
+  superviseurId String?
+  superviseur   Superviseur? @relation(fields: [superviseurId], references: [id])
+
+  role      String // poste occupé sur le contrat (ex. "Closer", "Support client")
+  dateDebut DateTime
+  dateFin   DateTime? // null = mission active (agent actuellement en production)
+
+  // Qualité de Service — notée périodiquement par le superviseur, /5. Null
+  // tant qu'aucune évaluation n'a encore été saisie.
+  qualityScore Float?
+
+  createdAt DateTime @default(now())
+}
+
+model Facture {
+  id String @id @default(cuid())
+
+  contratId String
+  contrat   ContratB2B @relation(fields: [contratId], references: [id])
+
+  periode String // "2026-09" — mois facturé
+  montant Float
+
+  // "emise" | "payee"
+  statut       String    @default("emise")
+  dateEmission DateTime  @default(now())
+  datePaiement DateTime?
 }

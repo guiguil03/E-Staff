@@ -95,9 +95,11 @@ export default function RegistrePanel() {
                     <td className="py-2.5 pr-4">
                       <span
                         className={`rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest ${
-                          r.statut === "Certifié"
-                            ? "border-success/40 text-success"
-                            : "border-white/20 text-white/50"
+                          r.statut === "En Production"
+                            ? "border-accent/40 text-accent"
+                            : r.statut === "Certifié"
+                              ? "border-success/40 text-success"
+                              : "border-white/20 text-white/50"
                         }`}
                       >
                         {r.statut}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import Reveal from "@/components/Reveal";
 import { apiGet } from "@/lib/api";
 import { adminHeaders } from "./adminHeaders";
@@ -22,7 +23,12 @@ interface CycleRow {
     typeCours: string | null;
     formateurNom: string | null;
   } | null;
-  production: null;
+  production: {
+    clientNom: string;
+    role: string;
+    depuisLe: string;
+    superviseurNom: string | null;
+  } | null;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -43,11 +49,12 @@ function fmtDate(iso: string | null): string {
 
 // Vue "cycle complet" — une ligne par candidat, du dépôt de sa candidature
 // jusqu'à son statut actuel dans le pipeline (test -> contrat -> paiement ->
-// affectation formation). Assemble des données déjà réelles (aucun nouveau
-// modèle) — la colonne Production reste vide tant que le module de staffing
-// client n'existe pas (voir RhService.getCycleComplet), affichée quand même
-// pour représenter honnêtement l'étape suivante du cycle plutôt que de la
-// cacher.
+// affectation formation -> production). Assemble EvaluationAttempt,
+// Apprenant, Groupe, Formateur et (depuis le module Production, phase 4,
+// 2026-08-26) la mission active de l'apprenant le cas échéant — voir
+// RhService.getCycleComplet. La colonne Production affiche "—" pour un
+// apprenant sans mission active (encore en formation), jamais un statut
+// inventé.
 export default function CyclePanel() {
   const [rows, setRows] = useState<CycleRow[] | "loading" | "erreur">("loading");
   const [filter, setFilter] = useState("");
@@ -127,9 +134,12 @@ export default function CyclePanel() {
                     className="border-b border-white/5 align-top font-sans text-sm text-white/80 hover:bg-white/5"
                   >
                     <td className="py-2.5 pr-4">
-                      <span className="block text-white">
+                      <Link
+                        href={`/compte/admin/cycle/${r.attemptId}`}
+                        className="block text-white hover:text-accent hover:underline"
+                      >
                         {r.candidat.firstName} {r.candidat.lastName}
-                      </span>
+                      </Link>
                       <span className="block font-mono text-[11px] text-white/40">
                         {r.candidat.email}
                       </span>
@@ -173,7 +183,20 @@ export default function CyclePanel() {
                         <span className="text-white/30">—</span>
                       )}
                     </td>
-                    <td className="py-2.5 pr-4 text-[11px] text-white/30">Bientôt disponible</td>
+                    <td className="py-2.5 pr-4">
+                      {r.production ? (
+                        <>
+                          <span className="block text-xs text-white">{r.production.clientNom}</span>
+                          <span className="block text-[11px] text-white/60">{r.production.role}</span>
+                          <span className="block text-[11px] text-white/40">
+                            depuis le {fmtDate(r.production.depuisLe)}
+                            {r.production.superviseurNom && ` · ${r.production.superviseurNom}`}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-white/30">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (

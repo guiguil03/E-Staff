@@ -99,6 +99,11 @@ export class RhController {
     return this.service.getCycleComplet();
   }
 
+  @Get('cycle/:attemptId')
+  getPersonneCasier(@Param('attemptId') attemptId: string) {
+    return this.service.getPersonneCasier(attemptId);
+  }
+
   @Put('groupes/:id/dates')
   updateVagueDates(@Param('id') id: string, @Body() dto: UpdateVagueDatesDto) {
     return this.service.updateVagueDates(
