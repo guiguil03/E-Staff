@@ -3,15 +3,17 @@
 // barème réel de la cliente (même pattern que les banques de questions
 // lexique/oral — voir etaff-project-roadmap "Known gap"). La tâche 1
 // (Débat Plateau Télé) est le vrai contenu client : le candidat choisit
-// d'abord un SUJET de débat (2 fournis le 2026-08-25, un 3e à venir — voir
-// VideoTaskSubject), puis un rôle (Option A ou B) au sein de ce sujet — voir
-// VideoTaskOption. Chaque sujet a sa propre contrainte linguistique (≥4
-// expressions parmi une liste propre au sujet, auto-déclaratif — le
-// formateur en tient compte dans "Adéquation avec la Consigne") et sa
-// propre vidéo de contexte, hébergée sur notre bucket (referenceVideoKey)
-// ou intégrée en iframe depuis une source externe qui l'autorise
-// explicitement (referenceVideoEmbedUrl, ex. TV5Monde — jamais réhébergée :
-// contenu pédagogique tiers, pas un fichier du client).
+// d'abord un SUJET de débat (3 fournis le 2026-08-25 : influenceurs,
+// inégalités salariales, santé publique — voir VideoTaskSubject), puis un
+// rôle (Option A ou B) au sein de ce sujet — voir VideoTaskOption. Chaque
+// sujet a sa propre contrainte linguistique (≥4 expressions parmi une liste
+// propre au sujet, auto-déclaratif — le formateur en tient compte dans
+// "Adéquation avec la Consigne") et sa propre vidéo de contexte, hébergée
+// sur notre bucket (referenceVideoKey — les 3 sujets utilisent ce mode) ou
+// intégrée en iframe depuis une source externe qui l'autorise explicitement
+// (referenceVideoEmbedUrl — support gardé mais plus utilisé depuis que le
+// sujet "inégalités salariales" est passé de l'iframe TV5Monde, peu fiable
+// en test, à une vidéo fournie par le client).
 export interface VideoTaskOption {
   key: string; // "A" | "B"
   role: string;
@@ -155,6 +157,52 @@ export const VIDEO_TASKS: VideoTask[] = [
         // propre vidéo (reportage Terriennes/TV5Monde), remuxée en MP4 sans
         // réencodage (déjà H.264/AAC, 21 Mo) et hébergée sur notre bucket.
         referenceVideoKey: "evaluation-references/inegalites-salariales.mp4",
+      },
+      {
+        key: "sante-publique",
+        title: "Les politiques de santé publique",
+        context:
+          "Vous participez à un débat télévisé sur les politiques de santé publique.",
+        options: [
+          {
+            key: "A",
+            role: "Le Spécialiste de la santé publique / L'Expert international",
+            objectif:
+              "Dénoncer les fractures sanitaires et plaider pour une prise en charge globale et équitable de la santé.",
+            introduction:
+              "Définissez le concept d'accès universel aux soins et le constat d'inégalité actuel.",
+            developpement:
+              "Exposez les conséquences sociales et économiques du manque d'infrastructures ou de financement de la santé.",
+            conclusion:
+              "Proposez des mécanismes de financement solidaire et de coopération internationale.",
+          },
+          {
+            key: "B",
+            role: "Le Représentant d'une organisation humanitaire",
+            objectif:
+              "Alerter sur la situation des populations vulnérables et faire pression sur les décideurs politiques.",
+            introduction: "Mettez en avant le droit fondamental à la santé.",
+            developpement:
+              "Présentez le travail de terrain, les urgences sanitaires et la réalité du manque de médicaments ou de personnel médical.",
+            conclusion:
+              "Lancez un appel à l'action pour une politique de santé qui dépasse les simples logiques lucratives.",
+          },
+        ],
+        linguisticConstraint: {
+          intro:
+            "Pour valider votre niveau C1, vous devez intégrer au moins 4 expressions ou termes parmi la liste suivante dans votre discours :",
+          termes: [
+            "Couverture santé universelle / Système de santé",
+            "Inégalités d'accès / Populations vulnérables",
+            "Prévention / Protection sociale",
+            "Politique publique de santé / Coopération internationale",
+          ],
+          minimum: 4,
+        },
+        // Reportage fourni par le client (interview Michel Sidibé, ONUSIDA),
+        // déjà en MP4 H.264/AAC — juste remuxé pour le faststart, pas de
+        // réencodage, puis hébergé sur notre bucket comme les 2 autres sujets.
+        referenceVideoKey: "evaluation-references/sante-publique.mp4",
       },
     ],
     maxSeconds: 180,
