@@ -9,22 +9,38 @@ import { UpsertObjectifJournalierDto } from "./dto/upsert-objectif-journalier.dt
 import { UpsertSuiviAgentHebdoDto } from "./dto/upsert-suivi-agent-hebdo.dto";
 import { UpsertRapportHebdoDto } from "./dto/upsert-rapport-hebdo.dto";
 import { UpdateDecaissementDto } from "./dto/update-decaissement.dto";
+import { UpdatePaiementAgentDto } from "./dto/update-paiement-agent.dto";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-// Ventilation du CA de production — 6 postes de charge représentant 90% du
-// CA facturé (tarifMensuel des contrats actifs), les 10% restants formant
-// la marge nette E-Staf. Voir DecaissementProduction.
-const POSTES_BUDGET: { key: string; label: string; pct: number }[] = [
-  { key: "salaires_agents", label: "Salaires Fixes Agents", pct: 0.5 },
-  { key: "charges_infrastructure", label: "Charges Fixes Infrastructure", pct: 0.075 },
-  { key: "pool_superviseurs", label: "Pool Superviseurs", pct: 0.075 },
-  { key: "commissions_apporteurs", label: "Commissions Apporteurs d'Affaires", pct: 0.05 },
-  { key: "primes_performance", label: "Primes Performance Agents", pct: 0.1 },
-  { key: "commission_demarrage", label: "Commission Démarrage Client (Mois 1)", pct: 0.1 },
+// Règle de base (Ravaka, 2026-08-27) : E-Staf doit toucher 20% net garanti
+// du CA, quoi qu'il en coûte — ce n'est pas un reliquat qui flotte selon les
+// charges réelles, c'est un plancher. Les 6 postes de charge ci-dessous
+// doivent donc impérativement tenir dans les 80% restants.
+const MARGIN_PCT_ESTAF = 0.2;
+const CHARGES_PCT_TOTAL = 1 - MARGIN_PCT_ESTAF;
+
+// Poids relatifs entre les 6 postes de charge — repris tels quels de la
+// structure fournie par le client (50/7.5/7.5/5/10/10, soit 90 au total),
+// puis rescalés proportionnellement pour tenir dans les 80% de CA
+// disponibles une fois la marge E-Staf prélevée. Voir DecaissementProduction.
+const RATIOS_POSTES: { key: string; label: string; ratio: number }[] = [
+  { key: "salaires_agents", label: "Salaires Fixes Agents", ratio: 50 },
+  { key: "charges_infrastructure", label: "Charges Fixes Infrastructure", ratio: 7.5 },
+  { key: "pool_superviseurs", label: "Pool Superviseurs", ratio: 7.5 },
+  { key: "commissions_apporteurs", label: "Commissions Apporteurs d'Affaires", ratio: 5 },
+  { key: "primes_performance", label: "Primes Performance Agents", ratio: 10 },
+  { key: "commission_demarrage", label: "Commission Démarrage Client (Mois 1)", ratio: 10 },
 ];
+const RATIO_TOTAL = RATIOS_POSTES.reduce((sum, p) => sum + p.ratio, 0);
+
+const POSTES_BUDGET: { key: string; label: string; pct: number }[] = RATIOS_POSTES.map((p) => ({
+  key: p.key,
+  label: p.label,
+  pct: (p.ratio / RATIO_TOTAL) * CHARGES_PCT_TOTAL,
+}));
 
 function currentPeriode(): string {
   const d = new Date();
@@ -250,6 +266,7 @@ export class ProductionService {
         superviseurId: dto.superviseurId,
         role: dto.role,
         dateDebut: new Date(dto.dateDebut),
+        tarifNegocie: dto.tarifNegocie ?? null,
       },
       include: { apprenant: true, contrat: true, superviseur: true },
     });
@@ -265,6 +282,7 @@ export class ProductionService {
         role: dto.role,
         dateFin: dto.dateFin === undefined ? undefined : dto.dateFin ? new Date(dto.dateFin) : null,
         qualityScore: dto.qualityScore === undefined ? undefined : dto.qualityScore,
+        tarifNegocie: dto.tarifNegocie === undefined ? undefined : dto.tarifNegocie,
       },
       include: { apprenant: true, contrat: true, superviseur: true },
     });
@@ -550,10 +568,11 @@ export class ProductionService {
   // ---- Tableau de bord financier global (budget vs. décaissements) -----------
 
   // Vue globale : CA total des contrats actifs ventilé en 6 postes de
-  // charge (90% du CA), comparé au réel saisi par la RH. Matérialise (get-
-  // or-create) une ligne DecaissementProduction par poste et par période au
-  // premier accès, avec le montant théorique calculé et le montant réel
-  // initialisé à la même valeur — la RH corrige ensuite si le réel diffère.
+  // charge (80% du CA — le solde des 20% de marge E-Staf garantie), comparé
+  // au réel saisi par la RH. Matérialise (get-or-create) une ligne
+  // DecaissementProduction par poste et par période au premier accès, avec
+  // le montant théorique calculé et le montant réel initialisé à la même
+  // valeur — la RH corrige ensuite si le réel diffère.
   async getTableauFinancierGlobal(periode?: string) {
     const p = periode ?? currentPeriode();
 
@@ -586,7 +605,9 @@ export class ProductionService {
 
     const budgetTheoriqueGlobal = round2(postes.reduce((sum, p2) => sum + p2.montantTheorique, 0));
     const depenseReelleValidee = round2(postes.reduce((sum, p2) => sum + p2.montantReel, 0));
-    const marginNetteTheorique = round2(caTotal - budgetTheoriqueGlobal);
+    // Marge E-Staf = 20% du CA, garantie — jamais un simple reliquat des
+    // dépenses réelles (voir MARGIN_PCT_ESTAF).
+    const marginNetteTheorique = round2(caTotal * MARGIN_PCT_ESTAF);
     const payees = postes.filter((p2) => p2.statut === "paye").length;
 
     return {
@@ -635,7 +656,7 @@ export class ProductionService {
     return this.getTableauFinancierGlobal(periode);
   }
 
-  // Détail par client — même ventilation 90/10 appliquée au tarifMensuel de
+  // Détail par client — même ventilation 80/20 appliquée au tarifMensuel de
   // chaque contrat actif, purement informatif (non persisté, contrairement
   // au tableau global ci-dessus qui suit les paiements réels poste par
   // poste).
@@ -657,7 +678,122 @@ export class ProductionService {
         ca,
         postes,
         totalCharges,
-        margeNetteTheorique: round2(ca - totalCharges),
+        margeNetteTheorique: round2(ca * MARGIN_PCT_ESTAF),
+      };
+    });
+  }
+
+  // ---- Détail micro : paie des agents (traçabilité "Salaires Fixes Agents" +
+  // "Primes Performance Agents") -----------------------------------------------
+
+  // Vision agent par agent, contrat par contrat : qui a été payé combien,
+  // pourquoi (la prime suggérée part du qualityScore de la mission — la
+  // seule mesure de performance par agent existante, faute d'objectif
+  // chiffré individuel — scaled par le poids "Primes Performance Agents" du
+  // tableau global), et par quel moyen. Matérialise (get-or-create) une
+  // ligne PaiementAgent par mission active et par période au premier accès,
+  // comme pour DecaissementProduction — la RH corrige ensuite le réel.
+  async getDetailPaieAgents(periode?: string) {
+    const p = periode ?? currentPeriode();
+    const primePct = POSTES_BUDGET.find((x) => x.key === "primes_performance")?.pct ?? 0;
+
+    const missions = await this.prisma.mission.findMany({
+      where: { dateFin: null },
+      include: { apprenant: true, contrat: true, superviseur: true },
+      orderBy: { dateDebut: "desc" },
+    });
+
+    const lignes = await Promise.all(
+      missions.map(async (m) => {
+        const existing = await this.prisma.paiementAgent.findUnique({
+          where: { missionId_periode: { missionId: m.id, periode: p } },
+        });
+        const tarif = m.tarifNegocie ?? 0;
+        const primeSuggeree =
+          m.qualityScore !== null ? round2(tarif * primePct * (m.qualityScore / 5)) : 0;
+        const row =
+          existing ??
+          (await this.prisma.paiementAgent.create({
+            data: {
+              missionId: m.id,
+              periode: p,
+              montantBase: tarif,
+              montantPrime: primeSuggeree,
+            },
+          }));
+        return {
+          missionId: m.id,
+          agentNom: `${m.apprenant.prenom} ${m.apprenant.nom}`,
+          agentMatricule: m.apprenant.matricule,
+          clientNom: m.contrat.clientNom,
+          superviseurNom: m.superviseur ? `${m.superviseur.prenom} ${m.superviseur.nom}` : null,
+          tarifNegocie: m.tarifNegocie,
+          qualityScore: m.qualityScore,
+          tauxAtteinteObjectifs: m.qualityScore !== null ? round2((m.qualityScore / 5) * 100) : null,
+          montantBase: row.montantBase,
+          montantPrime: row.montantPrime,
+          moyenPaiement: row.moyenPaiement,
+          statut: row.statut,
+          datePaiement: row.datePaiement,
+        };
+      })
+    );
+
+    return { periode: p, lignes };
+  }
+
+  async updatePaiementAgent(missionId: string, periode: string, dto: UpdatePaiementAgentDto) {
+    const existing = await this.prisma.paiementAgent.findUnique({
+      where: { missionId_periode: { missionId, periode } },
+    });
+    if (!existing) throw new NotFoundException("Ligne de paie introuvable.");
+    return this.prisma.paiementAgent.update({
+      where: { missionId_periode: { missionId, periode } },
+      data: {
+        montantBase: dto.montantBase ?? undefined,
+        montantPrime: dto.montantPrime ?? undefined,
+        moyenPaiement: dto.moyenPaiement === undefined ? undefined : dto.moyenPaiement,
+      },
+    });
+  }
+
+  async payerAgent(missionId: string, periode: string) {
+    const existing = await this.prisma.paiementAgent.findUnique({
+      where: { missionId_periode: { missionId, periode } },
+    });
+    if (!existing) throw new NotFoundException("Ligne de paie introuvable.");
+    return this.prisma.paiementAgent.update({
+      where: { missionId_periode: { missionId, periode } },
+      data: { statut: "paye", datePaiement: new Date() },
+    });
+  }
+
+  // ---- Détail micro : pool des superviseurs (traçabilité "Pool Superviseurs") -
+
+  // Lecture seule — pour quels clients travaille chaque superviseur et leur
+  // taux d'atteinte des objectifs (qualityScore moyen des agents qu'ils
+  // supervisent, seule mesure de performance disponible). Pas de paiement
+  // individuel ici : le poste "Pool Superviseurs" reste une ligne globale
+  // dans DecaissementProduction, ceci n'est que la ventilation qui la
+  // justifie.
+  async getDetailPoolSuperviseurs() {
+    const superviseurs = await this.prisma.superviseur.findMany({
+      include: { missions: { where: { dateFin: null }, include: { contrat: true } } },
+      orderBy: { nom: "asc" },
+    });
+    return superviseurs.map((s) => {
+      const scores = s.missions.map((m) => m.qualityScore).filter((v): v is number => v !== null);
+      const qualityScoreMoyen =
+        scores.length > 0 ? round2(scores.reduce((sum, v) => sum + v, 0) / scores.length) : null;
+      const clients = Array.from(new Set(s.missions.map((m) => m.contrat.clientNom)));
+      return {
+        matricule: s.matricule,
+        prenom: s.prenom,
+        nom: s.nom,
+        clients,
+        agentsActifs: s.missions.length,
+        qualityScoreMoyen,
+        tauxAtteinteObjectifs: qualityScoreMoyen !== null ? round2((qualityScoreMoyen / 5) * 100) : null,
       };
     });
   }

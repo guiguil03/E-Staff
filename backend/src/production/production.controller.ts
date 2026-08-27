@@ -10,6 +10,7 @@ import { UpsertObjectifJournalierDto } from "./dto/upsert-objectif-journalier.dt
 import { UpsertSuiviAgentHebdoDto } from "./dto/upsert-suivi-agent-hebdo.dto";
 import { UpsertRapportHebdoDto } from "./dto/upsert-rapport-hebdo.dto";
 import { UpdateDecaissementDto } from "./dto/update-decaissement.dto";
+import { UpdatePaiementAgentDto } from "./dto/update-paiement-agent.dto";
 
 @Controller("production")
 @UseGuards(AdminGuard)
@@ -158,5 +159,29 @@ export class ProductionController {
   @Post("decaissements/payer-tout")
   payerTousDecaissements(@Query("periode") periode: string) {
     return this.service.payerTousDecaissements(periode);
+  }
+
+  @Get("detail-paie-agents")
+  getDetailPaieAgents(@Query("periode") periode?: string) {
+    return this.service.getDetailPaieAgents(periode);
+  }
+
+  @Put("paiements-agents/:missionId/:periode")
+  updatePaiementAgent(
+    @Param("missionId") missionId: string,
+    @Param("periode") periode: string,
+    @Body() dto: UpdatePaiementAgentDto
+  ) {
+    return this.service.updatePaiementAgent(missionId, periode, dto);
+  }
+
+  @Post("paiements-agents/:missionId/:periode/payer")
+  payerAgent(@Param("missionId") missionId: string, @Param("periode") periode: string) {
+    return this.service.payerAgent(missionId, periode);
+  }
+
+  @Get("detail-pool-superviseurs")
+  getDetailPoolSuperviseurs() {
+    return this.service.getDetailPoolSuperviseurs();
   }
 }

@@ -642,7 +642,14 @@ model Mission {
   // tant qu'aucune évaluation n'a encore été saisie.
   qualityScore Float?
 
-  suivisHebdo SuiviAgentHebdo[]
+  // Salaire négocié avec le client pour ce poste ("Tarif/Position") — sert
+  // de base à la marge E-Staf garantie (20% net, voir MARGIN_PCT_ESTAF côté
+  // service) et de référence pour la paie réelle de l'agent (PaiementAgent).
+  // Nullable : pas toujours négocié/saisi au moment de la création.
+  tarifNegocie Float?
+
+  suivisHebdo    SuiviAgentHebdo[]
+  paiements      PaiementAgent[]
 
   createdAt DateTime @default(now())
 }
@@ -726,13 +733,13 @@ model RapportHebdoSuperviseur {
 }
 
 // Ligne du "Tableau de bord financier global" — un poste de charge (sur les
-// 6 % du CA de production alloués : salaires agents, infra, pool
+// 6 postes du CA de production alloués : salaires agents, infra, pool
 // superviseurs, commissions apporteurs, primes performance, commission de
-// démarrage — soit 90% du CA, les 10% restants formant la marge nette
-// E-Staf) pour une période donnée ("AAAA-MM"). Le montant théorique est
-// calculé automatiquement depuis le CA des contrats actifs (tarifMensuel) ;
-// le montant réel est saisi/ajusté manuellement par la RH (les primes,
-// coûts d'infra réels, etc. ne sont pas encore synchronisés
+// démarrage — soit 80% du CA, les 20% restants formant la marge nette
+// E-Staf garantie) pour une période donnée ("AAAA-MM"). Le montant
+// théorique est calculé automatiquement depuis le CA des contrats actifs
+// (tarifMensuel) ; le montant réel est saisi/ajusté manuellement par la RH
+// (les primes, coûts d'infra réels, etc. ne sont pas encore synchronisés
 // automatiquement — voir ProductionService.getTableauFinancierGlobal).
 model DecaissementProduction {
   id String @id @default(cuid())
@@ -753,4 +760,36 @@ model DecaissementProduction {
   updatedAt DateTime @updatedAt
 
   @@unique([poste, periode])
+}
+
+// Paie individuelle d'un agent en mission, pour une période donnée — la
+// vue "micro" derrière les postes globaux "Salaires Fixes Agents" et
+// "Primes Performance Agents" du tableau de bord financier : quel agent, sur
+// quel contrat, payé à combien, avec quelle prime et par quel moyen.
+// Matérialisée (get-or-create) au premier accès comme DecaissementProduction
+// — montantBase par défaut = Mission.tarifNegocie, montantPrime suggérée à
+// partir du qualityScore de la mission (proxy de taux d'atteinte des
+// objectifs, faute de cible chiffrée par agent) — corrigible par la RH.
+model PaiementAgent {
+  id String @id @default(cuid())
+
+  missionId String
+  mission   Mission @relation(fields: [missionId], references: [id])
+
+  periode String // "AAAA-MM"
+
+  montantBase  Float @default(0)
+  montantPrime Float @default(0)
+
+  // Libre : "Mobile Money", "Virement bancaire", "Espèces", etc.
+  moyenPaiement String?
+
+  // "en_attente" | "paye"
+  statut       String    @default("en_attente")
+  datePaiement DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([missionId, periode])
 }

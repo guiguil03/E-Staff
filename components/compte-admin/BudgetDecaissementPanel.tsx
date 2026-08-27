@@ -3,7 +3,19 @@
 import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
 import { apiGet, apiPostAuthed, apiPut } from "@/lib/api";
+import DetailPaieAgentsModal from "./DetailPaieAgentsModal";
+import DetailPoolSuperviseursModal from "./DetailPoolSuperviseursModal";
 import { adminHeaders } from "./adminHeaders";
+
+// Postes pour lesquels une vision micro (agent/superviseur par agent/
+// superviseur) existe réellement — les autres (infra, commissions
+// apporteurs, commission démarrage) n'ont pas encore de sous-ledger, donc
+// pas de bouton "Détails" plutôt qu'un contenu inventé.
+const POSTES_AVEC_DETAILS: Record<string, "agents" | "superviseurs"> = {
+  salaires_agents: "agents",
+  primes_performance: "agents",
+  pool_superviseurs: "superviseurs",
+};
 
 interface PosteBudget {
   poste: string;
@@ -70,12 +82,14 @@ function KpiCard({
 }
 
 // Tableau de bord budgétaire de la production — ventilation du CA des
-// contrats actifs (tarifMensuel) en 6 postes de charge représentant 90% du
-// CA (voir ProductionService.getTableauFinancierGlobal), suivis mois par
-// mois. Le montant théorique est calculé automatiquement ; le montant réel
-// est saisi/corrigé par la RH (aucune synchronisation automatique des
-// primes/coûts d'infra réels n'existe encore), sur le même principe que les
-// Factures : une ligne "en attente" jusqu'à ce qu'elle soit marquée payée.
+// contrats actifs (tarifMensuel) en 6 postes de charge représentant 80% du
+// CA (voir ProductionService.getTableauFinancierGlobal), les 20% restants
+// formant la marge nette E-Staf garantie ("quoi qu'il en coûte" — voir
+// MARGIN_PCT_ESTAF côté backend), suivis mois par mois. Le montant
+// théorique est calculé automatiquement ; le montant réel est saisi/corrigé
+// par la RH (aucune synchronisation automatique des primes/coûts d'infra
+// réels n'existe encore), sur le même principe que les Factures : une ligne
+// "en attente" jusqu'à ce qu'elle soit marquée payée.
 export default function BudgetDecaissementPanel() {
   const [tableau, setTableau] = useState<TableauFinancierGlobal | "loading" | "erreur">("loading");
   const [detailClients, setDetailClients] = useState<DetailClient[] | "loading" | "erreur">(
@@ -83,6 +97,7 @@ export default function BudgetDecaissementPanel() {
   );
   const [payingPoste, setPayingPoste] = useState<string | null>(null);
   const [payingTout, setPayingTout] = useState(false);
+  const [detailModal, setDetailModal] = useState<"agents" | "superviseurs" | null>(null);
 
   function refresh() {
     apiGet<TableauFinancierGlobal>("/production/tableau-financier-global", adminHeaders())
@@ -129,7 +144,7 @@ export default function BudgetDecaissementPanel() {
               <KpiCard
                 label="Budget théorique global"
                 value={fmtMontant(tableau.budgetTheoriqueGlobal)}
-                sub="90% du CA des contrats actifs"
+                sub="80% du CA des contrats actifs"
               />
               <KpiCard
                 label="Dépenses réelles validées"
@@ -175,6 +190,7 @@ export default function BudgetDecaissementPanel() {
                       <th className="py-2 pr-3">Postes & ventilation</th>
                       <th className="py-2 pr-3">% alloc.</th>
                       <th className="py-2 pr-3">Budget théorique</th>
+                      <th className="py-2 pr-3">Détails</th>
                       <th className="py-2 pr-3">Dépense réelle</th>
                       <th className="py-2 pr-3">Écart</th>
                       <th className="py-2 pr-3">Statut</th>
@@ -190,16 +206,19 @@ export default function BudgetDecaissementPanel() {
                         paying={payingPoste === p.poste}
                         onPayer={() => payer(p.poste, tableau.periode)}
                         onSaved={refresh}
+                        onOpenDetails={POSTES_AVEC_DETAILS[p.poste] ?? null}
+                        setDetailModal={setDetailModal}
                       />
                     ))}
                   </tbody>
                   <tfoot>
                     <tr className="border-t border-white/10 font-sans text-sm font-semibold text-white">
                       <td className="py-2.5 pr-3">Total des charges</td>
-                      <td className="py-2.5 pr-3 font-mono text-xs">90 %</td>
+                      <td className="py-2.5 pr-3 font-mono text-xs">80 %</td>
                       <td className="py-2.5 pr-3 font-mono text-xs">
                         {fmtMontant(tableau.budgetTheoriqueGlobal)}
                       </td>
+                      <td className="py-2.5 pr-3"></td>
                       <td className="py-2.5 pr-3 font-mono text-xs">
                         {fmtMontant(tableau.depenseReelleValidee)}
                       </td>
@@ -216,7 +235,7 @@ export default function BudgetDecaissementPanel() {
                 </table>
               </div>
               <p className="mt-3 font-mono text-[11px] text-white/40">
-                Marge nette théorique E-Staf (10% restant du CA) : {fmtMontant(tableau.marginNetteTheorique)}
+                Marge nette E-Staf garantie (20% du CA) : {fmtMontant(tableau.marginNetteTheorique)}
               </p>
             </div>
           </Reveal>
@@ -281,6 +300,13 @@ export default function BudgetDecaissementPanel() {
           )}
         </div>
       </Reveal>
+
+      {detailModal === "agents" && (
+        <DetailPaieAgentsModal onClose={() => setDetailModal(null)} />
+      )}
+      {detailModal === "superviseurs" && (
+        <DetailPoolSuperviseursModal onClose={() => setDetailModal(null)} />
+      )}
     </div>
   );
 }
@@ -291,12 +317,16 @@ function PosteRow({
   paying,
   onPayer,
   onSaved,
+  onOpenDetails,
+  setDetailModal,
 }: {
   poste: PosteBudget;
   periode: string;
   paying: boolean;
   onPayer: () => void;
   onSaved: () => void;
+  onOpenDetails: "agents" | "superviseurs" | null;
+  setDetailModal: (m: "agents" | "superviseurs" | null) => void;
 }) {
   const [montantReel, setMontantReel] = useState(String(poste.montantReel));
   const [savingReel, setSavingReel] = useState(false);
@@ -322,6 +352,18 @@ function PosteRow({
       <td className="py-2.5 pr-3 text-white">{poste.label}</td>
       <td className="py-2.5 pr-3 font-mono text-xs">{Math.round(poste.pctAlloc * 1000) / 10} %</td>
       <td className="py-2.5 pr-3 font-mono text-xs">{fmtMontant(poste.montantTheorique)}</td>
+      <td className="py-2.5 pr-3">
+        {onOpenDetails ? (
+          <button
+            onClick={() => setDetailModal(onOpenDetails)}
+            className="font-mono text-[11px] uppercase tracking-widest text-accent hover:underline"
+          >
+            Détails
+          </button>
+        ) : (
+          <span className="font-mono text-[11px] text-white/30">—</span>
+        )}
+      </td>
       <td className="py-2.5 pr-3">
         <input
           type="number"

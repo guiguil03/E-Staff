@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import RhShell from "@/components/compte-admin/RhShell";
-import FinancialDashboard from "@/components/compte-admin/FinancialDashboard";
+import BudgetDecaissementPanel from "@/components/compte-admin/BudgetDecaissementPanel";
 import ComingSoonPanel from "@/components/compte-admin/ComingSoonPanel";
 
 export const metadata: Metadata = {
@@ -12,10 +12,10 @@ export default function Page() {
   return (
     <RhShell
       title="Paie & Commissions"
-      subtitle="Facturation des contrats B2B et suivi des règlements."
+      subtitle="Argent qui sort — budget de production, décaissements et paie des agents/superviseurs."
     >
       <div className="space-y-6">
-        <FinancialDashboard />
+        <BudgetDecaissementPanel />
         <ComingSoonPanel
           title="Commissions partenaires"
           items={[

@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { IsNotEmpty, IsNumber, IsOptional, IsString } from "class-validator";
 
 export class CreateMissionDto {
   @IsString() @IsNotEmpty() apprenantId!: string;
@@ -6,4 +6,5 @@ export class CreateMissionDto {
   @IsOptional() @IsString() superviseurId?: string;
   @IsString() @IsNotEmpty() role!: string;
   @IsString() dateDebut!: string; // ISO
+  @IsOptional() @IsNumber() tarifNegocie?: number;
 }

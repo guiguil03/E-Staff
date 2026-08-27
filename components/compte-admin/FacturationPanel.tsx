@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
 import { apiGet, apiPostAuthed } from "@/lib/api";
-import BudgetDecaissementPanel from "./BudgetDecaissementPanel";
 import { adminHeaders } from "./adminHeaders";
 
 interface TableauFinancier {
@@ -55,12 +54,11 @@ function fmtDate(iso: string | null): string {
 
 const emptyForm = { contratId: "", periode: "", montant: "" };
 
-// Tableau de bord financier — factures réelles rattachées aux ContratB2B
-// (voir ProductionService.getTableauFinancier, module RH phase 5,
-// 2026-08-26). Pas de commissions partenaires ici : aucun modèle de
-// deal/commission n'existe pour les Connecteurs, volontairement laissé en
-// "Bientôt disponible" ailleurs sur cette page plutôt qu'inventé.
-export default function FinancialDashboard() {
+// Facturation & Encaissement — l'argent qui rentre (factures réelles
+// rattachées aux ContratB2B, voir ProductionService.getTableauFinancier),
+// séparé du budget/décaissements de production (l'argent qui sort, voir
+// BudgetDecaissementPanel sur la page Paie & Commissions).
+export default function FacturationPanel() {
   const [tableau, setTableau] = useState<TableauFinancier | "loading" | "erreur">("loading");
   const [factures, setFactures] = useState<Facture[] | "loading" | "erreur">("loading");
   const [contrats, setContrats] = useState<Contrat[]>([]);
@@ -115,17 +113,7 @@ export default function FinancialDashboard() {
   }
 
   return (
-    <div className="space-y-10">
-      <BudgetDecaissementPanel />
-
-      <div>
-        <h2 className="font-display text-lg font-semibold text-white">Facturation client</h2>
-        <p className="mt-1 font-mono text-[11px] text-white/40">
-          Argent qui rentre — factures émises aux clients B2B (distinct du budget de production
-          ci-dessus, qui suit l&apos;argent qui sort).
-        </p>
-      </div>
-
+    <div className="space-y-6">
       <Reveal>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {tableau === "loading" && <p className="font-sans text-sm text-white/50">Chargement...</p>}
