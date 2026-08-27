@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { apiGet, apiPut } from "@/lib/api";
 import ComparativeBarChart from "./ComparativeBarChart";
@@ -112,7 +113,12 @@ export default function ClientMissionModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  return (
+  // Rendu via portail dans document.body : un ancestor animé par Reveal
+  // (transform CSS) crée un nouveau containing block pour position:fixed,
+  // ce qui casserait l'overlay plein écran si la modale restait dans
+  // l'arbre normal (voir ClientMissionCards, rendu à l'intérieur d'un
+  // Reveal sur la page Production).
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
       onClick={onClose}
@@ -200,7 +206,8 @@ export default function ClientMissionModal({
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
