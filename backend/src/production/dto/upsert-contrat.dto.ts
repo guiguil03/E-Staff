@@ -4,6 +4,7 @@ export class UpsertContratDto {
   @IsString() @IsNotEmpty() clientNom!: string;
   @IsOptional() @IsString() entrepriseProjetId?: string;
   @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() dateSignature?: string | null;
   @IsString() dateDebut!: string; // ISO
   @IsOptional() @IsString() dateFin?: string | null;
 

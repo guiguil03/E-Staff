@@ -5,9 +5,42 @@ import { UpsertContratDto } from "./dto/upsert-contrat.dto";
 import { CreateMissionDto } from "./dto/create-mission.dto";
 import { UpdateMissionDto } from "./dto/update-mission.dto";
 import { CreateFactureDto } from "./dto/create-facture.dto";
+import { UpsertObjectifJournalierDto } from "./dto/upsert-objectif-journalier.dto";
+import { UpsertSuiviAgentHebdoDto } from "./dto/upsert-suivi-agent-hebdo.dto";
+import { UpsertRapportHebdoDto } from "./dto/upsert-rapport-hebdo.dto";
+import { UpdateDecaissementDto } from "./dto/update-decaissement.dto";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+// Ventilation du CA de production — 6 postes de charge représentant 90% du
+// CA facturé (tarifMensuel des contrats actifs), les 10% restants formant
+// la marge nette E-Staf. Voir DecaissementProduction.
+const POSTES_BUDGET: { key: string; label: string; pct: number }[] = [
+  { key: "salaires_agents", label: "Salaires Fixes Agents", pct: 0.5 },
+  { key: "charges_infrastructure", label: "Charges Fixes Infrastructure", pct: 0.075 },
+  { key: "pool_superviseurs", label: "Pool Superviseurs", pct: 0.075 },
+  { key: "commissions_apporteurs", label: "Commissions Apporteurs d'Affaires", pct: 0.05 },
+  { key: "primes_performance", label: "Primes Performance Agents", pct: 0.1 },
+  { key: "commission_demarrage", label: "Commission Démarrage Client (Mois 1)", pct: 0.1 },
+];
+
+function currentPeriode(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// Étiquette de semaine ISO ("AAAA-Wss"), utilisée pour regrouper les
+// objectifs journaliers en comparatif hebdomadaire et pour identifier les
+// suivis agents / rapports superviseur d'une semaine donnée.
+function isoWeekLabel(d: Date): string {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 }
 
 @Injectable()
@@ -95,6 +128,7 @@ export class ProductionService {
         clientNom: dto.clientNom,
         entrepriseProjetId: dto.entrepriseProjetId,
         description: dto.description,
+        dateSignature: dto.dateSignature ? new Date(dto.dateSignature) : null,
         dateDebut: new Date(dto.dateDebut),
         dateFin: dto.dateFin ? new Date(dto.dateFin) : null,
         statut: dto.statut ?? "actif",
@@ -112,6 +146,12 @@ export class ProductionService {
         clientNom: dto.clientNom,
         entrepriseProjetId: dto.entrepriseProjetId,
         description: dto.description,
+        dateSignature:
+          dto.dateSignature === undefined
+            ? undefined
+            : dto.dateSignature
+              ? new Date(dto.dateSignature)
+              : null,
         dateDebut: new Date(dto.dateDebut),
         dateFin: dto.dateFin ? new Date(dto.dateFin) : null,
         statut: dto.statut ?? existing.statut,
@@ -141,6 +181,7 @@ export class ProductionService {
     return {
       clientNom: contrat.clientNom,
       description: contrat.description,
+      dateSignature: contrat.dateSignature,
       dateDebut: contrat.dateDebut,
       dateFin: contrat.dateFin,
       statut: contrat.statut,
@@ -338,5 +379,308 @@ export class ProductionService {
     });
 
     return { revenuMensuelPotentiel, totalFacture, totalPaye, totalEnAttente, parContrat };
+  }
+
+  // ---- Cartes Mission/Client (vue Production) --------------------------------
+
+  // Une carte par contrat actif — nom du client, intitulé de la mission,
+  // superviseur principal (celui de la mission active la plus récente) et
+  // jauge d'objectif (dernier ObjectifJournalier saisi, ou null si aucune
+  // saisie n'existe encore — jamais une valeur inventée).
+  async getCartesMissionClient() {
+    const contrats = await this.prisma.contratB2B.findMany({
+      where: { statut: "actif" },
+      include: {
+        missions: {
+          where: { dateFin: null },
+          include: { superviseur: true },
+          orderBy: { dateDebut: "desc" },
+        },
+        objectifsJournaliers: { orderBy: { jour: "desc" }, take: 1 },
+      },
+      orderBy: { clientNom: "asc" },
+    });
+
+    return contrats.map((c) => {
+      const superviseurPrincipal = c.missions.find((m) => m.superviseur)?.superviseur ?? null;
+      return {
+        contratId: c.id,
+        clientNom: c.clientNom,
+        intitule: c.description,
+        superviseurNom: superviseurPrincipal
+          ? `${superviseurPrincipal.prenom} ${superviseurPrincipal.nom}`
+          : null,
+        objectifPct: c.objectifsJournaliers[0]?.tauxAtteint ?? null,
+        agentsActifs: c.missions.length,
+      };
+    });
+  }
+
+  async getContratModalData(contratId: string) {
+    const contrat = await this.prisma.contratB2B.findUnique({
+      where: { id: contratId },
+      include: {
+        missions: {
+          where: { dateFin: null },
+          include: { apprenant: true, superviseur: true },
+          orderBy: { dateDebut: "desc" },
+        },
+        objectifsJournaliers: { orderBy: { jour: "asc" } },
+        rapportsHebdo: { include: { superviseur: true }, orderBy: { semaine: "desc" } },
+        entrepriseProjet: true,
+      },
+    });
+    if (!contrat) throw new NotFoundException("Contrat introuvable.");
+
+    // Onglet 1 — objectif journalier (30 derniers jours saisis) + comparatif
+    // hebdomadaire (moyenne des jours saisis par semaine ISO, 8 dernières
+    // semaines ayant au moins une saisie).
+    const objectifsJournaliers = contrat.objectifsJournaliers.slice(-30).map((o) => ({
+      jour: o.jour,
+      tauxAtteint: o.tauxAtteint,
+    }));
+
+    const parSemaine = new Map<string, { total: number; count: number }>();
+    for (const o of contrat.objectifsJournaliers) {
+      const semaine = isoWeekLabel(new Date(o.jour));
+      const entry = parSemaine.get(semaine) ?? { total: 0, count: 0 };
+      entry.total += o.tauxAtteint;
+      entry.count += 1;
+      parSemaine.set(semaine, entry);
+    }
+    const comparatifHebdo = Array.from(parSemaine.entries())
+      .map(([semaine, { total, count }]) => ({ semaine, moyenneTaux: round2(total / count) }))
+      .sort((a, b) => (a.semaine < b.semaine ? -1 : 1))
+      .slice(-8);
+
+    // Onglet 2 — dernière semaine renseignée par mission active sur ce
+    // contrat. Un agent sans saisie apparaît quand même dans le tableau,
+    // avec des valeurs "—" côté frontend plutôt qu'être omis.
+    const missionIds = contrat.missions.map((m) => m.id);
+    const suivis = missionIds.length
+      ? await this.prisma.suiviAgentHebdo.findMany({
+          where: { missionId: { in: missionIds } },
+          orderBy: { semaine: "desc" },
+        })
+      : [];
+    const dernierSuiviParMission = new Map<string, (typeof suivis)[number]>();
+    for (const s of suivis) {
+      if (!dernierSuiviParMission.has(s.missionId)) dernierSuiviParMission.set(s.missionId, s);
+    }
+    const performanceAgents = contrat.missions.map((m) => {
+      const suivi = dernierSuiviParMission.get(m.id) ?? null;
+      return {
+        missionId: m.id,
+        agentNom: `${m.apprenant.prenom} ${m.apprenant.nom}`,
+        agentMatricule: m.apprenant.matricule,
+        agentEmail: m.apprenant.email,
+        superviseurNom: m.superviseur ? `${m.superviseur.prenom} ${m.superviseur.nom}` : null,
+        superviseurEmail: m.superviseur?.email ?? null,
+        semaine: suivi?.semaine ?? null,
+        concretisations: suivi?.concretisations ?? null,
+        tauxAbsence: suivi?.tauxAbsence ?? null,
+        nbRetards: suivi?.nbRetards ?? null,
+        remarques: suivi?.remarques ?? null,
+      };
+    });
+
+    // Onglet 3 — rapports hebdomadaires du superviseur, plus récents d'abord.
+    const rapportsHebdo = contrat.rapportsHebdo.map((r) => ({
+      id: r.id,
+      semaine: r.semaine,
+      constat: r.constat,
+      analyse: r.analyse,
+      axesAmelioration: r.axesAmelioration,
+      superviseurNom: r.superviseur ? `${r.superviseur.prenom} ${r.superviseur.nom}` : null,
+      updatedAt: r.updatedAt,
+    }));
+
+    return {
+      contratId: contrat.id,
+      clientNom: contrat.clientNom,
+      description: contrat.description,
+      dateSignature: contrat.dateSignature,
+      dateDebut: contrat.dateDebut,
+      dateFin: contrat.dateFin,
+      statut: contrat.statut,
+      // Coordonnées du contact client — nulles si le contrat n'a pas été créé
+      // depuis un lead "Proposer un projet" (entrepriseProjetId absent).
+      clientEmail: contrat.entrepriseProjet?.email ?? null,
+      objectifsJournaliers,
+      comparatifHebdo,
+      performanceAgents,
+      rapportsHebdo,
+    };
+  }
+
+  async upsertObjectifJournalier(contratId: string, dto: UpsertObjectifJournalierDto) {
+    const contrat = await this.prisma.contratB2B.findUnique({ where: { id: contratId } });
+    if (!contrat) throw new NotFoundException("Contrat introuvable.");
+    const jour = new Date(dto.jour);
+    jour.setUTCHours(0, 0, 0, 0);
+    return this.prisma.objectifJournalier.upsert({
+      where: { contratId_jour: { contratId, jour } },
+      create: { contratId, jour, tauxAtteint: dto.tauxAtteint },
+      update: { tauxAtteint: dto.tauxAtteint },
+    });
+  }
+
+  async upsertSuiviAgentHebdo(missionId: string, dto: UpsertSuiviAgentHebdoDto) {
+    const mission = await this.prisma.mission.findUnique({ where: { id: missionId } });
+    if (!mission) throw new NotFoundException("Mission introuvable.");
+    return this.prisma.suiviAgentHebdo.upsert({
+      where: { missionId_semaine: { missionId, semaine: dto.semaine } },
+      create: {
+        missionId,
+        semaine: dto.semaine,
+        concretisations: dto.concretisations ?? 0,
+        tauxAbsence: dto.tauxAbsence ?? null,
+        nbRetards: dto.nbRetards ?? 0,
+        remarques: dto.remarques ?? null,
+      },
+      update: {
+        concretisations: dto.concretisations ?? 0,
+        tauxAbsence: dto.tauxAbsence ?? null,
+        nbRetards: dto.nbRetards ?? 0,
+        remarques: dto.remarques ?? null,
+      },
+    });
+  }
+
+  // ---- Tableau de bord financier global (budget vs. décaissements) -----------
+
+  // Vue globale : CA total des contrats actifs ventilé en 6 postes de
+  // charge (90% du CA), comparé au réel saisi par la RH. Matérialise (get-
+  // or-create) une ligne DecaissementProduction par poste et par période au
+  // premier accès, avec le montant théorique calculé et le montant réel
+  // initialisé à la même valeur — la RH corrige ensuite si le réel diffère.
+  async getTableauFinancierGlobal(periode?: string) {
+    const p = periode ?? currentPeriode();
+
+    const contratsActifs = await this.prisma.contratB2B.findMany({ where: { statut: "actif" } });
+    const caTotal = round2(contratsActifs.reduce((sum, c) => sum + (c.tarifMensuel ?? 0), 0));
+
+    const postes = await Promise.all(
+      POSTES_BUDGET.map(async ({ key, label, pct }) => {
+        const montantTheorique = round2(caTotal * pct);
+        const existing = await this.prisma.decaissementProduction.findUnique({
+          where: { poste_periode: { poste: key, periode: p } },
+        });
+        const row =
+          existing ??
+          (await this.prisma.decaissementProduction.create({
+            data: { poste: key, periode: p, montantTheorique, montantReel: montantTheorique },
+          }));
+        return {
+          poste: key,
+          label,
+          pctAlloc: pct,
+          montantTheorique: row.montantTheorique,
+          montantReel: row.montantReel,
+          ecart: round2(row.montantTheorique - row.montantReel),
+          statut: row.statut,
+          datePaiement: row.datePaiement,
+        };
+      })
+    );
+
+    const budgetTheoriqueGlobal = round2(postes.reduce((sum, p2) => sum + p2.montantTheorique, 0));
+    const depenseReelleValidee = round2(postes.reduce((sum, p2) => sum + p2.montantReel, 0));
+    const marginNetteTheorique = round2(caTotal - budgetTheoriqueGlobal);
+    const payees = postes.filter((p2) => p2.statut === "paye").length;
+
+    return {
+      periode: p,
+      caTotal,
+      budgetTheoriqueGlobal,
+      depenseReelleValidee,
+      economieNette: round2(budgetTheoriqueGlobal - depenseReelleValidee),
+      marginNetteTheorique,
+      statutOperations: { payees, enAttente: postes.length - payees, total: postes.length },
+      postes,
+    };
+  }
+
+  async updateDecaissementMontantReel(
+    poste: string,
+    periode: string,
+    dto: UpdateDecaissementDto
+  ) {
+    const existing = await this.prisma.decaissementProduction.findUnique({
+      where: { poste_periode: { poste, periode } },
+    });
+    if (!existing) throw new NotFoundException("Ligne budgétaire introuvable.");
+    return this.prisma.decaissementProduction.update({
+      where: { poste_periode: { poste, periode } },
+      data: { montantReel: dto.montantReel },
+    });
+  }
+
+  async payerDecaissement(poste: string, periode: string) {
+    const existing = await this.prisma.decaissementProduction.findUnique({
+      where: { poste_periode: { poste, periode } },
+    });
+    if (!existing) throw new NotFoundException("Ligne budgétaire introuvable.");
+    return this.prisma.decaissementProduction.update({
+      where: { poste_periode: { poste, periode } },
+      data: { statut: "paye", datePaiement: new Date() },
+    });
+  }
+
+  async payerTousDecaissements(periode: string) {
+    await this.prisma.decaissementProduction.updateMany({
+      where: { periode, statut: { not: "paye" } },
+      data: { statut: "paye", datePaiement: new Date() },
+    });
+    return this.getTableauFinancierGlobal(periode);
+  }
+
+  // Détail par client — même ventilation 90/10 appliquée au tarifMensuel de
+  // chaque contrat actif, purement informatif (non persisté, contrairement
+  // au tableau global ci-dessus qui suit les paiements réels poste par
+  // poste).
+  async getDetailFinancierParClient() {
+    const contrats = await this.prisma.contratB2B.findMany({
+      where: { statut: "actif" },
+      orderBy: { clientNom: "asc" },
+    });
+    return contrats.map((c) => {
+      const ca = c.tarifMensuel ?? 0;
+      const postes = POSTES_BUDGET.map(({ key, label, pct }) => ({
+        poste: key,
+        label,
+        montant: round2(ca * pct),
+      }));
+      const totalCharges = round2(postes.reduce((sum, p2) => sum + p2.montant, 0));
+      return {
+        clientNom: c.clientNom,
+        ca,
+        postes,
+        totalCharges,
+        margeNetteTheorique: round2(ca - totalCharges),
+      };
+    });
+  }
+
+  async upsertRapportHebdo(contratId: string, dto: UpsertRapportHebdoDto) {
+    const contrat = await this.prisma.contratB2B.findUnique({ where: { id: contratId } });
+    if (!contrat) throw new NotFoundException("Contrat introuvable.");
+    return this.prisma.rapportHebdoSuperviseur.upsert({
+      where: { contratId_semaine: { contratId, semaine: dto.semaine } },
+      create: {
+        contratId,
+        semaine: dto.semaine,
+        superviseurId: dto.superviseurId ?? null,
+        constat: dto.constat ?? null,
+        analyse: dto.analyse ?? null,
+        axesAmelioration: dto.axesAmelioration ?? null,
+      },
+      update: {
+        superviseurId: dto.superviseurId ?? null,
+        constat: dto.constat ?? null,
+        analyse: dto.analyse ?? null,
+        axesAmelioration: dto.axesAmelioration ?? null,
+      },
+    });
   }
 }

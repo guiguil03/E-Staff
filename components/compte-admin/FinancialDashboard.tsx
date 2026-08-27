@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
 import { apiGet, apiPostAuthed } from "@/lib/api";
+import BudgetDecaissementPanel from "./BudgetDecaissementPanel";
 import { adminHeaders } from "./adminHeaders";
 
 interface TableauFinancier {
@@ -114,7 +115,17 @@ export default function FinancialDashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
+      <BudgetDecaissementPanel />
+
+      <div>
+        <h2 className="font-display text-lg font-semibold text-white">Facturation client</h2>
+        <p className="mt-1 font-mono text-[11px] text-white/40">
+          Argent qui rentre — factures émises aux clients B2B (distinct du budget de production
+          ci-dessus, qui suit l&apos;argent qui sort).
+        </p>
+      </div>
+
       <Reveal>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {tableau === "loading" && <p className="font-sans text-sm text-white/50">Chargement...</p>}

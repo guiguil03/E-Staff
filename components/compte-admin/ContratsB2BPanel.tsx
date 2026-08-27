@@ -24,7 +24,13 @@ const STATUT_LABELS: Record<string, string> = {
   suspendu: "Suspendu",
 };
 
-const emptyForm = { clientNom: "", description: "", dateDebut: "", tarifMensuel: "" };
+const emptyForm = {
+  clientNom: "",
+  description: "",
+  dateSignature: "",
+  dateDebut: "",
+  tarifMensuel: "",
+};
 
 function fmtDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString("fr-FR") : "—";
@@ -61,6 +67,7 @@ export default function ContratsB2BPanel() {
         {
           clientNom: form.clientNom.trim(),
           description: form.description.trim() || undefined,
+          dateSignature: form.dateSignature ? new Date(form.dateSignature).toISOString() : undefined,
           dateDebut: new Date(form.dateDebut).toISOString(),
           tarifMensuel: form.tarifMensuel ? Number(form.tarifMensuel) : undefined,
         },
@@ -144,6 +151,17 @@ export default function ContratsB2BPanel() {
                   type="date"
                   value={form.dateDebut}
                   onChange={(e) => setForm((f) => ({ ...f, dateDebut: e.target.value }))}
+                  className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
+                />
+              </div>
+              <div>
+                <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+                  Date de signature
+                </label>
+                <input
+                  type="date"
+                  value={form.dateSignature}
+                  onChange={(e) => setForm((f) => ({ ...f, dateSignature: e.target.value }))}
                   className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
                 />
               </div>

@@ -4,14 +4,8 @@ import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
 import { apiGet } from "@/lib/api";
 import ComparativeBarChart from "./ComparativeBarChart";
+import ClientMissionCards from "./ClientMissionCards";
 import { adminHeaders } from "./adminHeaders";
-
-interface VueEnsembleProduction {
-  agentsActifs: number;
-  missionsTotal: number;
-  contratsActifs: number;
-  superviseursCount: number;
-}
 
 interface PerformanceSuperviseur {
   matricule: string;
@@ -21,29 +15,16 @@ interface PerformanceSuperviseur {
   qualityScoreMoyen: number | null;
 }
 
-function KpiCard({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="rounded border border-white/10 bg-obsidianCard p-5">
-      <p className="font-mono text-[11px] uppercase tracking-widest text-white/50">{label}</p>
-      <p className="mt-2 font-display text-3xl font-bold text-accent">{value}</p>
-    </div>
-  );
-}
-
-// Vue d'ensemble Production — KPIs réels (voir ProductionService) + le
-// comparatif de performance des superviseurs (QS moyen des agents sous leur
-// supervision), qui remplace le "Bientôt disponible" affiché avant le
-// module Production sur la Vue d'ensemble générale du Portail RH.
+// Vue d'ensemble Production — une carte par contrat/mission active (voir
+// ClientMissionCards, qui remplace les 4 cartes KPI génériques d'origine)
+// + le comparatif de performance des superviseurs (QS moyen des agents
+// sous leur supervision).
 export default function ProductionVueEnsemble() {
-  const [data, setData] = useState<VueEnsembleProduction | "loading" | "erreur">("loading");
   const [performance, setPerformance] = useState<PerformanceSuperviseur[] | "loading" | "erreur">(
     "loading"
   );
 
   useEffect(() => {
-    apiGet<VueEnsembleProduction>("/production/vue-ensemble", adminHeaders())
-      .then(setData)
-      .catch(() => setData("erreur"));
     apiGet<PerformanceSuperviseur[]>("/production/performance-superviseurs", adminHeaders())
       .then(setPerformance)
       .catch(() => setPerformance("erreur"));
@@ -52,20 +33,7 @@ export default function ProductionVueEnsemble() {
   return (
     <div className="space-y-6">
       <Reveal>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {data === "loading" && <p className="font-sans text-sm text-white/50">Chargement...</p>}
-          {data === "erreur" && (
-            <p className="font-sans text-sm text-white/50">Erreur de chargement.</p>
-          )}
-          {typeof data === "object" && (
-            <>
-              <KpiCard label="Agents en production active" value={data.agentsActifs} />
-              <KpiCard label="Missions au total (historique inclus)" value={data.missionsTotal} />
-              <KpiCard label="Contrats B2B actifs" value={data.contratsActifs} />
-              <KpiCard label="Superviseurs" value={data.superviseursCount} />
-            </>
-          )}
-        </div>
+        <ClientMissionCards />
       </Reveal>
 
       <Reveal delay={40}>

@@ -26,6 +26,7 @@ interface FactureHistorique {
 interface ContratCasier {
   clientNom: string;
   description: string | null;
+  dateSignature: string | null;
   dateDebut: string;
   dateFin: string | null;
   statut: string;
@@ -82,6 +83,9 @@ export default function ContratCasierPanel({ id }: { id: string }) {
               <p className="mt-1 font-mono text-[11px] text-white/40">
                 {fmtDate(casier.dateDebut)} → {fmtDate(casier.dateFin)}
                 {casier.tarifMensuel && ` · ${fmtMontant(casier.tarifMensuel)}/mois`}
+              </p>
+              <p className="mt-0.5 font-mono text-[11px] text-white/40">
+                Signature : {fmtDate(casier.dateSignature)}
               </p>
             </div>
             <span className="rounded-full border border-accent/40 px-2.5 py-1 font-mono text-[11px] uppercase tracking-widest text-accent">

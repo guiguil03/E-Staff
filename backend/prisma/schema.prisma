@@ -581,7 +581,8 @@ model Superviseur {
   nom       String
   email     String
 
-  missions Mission[]
+  missions      Mission[]
+  rapportsHebdo RapportHebdoSuperviseur[]
 }
 
 model ContratB2B {
@@ -596,8 +597,14 @@ model ContratB2B {
   entrepriseProjet   EntrepriseProjet? @relation(fields: [entrepriseProjetId], references: [id])
 
   description String?
-  dateDebut   DateTime
-  dateFin     DateTime?
+
+  // Date de signature du contrat, distincte de dateDebut (démarrage effectif
+  // des prestations sur plateau) — les deux peuvent différer de plusieurs
+  // semaines. Nullable : les contrats créés avant ce champ n'ont pas cette
+  // info.
+  dateSignature DateTime?
+  dateDebut     DateTime
+  dateFin       DateTime?
 
   // "actif" | "termine" | "suspendu"
   statut String @default("actif")
@@ -607,8 +614,10 @@ model ContratB2B {
   // pas encore négocié/saisi.
   tarifMensuel Float?
 
-  missions Mission[]
-  factures Facture[]
+  missions             Mission[]
+  factures             Facture[]
+  objectifsJournaliers ObjectifJournalier[]
+  rapportsHebdo        RapportHebdoSuperviseur[]
 
   createdAt DateTime @default(now())
 }
@@ -633,6 +642,8 @@ model Mission {
   // tant qu'aucune évaluation n'a encore été saisie.
   qualityScore Float?
 
+  suivisHebdo SuiviAgentHebdo[]
+
   createdAt DateTime @default(now())
 }
 
@@ -649,4 +660,97 @@ model Facture {
   statut       String    @default("emise")
   dateEmission DateTime  @default(now())
   datePaiement DateTime?
+}
+
+// Objectif journalier d'un contrat B2B — saisie manuelle par le superviseur
+// (aucune synchronisation téléphonie/plateau n'existe dans ce produit à ce
+// jour). Sert au graphique "objectif atteint tous les jours" et, agrégé par
+// semaine côté service, au comparatif hebdomadaire de l'onglet 1 de la
+// carte Mission/Client.
+model ObjectifJournalier {
+  id String @id @default(cuid())
+
+  contratId String
+  contrat   ContratB2B @relation(fields: [contratId], references: [id])
+
+  jour       DateTime // horodatage normalisé à minuit, un enregistrement par jour et par contrat
+  tauxAtteint Float   // % de l'objectif journalier atteint
+
+  createdAt DateTime @default(now())
+
+  @@unique([contratId, jour])
+}
+
+// Suivi hebdomadaire d'un agent en mission — alimente le tableau de
+// performance des agents (onglet 2 de la carte Mission/Client). Une ligne
+// par mission et par semaine ISO (ex. "2026-W35").
+model SuiviAgentHebdo {
+  id String @id @default(cuid())
+
+  missionId String
+  mission   Mission @relation(fields: [missionId], references: [id])
+
+  semaine String // format ISO "AAAA-Wss"
+
+  concretisations Int     @default(0)
+  tauxAbsence     Float? // %
+  nbRetards       Int     @default(0)
+  remarques       String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([missionId, semaine])
+}
+
+// Rapport hebdomadaire du superviseur sur un contrat — les 3 zones de
+// texte récapitulatives de l'onglet 3 de la carte Mission/Client.
+model RapportHebdoSuperviseur {
+  id String @id @default(cuid())
+
+  contratId String
+  contrat   ContratB2B @relation(fields: [contratId], references: [id])
+
+  superviseurId String?
+  superviseur   Superviseur? @relation(fields: [superviseurId], references: [id])
+
+  semaine String // format ISO "AAAA-Wss"
+
+  constat          String?
+  analyse          String?
+  axesAmelioration String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([contratId, semaine])
+}
+
+// Ligne du "Tableau de bord financier global" — un poste de charge (sur les
+// 6 % du CA de production alloués : salaires agents, infra, pool
+// superviseurs, commissions apporteurs, primes performance, commission de
+// démarrage — soit 90% du CA, les 10% restants formant la marge nette
+// E-Staf) pour une période donnée ("AAAA-MM"). Le montant théorique est
+// calculé automatiquement depuis le CA des contrats actifs (tarifMensuel) ;
+// le montant réel est saisi/ajusté manuellement par la RH (les primes,
+// coûts d'infra réels, etc. ne sont pas encore synchronisés
+// automatiquement — voir ProductionService.getTableauFinancierGlobal).
+model DecaissementProduction {
+  id String @id @default(cuid())
+
+  // "salaires_agents" | "charges_infrastructure" | "pool_superviseurs" |
+  // "commissions_apporteurs" | "primes_performance" | "commission_demarrage"
+  poste   String
+  periode String // "AAAA-MM"
+
+  montantTheorique Float
+  montantReel      Float
+
+  // "en_attente" | "paye"
+  statut       String    @default("en_attente")
+  datePaiement DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([poste, periode])
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { AdminGuard } from "../common/admin.guard";
 import { ProductionService } from "./production.service";
 import { UpsertSuperviseurDto } from "./dto/upsert-superviseur.dto";
@@ -6,6 +6,10 @@ import { UpsertContratDto } from "./dto/upsert-contrat.dto";
 import { CreateMissionDto } from "./dto/create-mission.dto";
 import { UpdateMissionDto } from "./dto/update-mission.dto";
 import { CreateFactureDto } from "./dto/create-facture.dto";
+import { UpsertObjectifJournalierDto } from "./dto/upsert-objectif-journalier.dto";
+import { UpsertSuiviAgentHebdoDto } from "./dto/upsert-suivi-agent-hebdo.dto";
+import { UpsertRapportHebdoDto } from "./dto/upsert-rapport-hebdo.dto";
+import { UpdateDecaissementDto } from "./dto/update-decaissement.dto";
 
 @Controller("production")
 @UseGuards(AdminGuard)
@@ -100,5 +104,59 @@ export class ProductionController {
   @Get("tableau-financier")
   getTableauFinancier() {
     return this.service.getTableauFinancier();
+  }
+
+  @Get("cartes-mission-client")
+  getCartesMissionClient() {
+    return this.service.getCartesMissionClient();
+  }
+
+  @Get("contrats/:id/modal")
+  getContratModalData(@Param("id") id: string) {
+    return this.service.getContratModalData(id);
+  }
+
+  @Put("contrats/:id/objectifs-journaliers")
+  upsertObjectifJournalier(@Param("id") id: string, @Body() dto: UpsertObjectifJournalierDto) {
+    return this.service.upsertObjectifJournalier(id, dto);
+  }
+
+  @Put("missions/:id/suivi-hebdo")
+  upsertSuiviAgentHebdo(@Param("id") id: string, @Body() dto: UpsertSuiviAgentHebdoDto) {
+    return this.service.upsertSuiviAgentHebdo(id, dto);
+  }
+
+  @Put("contrats/:id/rapports-hebdo")
+  upsertRapportHebdo(@Param("id") id: string, @Body() dto: UpsertRapportHebdoDto) {
+    return this.service.upsertRapportHebdo(id, dto);
+  }
+
+  @Get("tableau-financier-global")
+  getTableauFinancierGlobal(@Query("periode") periode?: string) {
+    return this.service.getTableauFinancierGlobal(periode);
+  }
+
+  @Get("detail-financier-par-client")
+  getDetailFinancierParClient() {
+    return this.service.getDetailFinancierParClient();
+  }
+
+  @Put("decaissements/:poste/:periode/montant-reel")
+  updateDecaissementMontantReel(
+    @Param("poste") poste: string,
+    @Param("periode") periode: string,
+    @Body() dto: UpdateDecaissementDto
+  ) {
+    return this.service.updateDecaissementMontantReel(poste, periode, dto);
+  }
+
+  @Post("decaissements/:poste/:periode/payer")
+  payerDecaissement(@Param("poste") poste: string, @Param("periode") periode: string) {
+    return this.service.payerDecaissement(poste, periode);
+  }
+
+  @Post("decaissements/payer-tout")
+  payerTousDecaissements(@Query("periode") periode: string) {
+    return this.service.payerTousDecaissements(periode);
   }
 }
