@@ -6,16 +6,19 @@ import { apiGet, apiPostAuthed, apiPut } from "@/lib/api";
 import DetailPaieAgentsModal from "./DetailPaieAgentsModal";
 import DetailPoolSuperviseursModal from "./DetailPoolSuperviseursModal";
 import DetailCommissionsApporteursModal from "./DetailCommissionsApporteursModal";
+import DetailChargesInfrastructureModal from "./DetailChargesInfrastructureModal";
 import { adminHeaders } from "./adminHeaders";
 
-// Postes pour lesquels une vision micro existe réellement — infra n'a pas
-// encore de sous-ledger, donc pas de bouton "Détails" plutôt qu'un contenu
-// inventé.
-const POSTES_AVEC_DETAILS: Record<string, "agents" | "superviseurs" | "apporteurs"> = {
+// Postes pour lesquels une vision micro existe réellement.
+const POSTES_AVEC_DETAILS: Record<
+  string,
+  "agents" | "superviseurs" | "apporteurs" | "infrastructure"
+> = {
   salaires_agents: "agents",
   primes_performance: "agents",
   pool_superviseurs: "superviseurs",
   commissions_apporteurs: "apporteurs",
+  charges_infrastructure: "infrastructure",
 };
 
 interface PosteBudget {
@@ -99,7 +102,7 @@ export default function BudgetDecaissementPanel() {
   const [payingPoste, setPayingPoste] = useState<string | null>(null);
   const [payingTout, setPayingTout] = useState(false);
   const [detailModal, setDetailModal] = useState<
-    "agents" | "superviseurs" | "apporteurs" | null
+    "agents" | "superviseurs" | "apporteurs" | "infrastructure" | null
   >(null);
 
   function refresh() {
@@ -313,6 +316,9 @@ export default function BudgetDecaissementPanel() {
       {detailModal === "apporteurs" && (
         <DetailCommissionsApporteursModal onClose={() => setDetailModal(null)} />
       )}
+      {detailModal === "infrastructure" && (
+        <DetailChargesInfrastructureModal onClose={() => setDetailModal(null)} />
+      )}
     </div>
   );
 }
@@ -331,8 +337,8 @@ function PosteRow({
   paying: boolean;
   onPayer: () => void;
   onSaved: () => void;
-  onOpenDetails: "agents" | "superviseurs" | "apporteurs" | null;
-  setDetailModal: (m: "agents" | "superviseurs" | "apporteurs" | null) => void;
+  onOpenDetails: "agents" | "superviseurs" | "apporteurs" | "infrastructure" | null;
+  setDetailModal: (m: "agents" | "superviseurs" | "apporteurs" | "infrastructure" | null) => void;
 }) {
   const [montantReel, setMontantReel] = useState(String(poste.montantReel));
   const [savingReel, setSavingReel] = useState(false);

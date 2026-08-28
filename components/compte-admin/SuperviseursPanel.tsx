@@ -16,7 +16,15 @@ interface Superviseur {
   missions: { id: string }[]; // missions actives (dateFin=null)
 }
 
-const emptyForm = { matricule: "", prenom: "", nom: "", email: "" };
+const emptyForm = {
+  matricule: "",
+  prenom: "",
+  nom: "",
+  email: "",
+  tarifFixe: "",
+  moyenPaiementType: "",
+  ribOuMobileMoney: "",
+};
 
 // Annuaire des superviseurs — même pattern que FormateursPanel côté
 // Académie, transposé côté Production (voir ProductionService, module RH
@@ -45,7 +53,19 @@ export default function SuperviseursPanel() {
     setStatus("saving");
     setError(null);
     try {
-      await apiPostAuthed("/production/superviseurs", form, adminHeaders());
+      await apiPostAuthed(
+        "/production/superviseurs",
+        {
+          matricule: form.matricule,
+          prenom: form.prenom,
+          nom: form.nom,
+          email: form.email,
+          tarifFixe: form.tarifFixe ? Number(form.tarifFixe) : undefined,
+          moyenPaiementType: form.moyenPaiementType || undefined,
+          ribOuMobileMoney: form.ribOuMobileMoney.trim() || undefined,
+        },
+        adminHeaders()
+      );
       setForm(emptyForm);
       setOpen(false);
       setStatus("idle");
@@ -111,6 +131,45 @@ export default function SuperviseursPanel() {
                 <input
                   value={form.nom}
                   onChange={(e) => setForm((f) => ({ ...f, nom: e.target.value }))}
+                  className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
+                />
+              </div>
+              <div>
+                <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+                  Fixe mensuel
+                </label>
+                <input
+                  type="number"
+                  value={form.tarifFixe}
+                  onChange={(e) => setForm((f) => ({ ...f, tarifFixe: e.target.value }))}
+                  placeholder="Ex. 400000"
+                  className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
+                />
+              </div>
+              <div>
+                <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+                  Moyen de paiement
+                </label>
+                <select
+                  value={form.moyenPaiementType}
+                  onChange={(e) => setForm((f) => ({ ...f, moyenPaiementType: e.target.value }))}
+                  className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
+                >
+                  <option value="">— Non renseigné —</option>
+                  <option value="RIB">RIB</option>
+                  <option value="MVola">MVola</option>
+                  <option value="Orange Money">Orange Money</option>
+                  <option value="Airtel Money">Airtel Money</option>
+                </select>
+              </div>
+              <div>
+                <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+                  Numéro / RIB
+                </label>
+                <input
+                  value={form.ribOuMobileMoney}
+                  onChange={(e) => setForm((f) => ({ ...f, ribOuMobileMoney: e.target.value }))}
+                  placeholder="Numéro Mobile Money ou RIB"
                   className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
                 />
               </div>

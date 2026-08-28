@@ -614,8 +614,68 @@ model Superviseur {
   nom       String
   email     String
 
-  missions      Mission[]
-  rapportsHebdo RapportHebdoSuperviseur[]
+  // Fixe mensuel négocié — base du Net à Payer (voir PaiementSuperviseur),
+  // sur le même principe que Mission.tarifNegocie côté agents.
+  tarifFixe Float?
+
+  ribOuMobileMoney       String?
+  moyenPaiementType      String? // "RIB" | "MVola" | "Orange Money" | "Airtel Money"
+  coordonneesVerifieesLe DateTime?
+
+  missions               Mission[]
+  rapportsHebdo          RapportHebdoSuperviseur[]
+  paiements              PaiementSuperviseur[]
+  performancesParClient  PerformanceSuperviseurClient[]
+}
+
+// Paie d'un superviseur pour une période — le Fixe + la somme des primes
+// par client supervisé (voir PerformanceSuperviseurClient). Un superviseur
+// peut encadrer plusieurs contrats en parallèle ("Double Équipe"), chacun
+// avec sa propre performance et sa propre prime, mais un seul paiement net
+// global par période (voir ProductionService.getDetailPoolSuperviseurs).
+model PaiementSuperviseur {
+  id String @id @default(cuid())
+
+  superviseurId String
+  superviseur   Superviseur @relation(fields: [superviseurId], references: [id])
+
+  periode String // "AAAA-MM"
+
+  montantFixe Float @default(0)
+
+  // "en_attente" | "paye"
+  statut       String    @default("en_attente")
+  datePaiement DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([superviseurId, periode])
+}
+
+// Performance et prime d'un superviseur sur UN client/contrat donné, pour
+// une période — plusieurs lignes possibles par superviseur/période s'il
+// encadre plusieurs contrats (voir PaiementSuperviseur.montantFixe pour la
+// part fixe, commune). Le taux de performance est saisi manuellement par la
+// RH (moyenne qualityScore des agents de ce contrat proposée par défaut).
+model PerformanceSuperviseurClient {
+  id String @id @default(cuid())
+
+  superviseurId String
+  superviseur   Superviseur @relation(fields: [superviseurId], references: [id])
+
+  contratId String
+  contrat   ContratB2B @relation(fields: [contratId], references: [id])
+
+  periode String // "AAAA-MM"
+
+  tauxPerformance Float? // %
+  prime           Float  @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([superviseurId, contratId, periode])
 }
 
 model ContratB2B {
@@ -653,11 +713,12 @@ model ContratB2B {
   // pas encore négocié/saisi.
   tarifMensuel Float?
 
-  missions             Mission[]
-  factures             Facture[]
-  objectifsJournaliers ObjectifJournalier[]
-  rapportsHebdo        RapportHebdoSuperviseur[]
-  commissionDemarrage  CommissionDemarrageApporteur?
+  missions                   Mission[]
+  factures                   Facture[]
+  objectifsJournaliers       ObjectifJournalier[]
+  rapportsHebdo              RapportHebdoSuperviseur[]
+  commissionDemarrage        CommissionDemarrageApporteur?
+  performancesSuperviseur    PerformanceSuperviseurClient[]
 
   createdAt DateTime @default(now())
 }
@@ -870,4 +931,38 @@ model CommissionDemarrageApporteur {
   datePaiement DateTime?
 
   createdAt DateTime @default(now())
+}
+
+// Ligne de charge sous le poste "Charges Fixes Infrastructure" — loyer,
+// connexion internet, électricité, logistique, etc., avec pièce
+// justificative (voir StorageService, même bucket S3 que les devoirs/
+// enregistrements d'évaluation). Une ligne par poste et par période ;
+// contrairement aux autres postes du tableau de bord (calculés
+// automatiquement depuis le CA), les montants théorique/réel sont saisis
+// directement par la RH — pas de formule, ce sont de vraies factures.
+model ChargeInfrastructure {
+  id String @id @default(cuid())
+
+  poste       String // "Loyer", "Connexion Internet", "Électricité", "Logistique & Matériel", etc.
+  motif       String?
+  prestataire String?
+
+  periode String // "AAAA-MM"
+
+  montantTheorique Float
+  montantReel      Float @default(0)
+
+  // Clé S3 du fichier déposé (voir StorageService.uploadBuffer) + nom
+  // d'origine pour l'affichage — null tant qu'aucune pièce n'est déposée.
+  pieceJustificativeKey String?
+  pieceJustificativeNom String?
+
+  modePaiement String? // "Virement" | "MVola" | "Orange Money" | "Airtel Money" | "Espèces"
+
+  // "en_attente" | "paye"
+  statut       String    @default("en_attente")
+  datePaiement DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

@@ -72,9 +72,14 @@ export async function apiGetBlob(path: string, headers: HeadersInit): Promise<Bl
   return res.blob();
 }
 
-export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+export async function apiUpload<T>(
+  path: string,
+  formData: FormData,
+  headers?: HeadersInit
+): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     method: "POST",
+    headers,
     body: formData,
   });
   if (!res.ok) {

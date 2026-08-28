@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import * as path from "path";
 import { PrismaService } from "../prisma/prisma.service";
+import { StorageService } from "../common/storage.service";
 import { UpsertSuperviseurDto } from "./dto/upsert-superviseur.dto";
 import { UpsertContratDto } from "./dto/upsert-contrat.dto";
 import { CreateMissionDto } from "./dto/create-mission.dto";
@@ -10,6 +12,9 @@ import { UpsertSuiviAgentHebdoDto } from "./dto/upsert-suivi-agent-hebdo.dto";
 import { UpsertRapportHebdoDto } from "./dto/upsert-rapport-hebdo.dto";
 import { UpdateDecaissementDto } from "./dto/update-decaissement.dto";
 import { UpdatePaiementAgentDto } from "./dto/update-paiement-agent.dto";
+import { UpdatePerformanceSuperviseurClientDto } from "./dto/update-performance-superviseur-client.dto";
+import { UpdatePaiementSuperviseurDto } from "./dto/update-paiement-superviseur.dto";
+import { UpsertChargeInfrastructureDto } from "./dto/upsert-charge-infrastructure.dto";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -41,6 +46,16 @@ const POSTES_BUDGET: { key: string; label: string; pct: number }[] = RATIOS_POST
   label: p.label,
   pct: (p.ratio / RATIO_TOTAL) * CHARGES_PCT_TOTAL,
 }));
+
+// Lignes par défaut sous "Charges Fixes Infrastructure" — matérialisées
+// chaque mois (montant théorique à 0, saisi par la RH), la RH pouvant en
+// ajouter d'autres au besoin (voir createChargeInfrastructure).
+const POSTES_INFRASTRUCTURE_DEFAUT = [
+  "Loyer",
+  "Connexion Internet",
+  "Électricité",
+  "Logistique & Matériel",
+];
 
 function currentPeriode(): string {
   const d = new Date();
@@ -92,7 +107,10 @@ const MAJORATION_HEURES_SUP = 1.5;
 
 @Injectable()
 export class ProductionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService
+  ) {}
 
   // ---- Superviseurs ---------------------------------------------------------
 
@@ -112,7 +130,12 @@ export class ProductionService {
         `Un superviseur avec le matricule "${dto.matricule}" existe déjà.`
       );
     }
-    return this.prisma.superviseur.create({ data: dto });
+    return this.prisma.superviseur.create({
+      data: {
+        ...dto,
+        coordonneesVerifieesLe: dto.ribOuMobileMoney ? new Date() : null,
+      },
+    });
   }
 
   async updateSuperviseur(id: string, dto: UpsertSuperviseurDto) {
@@ -128,7 +151,18 @@ export class ProductionService {
         );
       }
     }
-    return this.prisma.superviseur.update({ where: { id }, data: dto });
+    return this.prisma.superviseur.update({
+      where: { id },
+      data: {
+        ...dto,
+        // Toute modification des coordonnées repasse par une nouvelle
+        // vérification RH — même principe que pour l'agent (Apprenant).
+        coordonneesVerifieesLe:
+          dto.ribOuMobileMoney !== undefined || dto.moyenPaiementType !== undefined
+            ? new Date()
+            : undefined,
+      },
+    });
   }
 
   async getSuperviseurCasier(id: string) {
@@ -759,7 +793,11 @@ export class ProductionService {
 
         const tarif = m.tarifNegocie ?? 0;
         const tauxHoraire = m.tarifNegocie ? round2(tarif / HEURES_MENSUELLES_STANDARD) : null;
-        const retenueAbsence = tauxHoraire !== null ? round2(tauxHoraire * heuresAbsence) : 0;
+        // Retenue sur salaire — absences non justifiées ET retards cumulés,
+        // au même taux horaire (voir la maquette "FENÊTRE DÉTAILLÉE : PAIE
+        // ET PERFORMANCES AGENTS", qui déduit aussi les retards).
+        const retenue =
+          tauxHoraire !== null ? round2(tauxHoraire * (heuresAbsence + heuresRetard)) : 0;
         const primeHeuresSup =
           tauxHoraire !== null ? round2(tauxHoraire * heuresSup * MAJORATION_HEURES_SUP) : 0;
 
@@ -787,7 +825,7 @@ export class ProductionService {
             },
           }));
 
-        const netAPayer = round2(row.montantBase - retenueAbsence + primeHeuresSup + row.montantPrime);
+        const netAPayer = round2(row.montantBase - retenue + primeHeuresSup + row.montantPrime);
 
         return {
           missionId: m.id,
@@ -802,7 +840,7 @@ export class ProductionService {
           heuresAbsence,
           heuresRetard,
           heuresSup,
-          retenueAbsence,
+          retenue,
           primeHeuresSup,
           montantBase: row.montantBase,
           montantPrime: row.montantPrime,
@@ -858,39 +896,148 @@ export class ProductionService {
   // individuel ici : le poste "Pool Superviseurs" reste une ligne globale
   // dans DecaissementProduction, ceci n'est que la ventilation qui la
   // justifie.
-  async getDetailPoolSuperviseurs() {
+  // Vision "Double Équipe" — un superviseur peut encadrer plusieurs
+  // contrats en parallèle, chacun avec sa propre performance et sa propre
+  // prime (voir PerformanceSuperviseurClient), mais un seul paiement net
+  // par période (Fixe + somme des primes, voir PaiementSuperviseur).
+  // Matérialise (get-or-create) les lignes au premier accès, comme pour
+  // getDetailPaieAgents.
+  async getDetailPoolSuperviseurs(periode?: string) {
+    const p = periode ?? currentPeriode();
     const poolPct = POSTES_BUDGET.find((x) => x.key === "pool_superviseurs")?.pct ?? 0;
+
     const superviseurs = await this.prisma.superviseur.findMany({
       include: { missions: { where: { dateFin: null }, include: { contrat: true } } },
       orderBy: { nom: "asc" },
     });
-    return superviseurs.map((s) => {
-      const scores = s.missions.map((m) => m.qualityScore).filter((v): v is number => v !== null);
-      const qualityScoreMoyen =
-        scores.length > 0 ? round2(scores.reduce((sum, v) => sum + v, 0) / scores.length) : null;
-      const clients = Array.from(new Set(s.missions.map((m) => m.contrat.clientNom)));
-      // CA agrégé des agents supervisés (tarif négocié) — base du calcul de
-      // la prime suggérée, sur le même principe que les primes agents (voir
-      // getDetailPaieAgents) : % du poste "Pool Superviseurs" pondéré par le
-      // taux d'atteinte (qualityScore moyen des équipes encadrées).
-      const caAgentsSupervises = round2(
-        s.missions.reduce((sum, m) => sum + (m.tarifNegocie ?? 0), 0)
-      );
-      const primeSuggeree =
-        qualityScoreMoyen !== null
-          ? round2(caAgentsSupervises * poolPct * (qualityScoreMoyen / 5))
-          : 0;
-      return {
-        matricule: s.matricule,
-        prenom: s.prenom,
-        nom: s.nom,
-        clients,
-        agentsActifs: s.missions.length,
-        qualityScoreMoyen,
-        tauxAtteinteObjectifs: qualityScoreMoyen !== null ? round2((qualityScoreMoyen / 5) * 100) : null,
-        caAgentsSupervises,
-        primeSuggeree,
-      };
+
+    return Promise.all(
+      superviseurs.map(async (s) => {
+        const parContrat = new Map<
+          string,
+          { clientNom: string; scores: number[]; caSupervise: number }
+        >();
+        for (const m of s.missions) {
+          const entry = parContrat.get(m.contratId) ?? {
+            clientNom: m.contrat.clientNom,
+            scores: [],
+            caSupervise: 0,
+          };
+          if (m.qualityScore !== null) entry.scores.push(m.qualityScore);
+          entry.caSupervise += m.tarifNegocie ?? 0;
+          parContrat.set(m.contratId, entry);
+        }
+
+        const clientsDetail = await Promise.all(
+          Array.from(parContrat.entries()).map(async ([contratId, c]) => {
+            const qualityScoreMoyen =
+              c.scores.length > 0
+                ? round2(c.scores.reduce((sum, v) => sum + v, 0) / c.scores.length)
+                : null;
+            const primeSuggeree =
+              qualityScoreMoyen !== null
+                ? round2(c.caSupervise * poolPct * (qualityScoreMoyen / 5))
+                : 0;
+
+            const existing = await this.prisma.performanceSuperviseurClient.findUnique({
+              where: {
+                superviseurId_contratId_periode: { superviseurId: s.id, contratId, periode: p },
+              },
+            });
+            const row =
+              existing ??
+              (await this.prisma.performanceSuperviseurClient.create({
+                data: {
+                  superviseurId: s.id,
+                  contratId,
+                  periode: p,
+                  tauxPerformance:
+                    qualityScoreMoyen !== null ? round2((qualityScoreMoyen / 5) * 100) : null,
+                  prime: primeSuggeree,
+                },
+              }));
+            return {
+              performanceId: row.id,
+              contratId,
+              clientNom: c.clientNom,
+              tauxPerformance: row.tauxPerformance,
+              prime: row.prime,
+            };
+          })
+        );
+
+        const existingPaiement = await this.prisma.paiementSuperviseur.findUnique({
+          where: { superviseurId_periode: { superviseurId: s.id, periode: p } },
+        });
+        const paiement =
+          existingPaiement ??
+          (await this.prisma.paiementSuperviseur.create({
+            data: { superviseurId: s.id, periode: p, montantFixe: s.tarifFixe ?? 0 },
+          }));
+
+        const totalPrimes = round2(clientsDetail.reduce((sum, c) => sum + c.prime, 0));
+        const netAPayer = round2(paiement.montantFixe + totalPrimes);
+
+        return {
+          superviseurId: s.id,
+          matricule: s.matricule,
+          prenom: s.prenom,
+          nom: s.nom,
+          agentsActifs: s.missions.length,
+          clientsDetail,
+          montantFixe: paiement.montantFixe,
+          totalPrimes,
+          netAPayer,
+          coordonneesPaiement:
+            s.moyenPaiementType && s.ribOuMobileMoney
+              ? {
+                  type: s.moyenPaiementType,
+                  numero: s.ribOuMobileMoney,
+                  verifieLe: s.coordonneesVerifieesLe,
+                }
+              : null,
+          statut: paiement.statut,
+          datePaiement: paiement.datePaiement,
+        };
+      })
+    );
+  }
+
+  async updatePerformanceSuperviseurClient(id: string, dto: UpdatePerformanceSuperviseurClientDto) {
+    const existing = await this.prisma.performanceSuperviseurClient.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Ligne de performance introuvable.");
+    return this.prisma.performanceSuperviseurClient.update({
+      where: { id },
+      data: {
+        tauxPerformance: dto.tauxPerformance === undefined ? undefined : dto.tauxPerformance,
+        prime: dto.prime ?? undefined,
+      },
+    });
+  }
+
+  async updatePaiementSuperviseur(
+    superviseurId: string,
+    periode: string,
+    dto: UpdatePaiementSuperviseurDto
+  ) {
+    const existing = await this.prisma.paiementSuperviseur.findUnique({
+      where: { superviseurId_periode: { superviseurId, periode } },
+    });
+    if (!existing) throw new NotFoundException("Paiement introuvable.");
+    return this.prisma.paiementSuperviseur.update({
+      where: { superviseurId_periode: { superviseurId, periode } },
+      data: { montantFixe: dto.montantFixe },
+    });
+  }
+
+  async payerSuperviseur(superviseurId: string, periode: string) {
+    const existing = await this.prisma.paiementSuperviseur.findUnique({
+      where: { superviseurId_periode: { superviseurId, periode } },
+    });
+    if (!existing) throw new NotFoundException("Paiement introuvable.");
+    return this.prisma.paiementSuperviseur.update({
+      where: { superviseurId_periode: { superviseurId, periode } },
+      data: { statut: "paye", datePaiement: new Date() },
     });
   }
 
@@ -1077,5 +1224,110 @@ export class ProductionService {
         depenseReelle: round2(v.depenseReelle),
       }))
       .sort((a, b) => (a.periode < b.periode ? -1 : 1));
+  }
+
+  // ---- Charges Fixes Infrastructure (avec pièces justificatives) -------------
+
+  // Postes fixes matérialisés par défaut chaque mois (get-or-create, comme
+  // les autres postes du tableau de bord) — la RH peut aussi ajouter des
+  // lignes libres (createChargeInfrastructure) pour des dépenses ponctuelles.
+  async getChargesInfrastructure(periode?: string) {
+    const p = periode ?? currentPeriode();
+    for (const poste of POSTES_INFRASTRUCTURE_DEFAUT) {
+      const existing = await this.prisma.chargeInfrastructure.findFirst({
+        where: { poste, periode: p },
+      });
+      if (!existing) {
+        await this.prisma.chargeInfrastructure.create({
+          data: { poste, periode: p, montantTheorique: 0 },
+        });
+      }
+    }
+    return this.prisma.chargeInfrastructure.findMany({
+      where: { periode: p },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  createChargeInfrastructure(dto: UpsertChargeInfrastructureDto) {
+    return this.prisma.chargeInfrastructure.create({
+      data: {
+        poste: dto.poste,
+        motif: dto.motif ?? null,
+        prestataire: dto.prestataire ?? null,
+        periode: dto.periode,
+        montantTheorique: dto.montantTheorique,
+        montantReel: dto.montantReel ?? 0,
+        modePaiement: dto.modePaiement ?? null,
+      },
+    });
+  }
+
+  async updateChargeInfrastructure(id: string, dto: UpsertChargeInfrastructureDto) {
+    const existing = await this.prisma.chargeInfrastructure.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Charge introuvable.");
+    return this.prisma.chargeInfrastructure.update({
+      where: { id },
+      data: {
+        poste: dto.poste,
+        motif: dto.motif ?? null,
+        prestataire: dto.prestataire ?? null,
+        montantTheorique: dto.montantTheorique,
+        montantReel: dto.montantReel ?? existing.montantReel,
+        modePaiement: dto.modePaiement === undefined ? undefined : dto.modePaiement,
+      },
+    });
+  }
+
+  async payerChargeInfrastructure(id: string) {
+    const existing = await this.prisma.chargeInfrastructure.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Charge introuvable.");
+    return this.prisma.chargeInfrastructure.update({
+      where: { id },
+      data: { statut: "paye", datePaiement: new Date() },
+    });
+  }
+
+  async payerToutesChargesInfrastructure(periode: string) {
+    await this.prisma.chargeInfrastructure.updateMany({
+      where: { periode, statut: { not: "paye" } },
+      data: { statut: "paye", datePaiement: new Date() },
+    });
+    return this.getChargesInfrastructure(periode);
+  }
+
+  async uploadPieceJustificative(id: string, file: Express.Multer.File) {
+    const existing = await this.prisma.chargeInfrastructure.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Charge introuvable.");
+    const extension = path.extname(file.originalname) || "";
+    const key = `charges-infrastructure/${id}${extension}`;
+    await this.storage.uploadBuffer(key, file.buffer, file.mimetype || "application/octet-stream");
+    return this.prisma.chargeInfrastructure.update({
+      where: { id },
+      data: { pieceJustificativeKey: key, pieceJustificativeNom: file.originalname },
+    });
+  }
+
+  async getPieceJustificativeStream(id: string) {
+    const existing = await this.prisma.chargeInfrastructure.findUnique({ where: { id } });
+    if (!existing?.pieceJustificativeKey) throw new NotFoundException("Pièce introuvable.");
+    try {
+      return await this.storage.getObjectStream(existing.pieceJustificativeKey);
+    } catch {
+      throw new NotFoundException("Fichier introuvable.");
+    }
+  }
+
+  // ---- Paiement en masse (agents) ---------------------------------------------
+
+  async payerTousLesAgents(periode: string) {
+    const paiements = await this.prisma.paiementAgent.findMany({
+      where: { periode, statut: { not: "paye" } },
+    });
+    await this.prisma.paiementAgent.updateMany({
+      where: { id: { in: paiements.map((p) => p.id) } },
+      data: { statut: "paye", datePaiement: new Date() },
+    });
+    return this.getDetailPaieAgents(periode);
   }
 }

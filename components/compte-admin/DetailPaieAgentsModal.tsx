@@ -25,7 +25,7 @@ interface LignePaieAgent {
   heuresAbsence: number;
   heuresRetard: number;
   heuresSup: number;
-  retenueAbsence: number;
+  retenue: number;
   primeHeuresSup: number;
   montantBase: number;
   montantPrime: number;
@@ -44,6 +44,10 @@ function fmtMontant(n: number): string {
   return `${n.toLocaleString("fr-FR")} Ar`;
 }
 
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 function fmtDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString("fr-FR") : "—";
 }
@@ -51,12 +55,13 @@ function fmtDate(iso: string | null): string {
 // Vision micro derrière les postes "Salaires Fixes Agents" et "Primes
 // Performance Agents" du tableau de bord financier — quel agent, sur quel
 // contrat, avec quel Net à Payer (base + prime + heures sup − retenues
-// d'absence, voir ProductionService.getDetailPaieAgents) et quelles
+// d'absence/retard, voir ProductionService.getDetailPaieAgents) et quelles
 // coordonnées de paiement vérifiées (auto-pulled depuis le casier agent,
 // jamais ressaisies manuellement ici). Rendu via portail (même raison que
 // ClientMissionModal : un ancestor Reveal casse position:fixed).
 export default function DetailPaieAgentsModal({ onClose }: { onClose: () => void }) {
   const [data, setData] = useState<DetailPaieAgents | "loading" | "erreur">("loading");
+  const [payingTout, setPayingTout] = useState(false);
 
   function refresh() {
     apiGet<DetailPaieAgents>("/production/detail-paie-agents", adminHeaders())
@@ -65,6 +70,21 @@ export default function DetailPaieAgentsModal({ onClose }: { onClose: () => void
   }
 
   useEffect(refresh, []);
+
+  async function payerTous() {
+    if (typeof data !== "object") return;
+    setPayingTout(true);
+    try {
+      await apiPostAuthed(
+        `/production/paiements-agents/payer-tout?periode=${data.periode}`,
+        {},
+        adminHeaders()
+      );
+      refresh();
+    } finally {
+      setPayingTout(false);
+    }
+  }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -114,28 +134,66 @@ export default function DetailPaieAgentsModal({ onClose }: { onClose: () => void
             {data.lignes.length === 0 ? (
               <p className="font-sans text-sm text-white/50">Aucun agent en mission active.</p>
             ) : (
-              <table className="w-full min-w-[1200px] border-collapse text-left">
-                <thead>
-                  <tr className="border-b border-white/10 font-mono text-[10px] uppercase tracking-widest text-white/40">
-                    <th className="py-2 pr-3">Agent</th>
-                    <th className="py-2 pr-3">Client</th>
-                    <th className="py-2 pr-3">Tarif négocié</th>
-                    <th className="py-2 pr-3">Retenue absence</th>
-                    <th className="py-2 pr-3">Prime h. sup</th>
-                    <th className="py-2 pr-3">Base</th>
-                    <th className="py-2 pr-3">Prime perf.</th>
-                    <th className="py-2 pr-3">Net à payer</th>
-                    <th className="py-2 pr-3">Coordonnées de paiement</th>
-                    <th className="py-2 pr-3">Statut</th>
-                    <th className="py-2 pr-3"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.lignes.map((l) => (
-                    <LigneRow key={l.missionId} ligne={l} periode={data.periode} onSaved={refresh} />
-                  ))}
-                </tbody>
-              </table>
+              <>
+                <div className="mb-3 flex justify-end">
+                  <button
+                    onClick={payerTous}
+                    disabled={payingTout || data.lignes.every((l) => l.statut === "paye")}
+                    className="rounded border border-success/40 px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest text-success hover:bg-success/10 disabled:opacity-50"
+                  >
+                    {payingTout ? "..." : "Payer tous les agents en attente"}
+                  </button>
+                </div>
+                <table className="w-full min-w-[1200px] border-collapse text-left">
+                  <thead>
+                    <tr className="border-b border-white/10 font-mono text-[10px] uppercase tracking-widest text-white/40">
+                      <th className="py-2 pr-3">Agent</th>
+                      <th className="py-2 pr-3">Client</th>
+                      <th className="py-2 pr-3">Tarif négocié</th>
+                      <th className="py-2 pr-3">Retenues</th>
+                      <th className="py-2 pr-3">Prime h. sup</th>
+                      <th className="py-2 pr-3">Base</th>
+                      <th className="py-2 pr-3">Prime perf.</th>
+                      <th className="py-2 pr-3">Net à payer</th>
+                      <th className="py-2 pr-3">Coordonnées de paiement</th>
+                      <th className="py-2 pr-3">Statut</th>
+                      <th className="py-2 pr-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.lignes.map((l) => (
+                      <LigneRow key={l.missionId} ligne={l} periode={data.periode} onSaved={refresh} />
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-white/10 font-sans text-sm font-semibold text-white">
+                      <td className="py-2.5 pr-3">Total cumulé agents</td>
+                      <td className="py-2.5 pr-3"></td>
+                      <td className="py-2.5 pr-3"></td>
+                      <td className="py-2.5 pr-3 font-mono text-xs">
+                        -{fmtMontant(round2(data.lignes.reduce((sum, l) => sum + l.retenue, 0)))}
+                      </td>
+                      <td className="py-2.5 pr-3 font-mono text-xs">
+                        +{fmtMontant(round2(data.lignes.reduce((sum, l) => sum + l.primeHeuresSup, 0)))}
+                      </td>
+                      <td className="py-2.5 pr-3 font-mono text-xs">
+                        {fmtMontant(round2(data.lignes.reduce((sum, l) => sum + l.montantBase, 0)))}
+                      </td>
+                      <td className="py-2.5 pr-3 font-mono text-xs">
+                        {fmtMontant(round2(data.lignes.reduce((sum, l) => sum + l.montantPrime, 0)))}
+                      </td>
+                      <td className="py-2.5 pr-3 font-mono text-xs">
+                        {fmtMontant(round2(data.lignes.reduce((sum, l) => sum + l.netAPayer, 0)))}
+                      </td>
+                      <td className="py-2.5 pr-3"></td>
+                      <td className="py-2.5 pr-3 font-mono text-xs">
+                        {data.lignes.filter((l) => l.statut === "paye").length} / {data.lignes.length} payés
+                      </td>
+                      <td className="py-2.5 pr-3"></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </>
             )}
           </div>
         )}
@@ -205,10 +263,14 @@ function LigneRow({
         {ligne.tarifNegocie !== null ? fmtMontant(ligne.tarifNegocie) : "—"}
       </td>
       <td className="py-2 pr-3 font-mono">
-        {ligne.retenueAbsence > 0 ? (
+        {ligne.retenue > 0 ? (
           <>
-            <span className="text-accent">-{fmtMontant(ligne.retenueAbsence)}</span>
-            <span className="block text-[10px] text-white/40">{ligne.heuresAbsence}h</span>
+            <span className="text-accent">-{fmtMontant(ligne.retenue)}</span>
+            <span className="block text-[10px] text-white/40">
+              {ligne.heuresAbsence > 0 && `${ligne.heuresAbsence}h absence`}
+              {ligne.heuresAbsence > 0 && ligne.heuresRetard > 0 && " · "}
+              {ligne.heuresRetard > 0 && `${ligne.heuresRetard}h retard`}
+            </span>
           </>
         ) : (
           "—"
