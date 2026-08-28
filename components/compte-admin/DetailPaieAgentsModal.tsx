@@ -2,8 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { apiGet, apiPostAuthed, apiPut } from "@/lib/api";
 import { adminHeaders } from "./adminHeaders";
+
+interface CoordonneesPaiement {
+  type: string;
+  numero: string;
+  verifieLe: string | null;
+}
 
 interface LignePaieAgent {
   missionId: string;
@@ -14,9 +21,16 @@ interface LignePaieAgent {
   tarifNegocie: number | null;
   qualityScore: number | null;
   tauxAtteinteObjectifs: number | null;
+  caRealiseMois: number;
+  heuresAbsence: number;
+  heuresRetard: number;
+  heuresSup: number;
+  retenueAbsence: number;
+  primeHeuresSup: number;
   montantBase: number;
   montantPrime: number;
-  moyenPaiement: string | null;
+  netAPayer: number;
+  coordonneesPaiement: CoordonneesPaiement | null;
   statut: string;
   datePaiement: string | null;
 }
@@ -36,11 +50,11 @@ function fmtDate(iso: string | null): string {
 
 // Vision micro derrière les postes "Salaires Fixes Agents" et "Primes
 // Performance Agents" du tableau de bord financier — quel agent, sur quel
-// contrat, payé à combien, avec quelle prime (calculée depuis le
-// qualityScore de sa mission, en l'absence d'objectif chiffré individuel) et
-// par quel moyen. Voir ProductionService.getDetailPaieAgents. Rendu via
-// portail (même raison que ClientMissionModal : un ancestor Reveal casse
-// position:fixed).
+// contrat, avec quel Net à Payer (base + prime + heures sup − retenues
+// d'absence, voir ProductionService.getDetailPaieAgents) et quelles
+// coordonnées de paiement vérifiées (auto-pulled depuis le casier agent,
+// jamais ressaisies manuellement ici). Rendu via portail (même raison que
+// ClientMissionModal : un ancestor Reveal casse position:fixed).
 export default function DetailPaieAgentsModal({ onClose }: { onClose: () => void }) {
   const [data, setData] = useState<DetailPaieAgents | "loading" | "erreur">("loading");
 
@@ -66,7 +80,7 @@ export default function DetailPaieAgentsModal({ onClose }: { onClose: () => void
       onClick={onClose}
     >
       <div
-        className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded border border-white/10 bg-obsidianCard p-6"
+        className="max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded border border-white/10 bg-obsidianCard p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 border-b border-white/10 pb-4">
@@ -76,7 +90,8 @@ export default function DetailPaieAgentsModal({ onClose }: { onClose: () => void
             </p>
             <p className="mt-1 font-mono text-[11px] text-white/40">
               Traçabilité des postes &quot;Salaires Fixes Agents&quot; et &quot;Primes Performance
-              Agents&quot;.
+              Agents&quot; — pointage et télévente saisis dans l&apos;onglet Performance des agents
+              de chaque carte Mission/Client.
             </p>
           </div>
           <button
@@ -99,16 +114,18 @@ export default function DetailPaieAgentsModal({ onClose }: { onClose: () => void
             {data.lignes.length === 0 ? (
               <p className="font-sans text-sm text-white/50">Aucun agent en mission active.</p>
             ) : (
-              <table className="w-full min-w-[980px] border-collapse text-left">
+              <table className="w-full min-w-[1200px] border-collapse text-left">
                 <thead>
                   <tr className="border-b border-white/10 font-mono text-[10px] uppercase tracking-widest text-white/40">
                     <th className="py-2 pr-3">Agent</th>
                     <th className="py-2 pr-3">Client</th>
                     <th className="py-2 pr-3">Tarif négocié</th>
-                    <th className="py-2 pr-3">Taux d&apos;atteinte</th>
-                    <th className="py-2 pr-3">Montant payé</th>
-                    <th className="py-2 pr-3">Prime</th>
-                    <th className="py-2 pr-3">Moyen de paiement</th>
+                    <th className="py-2 pr-3">Retenue absence</th>
+                    <th className="py-2 pr-3">Prime h. sup</th>
+                    <th className="py-2 pr-3">Base</th>
+                    <th className="py-2 pr-3">Prime perf.</th>
+                    <th className="py-2 pr-3">Net à payer</th>
+                    <th className="py-2 pr-3">Coordonnées de paiement</th>
                     <th className="py-2 pr-3">Statut</th>
                     <th className="py-2 pr-3"></th>
                   </tr>
@@ -139,7 +156,6 @@ function LigneRow({
 }) {
   const [montantBase, setMontantBase] = useState(String(ligne.montantBase));
   const [montantPrime, setMontantPrime] = useState(String(ligne.montantPrime));
-  const [moyenPaiement, setMoyenPaiement] = useState(ligne.moyenPaiement ?? "");
   const [saving, setSaving] = useState(false);
   const [paying, setPaying] = useState(false);
 
@@ -148,11 +164,7 @@ function LigneRow({
     try {
       await apiPut(
         `/production/paiements-agents/${ligne.missionId}/${periode}`,
-        {
-          montantBase: Number(montantBase) || 0,
-          montantPrime: Number(montantPrime) || 0,
-          moyenPaiement: moyenPaiement.trim() || null,
-        },
+        { montantBase: Number(montantBase) || 0, montantPrime: Number(montantPrime) || 0 },
         adminHeaders()
       );
       onSaved();
@@ -193,12 +205,20 @@ function LigneRow({
         {ligne.tarifNegocie !== null ? fmtMontant(ligne.tarifNegocie) : "—"}
       </td>
       <td className="py-2 pr-3 font-mono">
-        {ligne.tauxAtteinteObjectifs !== null ? (
+        {ligne.retenueAbsence > 0 ? (
           <>
-            {ligne.tauxAtteinteObjectifs}%
-            <span className="block text-[10px] text-white/40">
-              (score qualité {ligne.qualityScore}/5)
-            </span>
+            <span className="text-accent">-{fmtMontant(ligne.retenueAbsence)}</span>
+            <span className="block text-[10px] text-white/40">{ligne.heuresAbsence}h</span>
+          </>
+        ) : (
+          "—"
+        )}
+      </td>
+      <td className="py-2 pr-3 font-mono">
+        {ligne.primeHeuresSup > 0 ? (
+          <>
+            <span className="text-success">+{fmtMontant(ligne.primeHeuresSup)}</span>
+            <span className="block text-[10px] text-white/40">{ligne.heuresSup}h</span>
           </>
         ) : (
           "—"
@@ -223,16 +243,32 @@ function LigneRow({
           disabled={saving || paye}
           className="w-24 rounded border border-white/20 bg-obsidian px-2 py-1 font-mono text-xs text-white outline-none focus:border-accent disabled:opacity-60"
         />
+        {ligne.caRealiseMois > 0 && (
+          <span className="mt-0.5 block font-mono text-[10px] text-white/40">
+            CA réalisé : {fmtMontant(ligne.caRealiseMois)}
+          </span>
+        )}
       </td>
+      <td className="py-2 pr-3 font-mono font-semibold text-white">{fmtMontant(ligne.netAPayer)}</td>
       <td className="py-2 pr-3">
-        <input
-          value={moyenPaiement}
-          onChange={(e) => setMoyenPaiement(e.target.value)}
-          onBlur={save}
-          disabled={saving || paye}
-          placeholder="Mobile Money, virement..."
-          className="w-36 rounded border border-white/20 bg-obsidian px-2 py-1 text-xs text-white placeholder:text-white/30 outline-none focus:border-accent disabled:opacity-60"
-        />
+        {ligne.coordonneesPaiement ? (
+          <>
+            <span className="block text-white">{ligne.coordonneesPaiement.type}</span>
+            <span className="block font-mono text-[10px] text-white/40">
+              {ligne.coordonneesPaiement.numero}
+            </span>
+            <span className="block font-mono text-[10px] text-success">
+              Vérifié le {fmtDate(ligne.coordonneesPaiement.verifieLe)}
+            </span>
+          </>
+        ) : (
+          <Link
+            href={`/compte/admin/apprenants/${ligne.agentMatricule}`}
+            className="font-mono text-[10px] uppercase tracking-widest text-accent hover:underline"
+          >
+            Non vérifiées — compléter →
+          </Link>
+        )}
       </td>
       <td className="py-2 pr-3">
         <span

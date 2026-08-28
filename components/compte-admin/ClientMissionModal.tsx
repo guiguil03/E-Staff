@@ -20,6 +20,12 @@ interface PerformanceAgent {
   tauxAbsence: number | null;
   nbRetards: number | null;
   remarques: string | null;
+  heuresRetardCumulees: number | null;
+  heuresAbsenceNonJustifiee: number | null;
+  heuresSupValidees: number | null;
+  caRealise: number | null;
+  nbVentes: number | null;
+  rdvValides: number | null;
 }
 
 interface RapportHebdo {
@@ -311,7 +317,7 @@ function AgentsTab({ data, onSaved }: { data: ContratModalData; onSaved: () => v
       {data.performanceAgents.length === 0 ? (
         <p className="font-sans text-xs text-white/50">Aucun agent actif sur ce contrat.</p>
       ) : (
-        <table className="w-full min-w-[720px] border-collapse text-left">
+        <table className="w-full min-w-[1180px] border-collapse text-left">
           <thead>
             <tr className="border-b border-white/10 font-mono text-[10px] uppercase tracking-widest text-white/40">
               <th className="py-2 pr-3">Agent</th>
@@ -319,6 +325,20 @@ function AgentsTab({ data, onSaved }: { data: ContratModalData; onSaved: () => v
               <th className="py-2 pr-3">Concrétisations</th>
               <th className="py-2 pr-3">Absences %</th>
               <th className="py-2 pr-3">Retards</th>
+              <th className="py-2 pr-3" title="Pointage — retenue sur salaire">
+                Retard (h)
+              </th>
+              <th className="py-2 pr-3" title="Pointage — retenue sur salaire">
+                Absence (h)
+              </th>
+              <th className="py-2 pr-3" title="Pointage — majoré ×1,5 sur le net à payer">
+                H. sup (h)
+              </th>
+              <th className="py-2 pr-3" title="Télévente — base de la prime de performance">
+                CA réalisé
+              </th>
+              <th className="py-2 pr-3">Ventes</th>
+              <th className="py-2 pr-3">RDV validés</th>
               <th className="py-2 pr-3">Remarques</th>
               <th className="py-2 pr-3"></th>
             </tr>
@@ -343,6 +363,20 @@ function AgentRow({ agent, onSaved }: { agent: PerformanceAgent; onSaved: () => 
     agent.tauxAbsence !== null ? String(agent.tauxAbsence) : ""
   );
   const [nbRetards, setNbRetards] = useState(agent.nbRetards !== null ? String(agent.nbRetards) : "");
+  const [heuresRetard, setHeuresRetard] = useState(
+    agent.heuresRetardCumulees !== null ? String(agent.heuresRetardCumulees) : ""
+  );
+  const [heuresAbsence, setHeuresAbsence] = useState(
+    agent.heuresAbsenceNonJustifiee !== null ? String(agent.heuresAbsenceNonJustifiee) : ""
+  );
+  const [heuresSup, setHeuresSup] = useState(
+    agent.heuresSupValidees !== null ? String(agent.heuresSupValidees) : ""
+  );
+  const [caRealise, setCaRealise] = useState(agent.caRealise !== null ? String(agent.caRealise) : "");
+  const [nbVentes, setNbVentes] = useState(agent.nbVentes !== null ? String(agent.nbVentes) : "");
+  const [rdvValides, setRdvValides] = useState(
+    agent.rdvValides !== null ? String(agent.rdvValides) : ""
+  );
   const [remarques, setRemarques] = useState(agent.remarques ?? "");
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
 
@@ -356,6 +390,12 @@ function AgentRow({ agent, onSaved }: { agent: PerformanceAgent; onSaved: () => 
           concretisations: concretisations === "" ? 0 : Number(concretisations),
           tauxAbsence: tauxAbsence === "" ? null : Number(tauxAbsence),
           nbRetards: nbRetards === "" ? 0 : Number(nbRetards),
+          heuresRetardCumulees: heuresRetard === "" ? 0 : Number(heuresRetard),
+          heuresAbsenceNonJustifiee: heuresAbsence === "" ? 0 : Number(heuresAbsence),
+          heuresSupValidees: heuresSup === "" ? 0 : Number(heuresSup),
+          caRealise: caRealise === "" ? 0 : Number(caRealise),
+          nbVentes: nbVentes === "" ? 0 : Number(nbVentes),
+          rdvValides: rdvValides === "" ? 0 : Number(rdvValides),
           remarques: remarques.trim() || null,
         },
         adminHeaders()
@@ -413,6 +453,54 @@ function AgentRow({ agent, onSaved }: { agent: PerformanceAgent; onSaved: () => 
           type="number"
           value={nbRetards}
           onChange={(e) => setNbRetards(e.target.value)}
+          className="w-16 rounded border border-white/20 bg-obsidian px-2 py-1 text-xs text-white outline-none focus:border-accent"
+        />
+      </td>
+      <td className="py-2 pr-3">
+        <input
+          type="number"
+          value={heuresRetard}
+          onChange={(e) => setHeuresRetard(e.target.value)}
+          className="w-16 rounded border border-white/20 bg-obsidian px-2 py-1 text-xs text-white outline-none focus:border-accent"
+        />
+      </td>
+      <td className="py-2 pr-3">
+        <input
+          type="number"
+          value={heuresAbsence}
+          onChange={(e) => setHeuresAbsence(e.target.value)}
+          className="w-16 rounded border border-white/20 bg-obsidian px-2 py-1 text-xs text-white outline-none focus:border-accent"
+        />
+      </td>
+      <td className="py-2 pr-3">
+        <input
+          type="number"
+          value={heuresSup}
+          onChange={(e) => setHeuresSup(e.target.value)}
+          className="w-16 rounded border border-white/20 bg-obsidian px-2 py-1 text-xs text-white outline-none focus:border-accent"
+        />
+      </td>
+      <td className="py-2 pr-3">
+        <input
+          type="number"
+          value={caRealise}
+          onChange={(e) => setCaRealise(e.target.value)}
+          className="w-24 rounded border border-white/20 bg-obsidian px-2 py-1 text-xs text-white outline-none focus:border-accent"
+        />
+      </td>
+      <td className="py-2 pr-3">
+        <input
+          type="number"
+          value={nbVentes}
+          onChange={(e) => setNbVentes(e.target.value)}
+          className="w-16 rounded border border-white/20 bg-obsidian px-2 py-1 text-xs text-white outline-none focus:border-accent"
+        />
+      </td>
+      <td className="py-2 pr-3">
+        <input
+          type="number"
+          value={rdvValides}
+          onChange={(e) => setRdvValides(e.target.value)}
           className="w-16 rounded border border-white/20 bg-obsidian px-2 py-1 text-xs text-white outline-none focus:border-accent"
         />
       </td>

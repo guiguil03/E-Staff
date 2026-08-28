@@ -142,6 +142,10 @@ model Connecteur {
   // "nouveau" | "contacte" | "actif"
   status    String   @default("nouveau")
   createdAt DateTime @default(now())
+
+  apprenantsApportes Apprenant[]
+  contratsApportes   ContratB2B[]
+  commissionsDemarrage CommissionDemarrageApporteur[]
 }
 
 // ---------------------------------------------------------------------------
@@ -408,6 +412,35 @@ model Apprenant {
   groupeId String
   groupe   Groupe @relation(fields: [groupeId], references: [id])
 
+  // ---- Traçabilité recrutement & apporteurs (synchro ATS, 2026-08-28) ------
+
+  // Apporteur d'affaires à qui ce candidat est rattaché, s'il vient d'un
+  // apport plutôt que d'une candidature directe — sert de base au calcul de
+  // la commission récurrente de 5% (voir ProductionService.
+  // getCommissionsApporteurs).
+  connecteurId String?
+  connecteur   Connecteur? @relation(fields: [connecteurId], references: [id])
+
+  // Libre : "Candidature spontanée", "Réseau", nom de l'apporteur, etc. —
+  // distinct de connecteurId, qui est le seul champ structurellement fiable
+  // pour le calcul de commission.
+  sourceRecrutement String?
+
+  // "formation" | "essai" | "actif" | "inactif" — statut RH explicite de
+  // l'agent, distinct du statut de production calculé (Mission.dateFin) : un
+  // agent entre missions n'est pas forcément "inactif" au sens RH/commission.
+  // Contrôle si la commission récurrente de l'apporteur court toujours.
+  statutAgent String @default("formation")
+
+  // ---- Coffre-fort coordonnées de paiement (onboarding RH) -----------------
+
+  // Numéro RIB ou Mobile Money, selon moyenPaiementType — saisi/vérifié une
+  // fois par la RH, réutilisé automatiquement sur chaque paiement (voir
+  // PaiementAgent) plutôt que ressaisi à chaque fois.
+  ribOuMobileMoney       String?
+  moyenPaiementType      String? // "RIB" | "MVola" | "Orange Money" | "Airtel Money"
+  coordonneesVerifieesLe DateTime?
+
   presences Presence[]
   notations Notation[]
   // Tentative d'évaluation à l'origine de la création de ce compte, quand
@@ -596,6 +629,12 @@ model ContratB2B {
   entrepriseProjetId String?
   entrepriseProjet   EntrepriseProjet? @relation(fields: [entrepriseProjetId], references: [id])
 
+  // Apporteur d'affaires à l'origine de ce client — déclenche la commission
+  // de démarrage (10%, une fois) au profit de cet apporteur. Nullable : un
+  // contrat créé directement par la RH sans apporteur.
+  connecteurId String?
+  connecteur   Connecteur? @relation(fields: [connecteurId], references: [id])
+
   description String?
 
   // Date de signature du contrat, distincte de dateDebut (démarrage effectif
@@ -618,6 +657,7 @@ model ContratB2B {
   factures             Facture[]
   objectifsJournaliers ObjectifJournalier[]
   rapportsHebdo        RapportHebdoSuperviseur[]
+  commissionDemarrage  CommissionDemarrageApporteur?
 
   createdAt DateTime @default(now())
 }
@@ -703,6 +743,21 @@ model SuiviAgentHebdo {
   tauxAbsence     Float? // %
   nbRetards       Int     @default(0)
   remarques       String?
+
+  // ---- Pointage (synchro RH, 2026-08-28) — saisie manuelle par le
+  // superviseur, aucune pointeuse réelle connectée à ce jour. Alimente le
+  // calcul du Net à Payer (retenues/heures sup) en PaiementAgent.
+  heuresRetardCumulees      Float @default(0)
+  heuresAbsenceNonJustifiee Float @default(0)
+  heuresSupValidees         Float @default(0)
+
+  // ---- Métriques de production / télévente (synchro téléphonie, 2026-08-28)
+  // — saisie manuelle, aucun système de téléphonie réel connecté à ce jour.
+  // Quand caRealise > 0, la prime de l'agent se base dessus plutôt que sur
+  // qualityScore (voir ProductionService.getDetailPaieAgents).
+  caRealise  Float @default(0)
+  nbVentes   Int   @default(0)
+  rdvValides Int   @default(0)
 
   createdAt DateTime @default(now())
 
@@ -792,4 +847,27 @@ model PaiementAgent {
   updatedAt DateTime @updatedAt
 
   @@unique([missionId, periode])
+}
+
+// Commission de démarrage (10% du tarif mensuel du contrat, versée une
+// seule fois) due à l'apporteur d'affaires qui a amené ce client — voir
+// ContratB2B.connecteurId. Un seul enregistrement par contrat (jamais
+// récurrent, contrairement à la commission sur la masse salariale — voir
+// ProductionService.getCommissionsDemarrage).
+model CommissionDemarrageApporteur {
+  id String @id @default(cuid())
+
+  contratId String     @unique
+  contrat   ContratB2B @relation(fields: [contratId], references: [id])
+
+  connecteurId String
+  connecteur   Connecteur @relation(fields: [connecteurId], references: [id])
+
+  montant Float
+
+  // "en_attente" | "paye"
+  statut       String    @default("en_attente")
+  datePaiement DateTime?
+
+  createdAt DateTime @default(now())
 }

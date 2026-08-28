@@ -13,6 +13,12 @@ interface DetailSuperviseur {
   agentsActifs: number;
   qualityScoreMoyen: number | null;
   tauxAtteinteObjectifs: number | null;
+  caAgentsSupervises: number;
+  primeSuggeree: number;
+}
+
+function fmtMontant(n: number): string {
+  return `${n.toLocaleString("fr-FR")} Ar`;
 }
 
 // Vision micro derrière le poste "Pool Superviseurs" du tableau de bord
@@ -97,6 +103,12 @@ export default function DetailPoolSuperviseursModal({ onClose }: { onClose: () =
                   {s.agentsActifs > 1 ? "s" : ""}
                   {s.clients.length > 0 && ` · ${s.clients.join(", ")}`}
                 </p>
+                {s.primeSuggeree > 0 && (
+                  <p className="mt-1 font-mono text-[11px] text-success">
+                    Prime suggérée : {fmtMontant(s.primeSuggeree)}
+                    <span className="text-white/40"> (basée sur {fmtMontant(s.caAgentsSupervises)} de CA supervisé)</span>
+                  </p>
+                )}
               </div>
             ))}
           </div>

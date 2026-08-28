@@ -8,6 +8,7 @@ import { CockpitService } from '../cockpit/cockpit.service';
 import { NotationService } from '../notation/notation.service';
 import { UpsertReunionDto } from './dto/upsert-reunion.dto';
 import { UpsertFormateurDto } from './dto/upsert-formateur.dto';
+import { UpdateApprenantRhDto } from './dto/update-apprenant-rh.dto';
 
 // Certification "vivier" — mêmes seuils/tiers que le pipeline d'admission
 // (voir evaluation/scoring.ts) : un candidat admis en niveau_c1 ou en
@@ -571,6 +572,7 @@ export class RhService {
       include: {
         groupe: { include: { formateur: true } },
         evaluationAttempt: { include: { candidat: true } },
+        connecteur: true,
         missions: {
           include: { contrat: true, superviseur: true },
           orderBy: { dateDebut: 'desc' },
@@ -599,6 +601,19 @@ export class RhService {
         ? `${apprenant.groupe.formateur.prenom} ${apprenant.groupe.formateur.nom}`
         : null,
       abonnementExpireAt: apprenant.abonnementExpireAt,
+      tracabilite: {
+        connecteurId: apprenant.connecteurId,
+        connecteurNom: apprenant.connecteur
+          ? `${apprenant.connecteur.firstName} ${apprenant.connecteur.lastName}`
+          : null,
+        sourceRecrutement: apprenant.sourceRecrutement,
+        statutAgent: apprenant.statutAgent,
+      },
+      coordonneesPaiement: {
+        ribOuMobileMoney: apprenant.ribOuMobileMoney,
+        moyenPaiementType: apprenant.moyenPaiementType,
+        verifieLe: apprenant.coordonneesVerifieesLe,
+      },
       admission: apprenant.evaluationAttempt
         ? {
             totalScore: apprenant.evaluationAttempt.totalScore,
@@ -622,6 +637,41 @@ export class RhService {
         qualityScore: m.qualityScore,
       })),
     };
+  }
+
+  // Traçabilité recrutement (apporteur, source) + coordonnées de paiement
+  // vérifiées — saisies une fois par la RH à l'onboarding, réutilisées
+  // automatiquement partout ailleurs (commissions apporteurs, paie agents)
+  // plutôt que ressaisies. Voir ProductionService.getDetailPaieAgents /
+  // getCommissionsApporteurs.
+  async updateApprenantRh(matricule: string, dto: UpdateApprenantRhDto) {
+    const apprenant = await this.prisma.apprenant.findUnique({ where: { matricule } });
+    if (!apprenant) throw new NotFoundException('Apprenant introuvable.');
+    if (dto.connecteurId) {
+      const connecteur = await this.prisma.connecteur.findUnique({
+        where: { id: dto.connecteurId },
+      });
+      if (!connecteur) throw new NotFoundException('Apporteur introuvable.');
+    }
+    return this.prisma.apprenant.update({
+      where: { matricule },
+      data: {
+        connecteurId: dto.connecteurId === undefined ? undefined : dto.connecteurId,
+        sourceRecrutement:
+          dto.sourceRecrutement === undefined ? undefined : dto.sourceRecrutement,
+        statutAgent: dto.statutAgent ?? undefined,
+        ribOuMobileMoney:
+          dto.ribOuMobileMoney === undefined ? undefined : dto.ribOuMobileMoney,
+        moyenPaiementType:
+          dto.moyenPaiementType === undefined ? undefined : dto.moyenPaiementType,
+        // Toute modification des coordonnées de paiement doit repasser par
+        // une nouvelle vérification RH — jamais silencieusement conservée.
+        coordonneesVerifieesLe:
+          dto.ribOuMobileMoney !== undefined || dto.moyenPaiementType !== undefined
+            ? new Date()
+            : undefined,
+      },
+    });
   }
 
   async getFormateurCasier(id: string) {

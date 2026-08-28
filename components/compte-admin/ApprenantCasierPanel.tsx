@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPut } from "@/lib/api";
 import { COMPETENCY_DEFS } from "@/components/compte-formateur/gradingGrids";
 import { adminHeaders } from "./adminHeaders";
 
@@ -48,13 +48,37 @@ interface ApprenantCasier {
   typeCours: string | null;
   formateurNom: string | null;
   abonnementExpireAt: string | null;
+  tracabilite: {
+    connecteurId: string | null;
+    connecteurNom: string | null;
+    sourceRecrutement: string | null;
+    statutAgent: string;
+  };
+  coordonneesPaiement: {
+    ribOuMobileMoney: string | null;
+    moyenPaiementType: string | null;
+    verifieLe: string | null;
+  };
   admission: { totalScore: number | null; tier: string | null; gradedAt: string | null } | null;
   historiqueNotations: SeanceNotations[];
   historiquePresences: Presence[];
   historiqueMissions: MissionHistorique[];
 }
 
+interface Apporteur {
+  id: string;
+  firstName: string;
+  lastName: string;
+}
+
 const COMPETENCY_LABELS = Object.fromEntries(COMPETENCY_DEFS.map((c) => [c.key, c.label]));
+
+const STATUT_AGENT_LABELS: Record<string, string> = {
+  formation: "En formation",
+  essai: "Période d'essai",
+  actif: "Actif en production",
+  inactif: "Démissionné / Inactif",
+};
 
 function fmtDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString("fr-FR") : "—";
@@ -66,12 +90,21 @@ function fmtDate(iso: string | null): string {
 // au lieu de dupliquer la logique.
 export default function ApprenantCasierPanel({ matricule }: { matricule: string }) {
   const [casier, setCasier] = useState<ApprenantCasier | "loading" | "erreur">("loading");
+  const [apporteurs, setApporteurs] = useState<Apporteur[]>([]);
 
-  useEffect(() => {
+  function refresh() {
     apiGet<ApprenantCasier>(`/rh/apprenants/${matricule}/casier`, adminHeaders())
       .then(setCasier)
       .catch(() => setCasier("erreur"));
-  }, [matricule]);
+  }
+
+  useEffect(refresh, [matricule]);
+
+  useEffect(() => {
+    apiGet<Apporteur[]>("/rh/partenaires", adminHeaders())
+      .then(setApporteurs)
+      .catch(() => {});
+  }, []);
 
   if (casier === "loading") return <p className="font-sans text-sm text-white/50">Chargement...</p>;
   if (casier === "erreur")
@@ -111,6 +144,16 @@ export default function ApprenantCasierPanel({ matricule }: { matricule: string 
             </p>
           )}
         </div>
+      </Reveal>
+
+      <Reveal delay={10}>
+        <TracabilitePaiementSection
+          matricule={casier.matricule}
+          tracabilite={casier.tracabilite}
+          coordonneesPaiement={casier.coordonneesPaiement}
+          apporteurs={apporteurs}
+          onSaved={refresh}
+        />
       </Reveal>
 
       {casier.historiqueMissions.length > 0 && (
@@ -189,6 +232,157 @@ export default function ApprenantCasierPanel({ matricule }: { matricule: string 
           </div>
         </div>
       </Reveal>
+    </div>
+  );
+}
+
+function TracabilitePaiementSection({
+  matricule,
+  tracabilite,
+  coordonneesPaiement,
+  apporteurs,
+  onSaved,
+}: {
+  matricule: string;
+  tracabilite: ApprenantCasier["tracabilite"];
+  coordonneesPaiement: ApprenantCasier["coordonneesPaiement"];
+  apporteurs: Apporteur[];
+  onSaved: () => void;
+}) {
+  const [connecteurId, setConnecteurId] = useState(tracabilite.connecteurId ?? "");
+  const [sourceRecrutement, setSourceRecrutement] = useState(tracabilite.sourceRecrutement ?? "");
+  const [statutAgent, setStatutAgent] = useState(tracabilite.statutAgent);
+  const [moyenPaiementType, setMoyenPaiementType] = useState(
+    coordonneesPaiement.moyenPaiementType ?? ""
+  );
+  const [ribOuMobileMoney, setRibOuMobileMoney] = useState(
+    coordonneesPaiement.ribOuMobileMoney ?? ""
+  );
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    try {
+      await apiPut(
+        `/rh/apprenants/${matricule}`,
+        {
+          connecteurId: connecteurId || null,
+          sourceRecrutement: sourceRecrutement.trim() || null,
+          statutAgent,
+          moyenPaiementType: moyenPaiementType || null,
+          ribOuMobileMoney: ribOuMobileMoney.trim() || null,
+        },
+        adminHeaders()
+      );
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="rounded border border-white/10 bg-obsidianCard p-6">
+      <h3 className="font-display text-base font-semibold text-white">
+        Traçabilité &amp; coordonnées de paiement
+      </h3>
+      <p className="mt-1 font-mono text-[11px] text-white/40">
+        Base des commissions apporteurs et de l&apos;affichage automatique des coordonnées de
+        paiement sur les bulletins.
+      </p>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+            Apporteur d&apos;affaires
+          </label>
+          <select
+            value={connecteurId}
+            onChange={(e) => setConnecteurId(e.target.value)}
+            className="mt-1 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
+          >
+            <option value="">— Aucun (candidature directe) —</option>
+            {apporteurs.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.firstName} {a.lastName}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+            Source de recrutement
+          </label>
+          <input
+            value={sourceRecrutement}
+            onChange={(e) => setSourceRecrutement(e.target.value)}
+            placeholder="Ex. Réseau, candidature spontanée..."
+            className="mt-1 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
+          />
+        </div>
+        <div>
+          <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+            Statut agent
+          </label>
+          <select
+            value={statutAgent}
+            onChange={(e) => setStatutAgent(e.target.value)}
+            className="mt-1 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
+          >
+            {Object.entries(STATUT_AGENT_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 font-mono text-[10px] text-white/40">
+            Contrôle si la commission récurrente de l&apos;apporteur court toujours.
+          </p>
+        </div>
+        <div />
+        <div>
+          <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+            Moyen de paiement
+          </label>
+          <select
+            value={moyenPaiementType}
+            onChange={(e) => setMoyenPaiementType(e.target.value)}
+            className="mt-1 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
+          >
+            <option value="">— Non renseigné —</option>
+            <option value="RIB">RIB</option>
+            <option value="MVola">MVola</option>
+            <option value="Orange Money">Orange Money</option>
+            <option value="Airtel Money">Airtel Money</option>
+          </select>
+        </div>
+        <div>
+          <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+            Numéro / RIB
+          </label>
+          <input
+            value={ribOuMobileMoney}
+            onChange={(e) => setRibOuMobileMoney(e.target.value)}
+            placeholder="Numéro Mobile Money ou RIB"
+            className="mt-1 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
+          />
+        </div>
+      </div>
+
+      {coordonneesPaiement.verifieLe && (
+        <p className="mt-3 font-mono text-[11px] text-success">
+          Coordonnées vérifiées le {fmtDate(coordonneesPaiement.verifieLe)}
+        </p>
+      )}
+
+      <div className="mt-3">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="rounded border border-accent px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest text-accent hover:bg-accent/10 disabled:opacity-50"
+        >
+          {saving ? "Enregistrement..." : "Enregistrer"}
+        </button>
+      </div>
     </div>
   );
 }

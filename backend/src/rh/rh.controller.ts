@@ -15,6 +15,7 @@ import { UpsertFormateurDto } from './dto/upsert-formateur.dto';
 import { AssignFormateurDto } from './dto/assign-formateur.dto';
 import { UpdateTypeCoursDto } from './dto/update-type-cours.dto';
 import { UpdateVagueDatesDto } from './dto/update-vague-dates.dto';
+import { UpdateApprenantRhDto } from './dto/update-apprenant-rh.dto';
 
 @Controller('rh')
 @UseGuards(AdminGuard)
@@ -121,6 +122,14 @@ export class RhController {
   @Get('apprenants/:matricule/casier')
   getApprenantCasier(@Param('matricule') matricule: string) {
     return this.service.getApprenantCasier(matricule);
+  }
+
+  @Put('apprenants/:matricule')
+  updateApprenantRh(
+    @Param('matricule') matricule: string,
+    @Body() dto: UpdateApprenantRhDto,
+  ) {
+    return this.service.updateApprenantRh(matricule, dto);
   }
 
   @Get('formateurs/:id/casier')

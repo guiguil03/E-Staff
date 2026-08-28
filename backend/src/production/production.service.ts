@@ -59,6 +59,37 @@ function isoWeekLabel(d: Date): string {
   return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 }
 
+// Lundi de la semaine ISO donnée — sert à rattacher un SuiviAgentHebdo
+// (suivi par semaine) à un mois de paie ("AAAA-MM") pour agréger le
+// pointage/les métriques de la période. Approximation : une semaine à
+// cheval sur deux mois est rattachée au mois de son lundi.
+function isoWeekToMonday(label: string): Date {
+  const [yearStr, weekStr] = label.split("-W");
+  const year = Number(yearStr);
+  const week = Number(weekStr);
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4DayNum = jan4.getUTCDay() || 7;
+  const week1Monday = new Date(jan4);
+  week1Monday.setUTCDate(jan4.getUTCDate() - jan4DayNum + 1);
+  const monday = new Date(week1Monday);
+  monday.setUTCDate(week1Monday.getUTCDate() + (week - 1) * 7);
+  return monday;
+}
+
+function moisDeLaSemaine(label: string): string {
+  const monday = isoWeekToMonday(label);
+  return `${monday.getUTCFullYear()}-${String(monday.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+// Heures mensuelles standard utilisées pour convertir un tarif négocié
+// (mensuel) en taux horaire — 173,33h/mois est la référence usuelle pour un
+// temps plein 40h/semaine (52 semaines / 12 mois × 40h). Pas de donnée
+// contractuelle par agent pour affiner ce chiffre à ce jour.
+const HEURES_MENSUELLES_STANDARD = 173.33;
+// Majoration heures supplémentaires — valeur par défaut usuelle (+50%), pas
+// de barème négocié par agent en base.
+const MAJORATION_HEURES_SUP = 1.5;
+
 @Injectable()
 export class ProductionService {
   constructor(private readonly prisma: PrismaService) {}
@@ -143,6 +174,7 @@ export class ProductionService {
       data: {
         clientNom: dto.clientNom,
         entrepriseProjetId: dto.entrepriseProjetId,
+        connecteurId: dto.connecteurId ?? null,
         description: dto.description,
         dateSignature: dto.dateSignature ? new Date(dto.dateSignature) : null,
         dateDebut: new Date(dto.dateDebut),
@@ -161,6 +193,7 @@ export class ProductionService {
       data: {
         clientNom: dto.clientNom,
         entrepriseProjetId: dto.entrepriseProjetId,
+        connecteurId: dto.connecteurId === undefined ? undefined : dto.connecteurId,
         description: dto.description,
         dateSignature:
           dto.dateSignature === undefined
@@ -499,6 +532,12 @@ export class ProductionService {
         tauxAbsence: suivi?.tauxAbsence ?? null,
         nbRetards: suivi?.nbRetards ?? null,
         remarques: suivi?.remarques ?? null,
+        heuresRetardCumulees: suivi?.heuresRetardCumulees ?? null,
+        heuresAbsenceNonJustifiee: suivi?.heuresAbsenceNonJustifiee ?? null,
+        heuresSupValidees: suivi?.heuresSupValidees ?? null,
+        caRealise: suivi?.caRealise ?? null,
+        nbVentes: suivi?.nbVentes ?? null,
+        rdvValides: suivi?.rdvValides ?? null,
       };
     });
 
@@ -546,22 +585,22 @@ export class ProductionService {
   async upsertSuiviAgentHebdo(missionId: string, dto: UpsertSuiviAgentHebdoDto) {
     const mission = await this.prisma.mission.findUnique({ where: { id: missionId } });
     if (!mission) throw new NotFoundException("Mission introuvable.");
+    const data = {
+      concretisations: dto.concretisations ?? 0,
+      tauxAbsence: dto.tauxAbsence ?? null,
+      nbRetards: dto.nbRetards ?? 0,
+      remarques: dto.remarques ?? null,
+      heuresRetardCumulees: dto.heuresRetardCumulees ?? 0,
+      heuresAbsenceNonJustifiee: dto.heuresAbsenceNonJustifiee ?? 0,
+      heuresSupValidees: dto.heuresSupValidees ?? 0,
+      caRealise: dto.caRealise ?? 0,
+      nbVentes: dto.nbVentes ?? 0,
+      rdvValides: dto.rdvValides ?? 0,
+    };
     return this.prisma.suiviAgentHebdo.upsert({
       where: { missionId_semaine: { missionId, semaine: dto.semaine } },
-      create: {
-        missionId,
-        semaine: dto.semaine,
-        concretisations: dto.concretisations ?? 0,
-        tauxAbsence: dto.tauxAbsence ?? null,
-        nbRetards: dto.nbRetards ?? 0,
-        remarques: dto.remarques ?? null,
-      },
-      update: {
-        concretisations: dto.concretisations ?? 0,
-        tauxAbsence: dto.tauxAbsence ?? null,
-        nbRetards: dto.nbRetards ?? 0,
-        remarques: dto.remarques ?? null,
-      },
+      create: { missionId, semaine: dto.semaine, ...data },
+      update: data,
     });
   }
 
@@ -699,18 +738,44 @@ export class ProductionService {
 
     const missions = await this.prisma.mission.findMany({
       where: { dateFin: null },
-      include: { apprenant: true, contrat: true, superviseur: true },
+      include: {
+        apprenant: true,
+        contrat: true,
+        superviseur: true,
+        suivisHebdo: true,
+      },
       orderBy: { dateDebut: "desc" },
     });
 
     const lignes = await Promise.all(
       missions.map(async (m) => {
+        // Agrège le pointage/les métriques de toutes les semaines
+        // rattachées à ce mois de paie (voir moisDeLaSemaine).
+        const suivisDuMois = m.suivisHebdo.filter((s) => moisDeLaSemaine(s.semaine) === p);
+        const heuresAbsence = suivisDuMois.reduce((sum, s) => sum + s.heuresAbsenceNonJustifiee, 0);
+        const heuresRetard = suivisDuMois.reduce((sum, s) => sum + s.heuresRetardCumulees, 0);
+        const heuresSup = suivisDuMois.reduce((sum, s) => sum + s.heuresSupValidees, 0);
+        const caRealiseMois = round2(suivisDuMois.reduce((sum, s) => sum + s.caRealise, 0));
+
+        const tarif = m.tarifNegocie ?? 0;
+        const tauxHoraire = m.tarifNegocie ? round2(tarif / HEURES_MENSUELLES_STANDARD) : null;
+        const retenueAbsence = tauxHoraire !== null ? round2(tauxHoraire * heuresAbsence) : 0;
+        const primeHeuresSup =
+          tauxHoraire !== null ? round2(tauxHoraire * heuresSup * MAJORATION_HEURES_SUP) : 0;
+
+        // Prime de performance suggérée — basée sur le CA réalisé si des
+        // métriques de télévente ont été saisies ce mois, sinon repli sur le
+        // qualityScore (proxy de taux d'atteinte, faute de mieux).
+        const primeSuggeree =
+          caRealiseMois > 0
+            ? round2(caRealiseMois * primePct)
+            : m.qualityScore !== null
+              ? round2(tarif * primePct * (m.qualityScore / 5))
+              : 0;
+
         const existing = await this.prisma.paiementAgent.findUnique({
           where: { missionId_periode: { missionId: m.id, periode: p } },
         });
-        const tarif = m.tarifNegocie ?? 0;
-        const primeSuggeree =
-          m.qualityScore !== null ? round2(tarif * primePct * (m.qualityScore / 5)) : 0;
         const row =
           existing ??
           (await this.prisma.paiementAgent.create({
@@ -721,6 +786,9 @@ export class ProductionService {
               montantPrime: primeSuggeree,
             },
           }));
+
+        const netAPayer = round2(row.montantBase - retenueAbsence + primeHeuresSup + row.montantPrime);
+
         return {
           missionId: m.id,
           agentNom: `${m.apprenant.prenom} ${m.apprenant.nom}`,
@@ -730,9 +798,23 @@ export class ProductionService {
           tarifNegocie: m.tarifNegocie,
           qualityScore: m.qualityScore,
           tauxAtteinteObjectifs: m.qualityScore !== null ? round2((m.qualityScore / 5) * 100) : null,
+          caRealiseMois,
+          heuresAbsence,
+          heuresRetard,
+          heuresSup,
+          retenueAbsence,
+          primeHeuresSup,
           montantBase: row.montantBase,
           montantPrime: row.montantPrime,
-          moyenPaiement: row.moyenPaiement,
+          netAPayer,
+          coordonneesPaiement:
+            m.apprenant.moyenPaiementType && m.apprenant.ribOuMobileMoney
+              ? {
+                  type: m.apprenant.moyenPaiementType,
+                  numero: m.apprenant.ribOuMobileMoney,
+                  verifieLe: m.apprenant.coordonneesVerifieesLe,
+                }
+              : null,
           statut: row.statut,
           datePaiement: row.datePaiement,
         };
@@ -777,6 +859,7 @@ export class ProductionService {
   // dans DecaissementProduction, ceci n'est que la ventilation qui la
   // justifie.
   async getDetailPoolSuperviseurs() {
+    const poolPct = POSTES_BUDGET.find((x) => x.key === "pool_superviseurs")?.pct ?? 0;
     const superviseurs = await this.prisma.superviseur.findMany({
       include: { missions: { where: { dateFin: null }, include: { contrat: true } } },
       orderBy: { nom: "asc" },
@@ -786,6 +869,17 @@ export class ProductionService {
       const qualityScoreMoyen =
         scores.length > 0 ? round2(scores.reduce((sum, v) => sum + v, 0) / scores.length) : null;
       const clients = Array.from(new Set(s.missions.map((m) => m.contrat.clientNom)));
+      // CA agrégé des agents supervisés (tarif négocié) — base du calcul de
+      // la prime suggérée, sur le même principe que les primes agents (voir
+      // getDetailPaieAgents) : % du poste "Pool Superviseurs" pondéré par le
+      // taux d'atteinte (qualityScore moyen des équipes encadrées).
+      const caAgentsSupervises = round2(
+        s.missions.reduce((sum, m) => sum + (m.tarifNegocie ?? 0), 0)
+      );
+      const primeSuggeree =
+        qualityScoreMoyen !== null
+          ? round2(caAgentsSupervises * poolPct * (qualityScoreMoyen / 5))
+          : 0;
       return {
         matricule: s.matricule,
         prenom: s.prenom,
@@ -794,7 +888,110 @@ export class ProductionService {
         agentsActifs: s.missions.length,
         qualityScoreMoyen,
         tauxAtteinteObjectifs: qualityScoreMoyen !== null ? round2((qualityScoreMoyen / 5) * 100) : null,
+        caAgentsSupervises,
+        primeSuggeree,
       };
+    });
+  }
+
+  // ---- Traçabilité & commissions apporteurs d'affaires (synchro ATS) --------
+
+  // Commission récurrente (5% par défaut, voir POSTES_BUDGET) sur la masse
+  // salariale des agents ACTIFS apportés par chaque connecteur — s'arrête
+  // dès que statutAgent passe à autre chose que "actif" (aucun calcul pour
+  // les agents en formation/essai/inactifs). Vue détail justifiant le poste
+  // global "Commissions Apporteurs d'Affaires" (paiement effectif géré au
+  // niveau du DecaissementProduction global, pas ici).
+  async getCommissionsApporteurs(periode?: string) {
+    const p = periode ?? currentPeriode();
+    const commissionPct = POSTES_BUDGET.find((x) => x.key === "commissions_apporteurs")?.pct ?? 0;
+
+    const connecteurs = await this.prisma.connecteur.findMany({
+      include: {
+        apprenantsApportes: {
+          where: { statutAgent: "actif" },
+          include: { missions: { where: { dateFin: null }, include: { contrat: true } } },
+        },
+      },
+      orderBy: { lastName: "asc" },
+    });
+
+    return Promise.all(
+      connecteurs
+        .filter((c) => c.apprenantsApportes.some((a) => a.missions.length > 0))
+        .map(async (c) => {
+          const agentsDetail: {
+            agentNom: string;
+            agentMatricule: string;
+            clientNom: string;
+            montantBase: number;
+          }[] = [];
+          for (const a of c.apprenantsApportes) {
+            const mission = a.missions[0];
+            if (!mission) continue;
+            const paiement = await this.prisma.paiementAgent.findUnique({
+              where: { missionId_periode: { missionId: mission.id, periode: p } },
+            });
+            const base = paiement?.montantBase ?? mission.tarifNegocie ?? 0;
+            agentsDetail.push({
+              agentNom: `${a.prenom} ${a.nom}`,
+              agentMatricule: a.matricule,
+              clientNom: mission.contrat.clientNom,
+              montantBase: base,
+            });
+          }
+          const masseSalariale = round2(agentsDetail.reduce((sum, a) => sum + a.montantBase, 0));
+          return {
+            connecteurId: c.id,
+            nom: `${c.firstName} ${c.lastName}`,
+            agentsActifs: agentsDetail,
+            masseSalariale,
+            commission: round2(masseSalariale * commissionPct),
+          };
+        })
+    );
+  }
+
+  // Commission de démarrage (10% par défaut, une seule fois par contrat) —
+  // matérialisée (get-or-create) dès qu'un contrat a un apporteur rattaché,
+  // avec son propre statut de paiement (distinct du poste global mensuel
+  // "Commission Démarrage Client" du tableau de bord, qui reste une
+  // enveloppe de planification récurrente — voir POSTES_BUDGET).
+  async getCommissionsDemarrage() {
+    const demarragePct = POSTES_BUDGET.find((x) => x.key === "commission_demarrage")?.pct ?? 0;
+    const contrats = await this.prisma.contratB2B.findMany({
+      where: { connecteurId: { not: null } },
+      include: { connecteur: true, commissionDemarrage: true },
+      orderBy: { dateDebut: "desc" },
+    });
+
+    return Promise.all(
+      contrats.map(async (c) => {
+        const montant = round2((c.tarifMensuel ?? 0) * demarragePct);
+        const row =
+          c.commissionDemarrage ??
+          (await this.prisma.commissionDemarrageApporteur.create({
+            data: { contratId: c.id, connecteurId: c.connecteurId as string, montant },
+          }));
+        return {
+          id: row.id,
+          contratId: c.id,
+          clientNom: c.clientNom,
+          connecteurNom: c.connecteur ? `${c.connecteur.firstName} ${c.connecteur.lastName}` : null,
+          montant: row.montant,
+          statut: row.statut,
+          datePaiement: row.datePaiement,
+        };
+      })
+    );
+  }
+
+  async payerCommissionDemarrage(id: string) {
+    const existing = await this.prisma.commissionDemarrageApporteur.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Commission introuvable.");
+    return this.prisma.commissionDemarrageApporteur.update({
+      where: { id },
+      data: { statut: "paye", datePaiement: new Date() },
     });
   }
 

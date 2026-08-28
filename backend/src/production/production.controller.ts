@@ -194,4 +194,19 @@ export class ProductionController {
   getTendanceMensuelleProduction() {
     return this.service.getTendanceMensuelleProduction();
   }
+
+  @Get("commissions-apporteurs")
+  getCommissionsApporteurs(@Query("periode") periode?: string) {
+    return this.service.getCommissionsApporteurs(periode);
+  }
+
+  @Get("commissions-demarrage")
+  getCommissionsDemarrage() {
+    return this.service.getCommissionsDemarrage();
+  }
+
+  @Post("commissions-demarrage/:id/payer")
+  payerCommissionDemarrage(@Param("id") id: string) {
+    return this.service.payerCommissionDemarrage(id);
+  }
 }

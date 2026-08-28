@@ -15,7 +15,14 @@ interface Contrat {
   dateFin: string | null;
   statut: string;
   tarifMensuel: number | null;
+  connecteurId: string | null;
   _count: { missions: number };
+}
+
+interface Apporteur {
+  id: string;
+  firstName: string;
+  lastName: string;
 }
 
 const STATUT_LABELS: Record<string, string> = {
@@ -30,6 +37,7 @@ const emptyForm = {
   dateSignature: "",
   dateDebut: "",
   tarifMensuel: "",
+  connecteurId: "",
 };
 
 function fmtDate(iso: string | null): string {
@@ -42,6 +50,7 @@ function fmtDate(iso: string | null): string {
 // c'est le seul champ modifié fréquemment une fois le contrat créé.
 export default function ContratsB2BPanel() {
   const [contrats, setContrats] = useState<Contrat[] | "loading" | "erreur">("loading");
+  const [apporteurs, setApporteurs] = useState<Apporteur[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
@@ -57,6 +66,12 @@ export default function ContratsB2BPanel() {
 
   useEffect(refresh, []);
 
+  useEffect(() => {
+    apiGet<Apporteur[]>("/rh/partenaires", adminHeaders())
+      .then(setApporteurs)
+      .catch(() => {});
+  }, []);
+
   async function create() {
     if (!form.clientNom.trim() || !form.dateDebut) return;
     setStatus("saving");
@@ -70,6 +85,7 @@ export default function ContratsB2BPanel() {
           dateSignature: form.dateSignature ? new Date(form.dateSignature).toISOString() : undefined,
           dateDebut: new Date(form.dateDebut).toISOString(),
           tarifMensuel: form.tarifMensuel ? Number(form.tarifMensuel) : undefined,
+          connecteurId: form.connecteurId || undefined,
         },
         adminHeaders()
       );
@@ -95,6 +111,7 @@ export default function ContratsB2BPanel() {
           dateFin: c.dateFin,
           statut,
           tarifMensuel: c.tarifMensuel,
+          connecteurId: c.connecteurId,
         },
         adminHeaders()
       );
@@ -175,6 +192,26 @@ export default function ContratsB2BPanel() {
                   placeholder="Ex. Squad commerciale — 5 postes"
                   className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
                 />
+              </div>
+              <div>
+                <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+                  Apporteur d&apos;affaires
+                </label>
+                <select
+                  value={form.connecteurId}
+                  onChange={(e) => setForm((f) => ({ ...f, connecteurId: e.target.value }))}
+                  className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
+                >
+                  <option value="">— Aucun (client direct) —</option>
+                  {apporteurs.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.firstName} {a.lastName}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 font-mono text-[10px] text-white/40">
+                  Déclenche la commission de démarrage (10%) au profit de cet apporteur.
+                </p>
               </div>
             </div>
             <div className="mt-3">
