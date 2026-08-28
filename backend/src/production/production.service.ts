@@ -819,4 +819,66 @@ export class ProductionService {
       },
     });
   }
+
+  // ---- État financier global : Production (Vue d'ensemble macro) -------------
+
+  // Par client actif : CA réellement encaissé (factures payées, pas le
+  // tarif théorique) ventilé en coût estimé (80%) / bénéfice net E-Staf
+  // (20%) — voir MARGIN_PCT_ESTAF. Pas de "dépenses réelles" par client ici
+  // (le suivi réel des décaissements n'existe qu'au niveau global, voir
+  // DecaissementProduction) — seulement ce qui est honnêtement calculable
+  // par contrat.
+  async getEtatFinancierProductionParClient() {
+    const contrats = await this.prisma.contratB2B.findMany({
+      where: { statut: "actif" },
+      include: {
+        missions: { where: { dateFin: null } },
+        factures: { where: { statut: "payee" } },
+      },
+      orderBy: { clientNom: "asc" },
+    });
+
+    return contrats.map((c) => {
+      const caEncaisse = round2(c.factures.reduce((sum, f) => sum + f.montant, 0));
+      return {
+        clientNom: c.clientNom,
+        nbAgents: c.missions.length,
+        caEncaisse,
+        coutEstime: round2(caEncaisse * CHARGES_PCT_TOTAL),
+        beneficeNetEstaf: round2(caEncaisse * MARGIN_PCT_ESTAF),
+      };
+    });
+  }
+
+  // Tendance mensuelle réelle — CA encaissé (factures payées) vs. dépenses
+  // réelles validées (DecaissementProduction), regroupés par mois où une
+  // donnée existe réellement. Aucun mois fabriqué : un mois sans facture ni
+  // décaissement n'apparaît simplement pas dans la série.
+  async getTendanceMensuelleProduction() {
+    const [factures, decaissements] = await Promise.all([
+      this.prisma.facture.findMany({ where: { statut: "payee" } }),
+      this.prisma.decaissementProduction.findMany(),
+    ]);
+
+    const parMois = new Map<string, { caEncaisse: number; depenseReelle: number }>();
+    for (const f of factures) {
+      const mois = f.periode;
+      const entry = parMois.get(mois) ?? { caEncaisse: 0, depenseReelle: 0 };
+      entry.caEncaisse += f.montant;
+      parMois.set(mois, entry);
+    }
+    for (const d of decaissements) {
+      const entry = parMois.get(d.periode) ?? { caEncaisse: 0, depenseReelle: 0 };
+      entry.depenseReelle += d.montantReel;
+      parMois.set(d.periode, entry);
+    }
+
+    return Array.from(parMois.entries())
+      .map(([periode, v]) => ({
+        periode,
+        caEncaisse: round2(v.caEncaisse),
+        depenseReelle: round2(v.depenseReelle),
+      }))
+      .sort((a, b) => (a.periode < b.periode ? -1 : 1));
+  }
 }

@@ -46,6 +46,7 @@ export class RhService {
       recrutementsEnCours,
       connecteurs,
       agentsEnProductionActive,
+      apprenantsFol,
     ] = await Promise.all([
       this.prisma.apprenant.findMany({ include: { evaluationAttempt: true } }),
       this.prisma.apprenant.findMany({
@@ -55,8 +56,15 @@ export class RhService {
       this.prisma.evaluationAttempt.count({
         where: { status: { in: STATUTS_RECRUTEMENT_EN_COURS } },
       }),
-      this.prisma.connecteur.findMany({ select: { status: true } }),
+      this.prisma.connecteur.findMany({ select: { status: true, createdAt: true } }),
       this.prisma.mission.count({ where: { dateFin: null } }),
+      this.prisma.apprenant.findMany({
+        where: {
+          groupe: { typeCours: 'FOL' },
+          abonnementExpireAt: { gt: new Date() },
+        },
+        select: { id: true },
+      }),
     ]);
 
     const talentsEnVivier = apprenants.filter(
@@ -69,6 +77,23 @@ export class RhService {
       (c) => c.status === 'actif',
     ).length;
 
+    // Croissance des apporteurs d'affaires sur le mois en cours — réel,
+    // calculé depuis les dates de création des Connecteurs (pas de snapshot
+    // historique nécessaire). Null si aucun apporteur n'existait avant ce
+    // mois (pourcentage non significatif).
+    const now = new Date();
+    const debutMois = new Date(now.getFullYear(), now.getMonth(), 1);
+    const apporteursAvantCeMois = connecteurs.filter(
+      (c) => c.createdAt < debutMois,
+    ).length;
+    const apporteursNouveauxMTD = connecteurs.filter(
+      (c) => c.createdAt >= debutMois,
+    ).length;
+    const apporteursGrowthPctMTD =
+      apporteursAvantCeMois > 0
+        ? Math.round((apporteursNouveauxMTD / apporteursAvantCeMois) * 1000) / 10
+        : null;
+
     return {
       talentsEnVivier,
       agentsEnProductionActive,
@@ -77,6 +102,9 @@ export class RhService {
       apprenantsTotal: apprenants.length,
       partenairesActifs,
       partenairesTotal: connecteurs.length,
+      apporteursNouveauxMTD,
+      apporteursGrowthPctMTD,
+      abonnementsFolActifs: apprenantsFol.length,
     };
   }
 
@@ -640,6 +668,59 @@ export class RhService {
       opportunityTiming: connecteur.opportunityTiming,
       status: connecteur.status,
       candidatureRecueLe: connecteur.createdAt,
+    };
+  }
+
+  // ---- Administratif & alerte (Vue d'ensemble) ------------------------------
+
+  // Alertes réelles et actionnables pour la Vue d'ensemble — jamais un
+  // texte statique : chaque item disparaît de lui-même une fois la
+  // situation résolue (test validé, groupe affecté), pas de mécanisme de
+  // "dismiss" séparé qui masquerait un vrai signal en attente.
+  async getAlertesAdministratives() {
+    const [testsCorriges, groupesSansFormateur, formateurs, reunionsAVenir] =
+      await Promise.all([
+        this.prisma.evaluationAttempt.findMany({
+          where: { status: 'corrige' },
+          include: { candidat: true },
+          orderBy: { gradedAt: 'asc' },
+        }),
+        this.prisma.groupe.findMany({
+          where: { formateurId: null },
+          include: { _count: { select: { apprenants: true } } },
+        }),
+        this.prisma.formateur.findMany({ orderBy: { nom: 'asc' } }),
+        this.prisma.reunion.findMany({
+          where: { statut: 'planifiee', startAt: { gte: new Date() } },
+          orderBy: { startAt: 'asc' },
+          take: 3,
+        }),
+      ]);
+
+    return {
+      testsEnAttenteValidation: testsCorriges.map((t) => ({
+        attemptId: t.id,
+        candidatNom: `${t.candidat.firstName} ${t.candidat.lastName}`,
+        totalScore: t.totalScore,
+        gradedAt: t.gradedAt,
+      })),
+      groupesSansFormateur: groupesSansFormateur
+        .filter((g) => g._count.apprenants > 0)
+        .map((g) => ({
+          groupeId: g.id,
+          label: g.label,
+          typeCours: g.typeCours,
+          nbApprenants: g._count.apprenants,
+        })),
+      formateursDisponibles: formateurs.map((f) => ({
+        id: f.id,
+        nom: `${f.prenom} ${f.nom}`,
+      })),
+      reunionsAVenir: reunionsAVenir.map((r) => ({
+        id: r.id,
+        titre: r.titre,
+        startAt: r.startAt,
+      })),
     };
   }
 }

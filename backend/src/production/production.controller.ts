@@ -184,4 +184,14 @@ export class ProductionController {
   getDetailPoolSuperviseurs() {
     return this.service.getDetailPoolSuperviseurs();
   }
+
+  @Get("etat-financier-par-client")
+  getEtatFinancierProductionParClient() {
+    return this.service.getEtatFinancierProductionParClient();
+  }
+
+  @Get("tendance-mensuelle")
+  getTendanceMensuelleProduction() {
+    return this.service.getTendanceMensuelleProduction();
+  }
 }

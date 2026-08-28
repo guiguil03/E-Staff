@@ -132,4 +132,9 @@ export class RhController {
   getPartenaireCasier(@Param('id') id: string) {
     return this.service.getPartenaireCasier(id);
   }
+
+  @Get('alertes-administratives')
+  getAlertesAdministratives() {
+    return this.service.getAlertesAdministratives();
+  }
 }
