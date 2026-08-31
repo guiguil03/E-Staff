@@ -15,7 +15,7 @@ const labelClass = "block text-sm font-medium mb-1 text-white/80";
 // arrive avec un mot de passe temporaire généré automatiquement (voir
 // EvaluationService.confirmPayment) et devrait le remplacer par un mot de
 // passe de son choix.
-export default function ParametresPanel() {
+export default function ParametresPanel({ className }: { className?: string } = {}) {
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -54,8 +54,8 @@ export default function ParametresPanel() {
   }
 
   return (
-    <Reveal>
-      <div className="rounded border border-white/10 bg-obsidianCard p-6">
+    <Reveal className={className}>
+      <div className="h-full rounded border border-white/10 bg-obsidianCard p-6">
         <h3 className="font-display text-base font-semibold text-white">Paramètres</h3>
         <p className="mt-1 font-sans text-xs text-white/50">Changer mon mot de passe</p>
 

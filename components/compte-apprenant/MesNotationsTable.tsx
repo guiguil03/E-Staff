@@ -60,7 +60,7 @@ function toGridEntry(n: NotationApi | undefined): GridCompetencyEntry | undefine
 // pas encore notée → dépôt de devoir. Persisté en base (table Notation,
 // 2026-08-07) — remplace l'ancien contenu figé "Évaluation de la dernière
 // séance" par un vrai historique séance par séance.
-export default function MesNotationsTable() {
+export default function MesNotationsTable({ className }: { className?: string } = {}) {
   const [matricule, setMatricule] = useState<string | null>(null);
   const [seances, setSeances] = useState<SeanceNotations[] | "loading" | "erreur">("loading");
   const [selected, setSelected] = useState<{ numero: number; competence: string } | null>(null);
@@ -85,8 +85,8 @@ export default function MesNotationsTable() {
   const selectedDef = selected ? COMPETENCY_DEFS.find((d) => d.key === selected.competence) : undefined;
 
   return (
-    <Reveal>
-      <div className="rounded border border-white/10 bg-obsidianCard p-6">
+    <Reveal className={className}>
+      <div className="h-full rounded border border-white/10 bg-obsidianCard p-6">
         <h3 className="font-display text-base font-semibold text-white">
           Mes séances &amp; notation
         </h3>

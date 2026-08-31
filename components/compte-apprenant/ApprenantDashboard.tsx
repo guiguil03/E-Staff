@@ -49,8 +49,8 @@ export default function ApprenantDashboard() {
           tauxReussiteGlobal={TAUX_REUSSITE_GLOBAL}
         />
 
-        <div className="grid items-start gap-6 lg:grid-cols-[1fr_320px]">
-          <div className="space-y-6">
+        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+          <div className="flex flex-col gap-6">
             <EvaluationCumulee />
             <WeeklyCompetencyChart />
             <OperationalTracking
@@ -58,10 +58,10 @@ export default function ApprenantDashboard() {
               alerteCompetence={ALERTE_PEDAGOGIQUE.competence}
               commentaire={COMMENTAIRE_FORMATEUR}
             />
-            <MesNotationsTable />
+            <MesNotationsTable className="flex-1" />
           </div>
 
-          <div className="space-y-6">
+          <div className="flex flex-col gap-6">
             <CecrGauge
               value={computeJaugePosition(NIVEAU_INITIAL, TAUX_EVOLUTION_MENSUEL)}
               displayValue={TAUX_EVOLUTION_MENSUEL}
@@ -79,7 +79,7 @@ export default function ApprenantDashboard() {
               quotaAnnulations={DOSSIER.quotaAnnulations}
               annulationsUtilisees={DOSSIER.annulationsUtilisees}
             />
-            <ParametresPanel />
+            <ParametresPanel className="flex-1" />
           </div>
         </div>
       </div>
