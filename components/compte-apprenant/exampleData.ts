@@ -37,13 +37,6 @@ export const SEANCE_ACTUELLE: { global: number; competencies: CompetencyScore[] 
 
 export const TAUX_REUSSITE_GLOBAL = 82;
 
-export const WEEKLY_AVERAGES = [
-  { week: 0, label: "Initial", moyenne: 67 },
-  { week: 1, label: "S1", moyenne: 69 },
-  { week: 2, label: "S2", moyenne: 71 },
-  { week: 3, label: "S3", moyenne: 74 },
-];
-
 // Niveau CECR de départ de l'apprenant (validé lors du test d'évaluation
 // initial, avant même la 1ère séance) + taux d'évolution DANS ce palier ce
 // mois-ci (0-100%, PAS une position absolue — voir cecrPaliers.ts). La

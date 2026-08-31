@@ -2,7 +2,7 @@
 
 import ProfileHeader from "./ProfileHeader";
 import EvaluationCumulee from "./EvaluationCumulee";
-import ComparativeChart from "./ComparativeChart";
+import WeeklyCompetencyChart from "./WeeklyCompetencyChart";
 import CecrGauge from "./CecrGauge";
 import { computeJaugePosition, PALIER_LABELS } from "./cecrPaliers";
 import OperationalTracking from "./OperationalTracking";
@@ -20,7 +20,6 @@ import {
   PROCHAINE_SEANCE,
   TAUX_EVOLUTION_MENSUEL,
   TAUX_REUSSITE_GLOBAL,
-  WEEKLY_AVERAGES,
 } from "./exampleData";
 import { useRequireRole } from "@/lib/useRequireRole";
 
@@ -53,10 +52,7 @@ export default function ApprenantDashboard() {
         <div className="grid items-start gap-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-6">
             <EvaluationCumulee />
-            <ComparativeChart
-              points={WEEKLY_AVERAGES.map((w) => ({ label: w.label, value: w.moyenne }))}
-              niveauInitial={DIAGNOSTIC_INITIAL.global}
-            />
+            <WeeklyCompetencyChart />
             <OperationalTracking
               assiduite={ASSIDUITE}
               alerteCompetence={ALERTE_PEDAGOGIQUE.competence}
