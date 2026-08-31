@@ -17,6 +17,17 @@ import { UpdateApprenantRhDto } from './dto/update-apprenant-rh.dto';
 // distincte à ce stade (nécessiterait un vrai statut de fin de cursus).
 const TIERS_VIVIER = ['niveau_c1', 'placement_direct'];
 
+// État financier Académie — inverse de MARGIN_PCT_ESTAF côté Production
+// (charges 80% / marge 20%) : la Formation a une structure de coûts bien
+// plus légère (pas de masse salariale d'agents), donc coût prévu 20% / marge
+// nette e-Staf 80% du CA théorique (règle métier donnée par le client).
+const COUT_PCT_FORMATION = 0.2;
+const MARGIN_PCT_FORMATION = 0.8;
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 // Statuts d'EvaluationAttempt considérés comme "recrutement en cours" — tout
 // ce qui n'est pas encore allé au bout du pipeline (candidat non retenu
 // exclu : "rejete" n'est plus "en cours").
@@ -772,5 +783,61 @@ export class RhService {
         startAt: r.startAt,
       })),
     };
+  }
+
+  // ---- État financier global : Académie (Vue d'ensemble macro) ------------
+  // Par type de cours (Groupe.typeCours) : CA théorique = apprenants actifs
+  // × prix catalogue du type de cours (TarifFormation, saisi par la RH — 0
+  // tant qu'il n'est pas renseigné, jamais un montant inventé), ventilé en
+  // coût prévu (20%) / bénéfice net e-Staf (80%) — voir COUT_PCT_FORMATION.
+  async getEtatFinancierFormation() {
+    const groupes = await this.prisma.groupe.findMany({
+      where: { typeCours: { not: null } },
+      include: { apprenants: { select: { statutAgent: true } } },
+    });
+
+    const nbActifsParType = new Map<string, number>();
+    for (const g of groupes) {
+      if (!g.typeCours) continue;
+      const actifs = g.apprenants.filter((a) => a.statutAgent !== 'inactif').length;
+      nbActifsParType.set(g.typeCours, (nbActifsParType.get(g.typeCours) ?? 0) + actifs);
+    }
+
+    const typesCours = Array.from(nbActifsParType.keys()).sort();
+
+    // Get-or-create le tarif de chaque type de cours réellement en usage —
+    // même principe que POSTES_INFRASTRUCTURE_DEFAUT côté Production.
+    const tarifs = await Promise.all(
+      typesCours.map((typeCours) =>
+        this.prisma.tarifFormation.upsert({
+          where: { typeCours },
+          create: { typeCours, prixFormation: 0 },
+          update: {},
+        }),
+      ),
+    );
+    const prixParType = new Map(tarifs.map((t) => [t.typeCours, t.prixFormation]));
+
+    return typesCours.map((typeCours) => {
+      const nbApprenantsActifs = nbActifsParType.get(typeCours) ?? 0;
+      const prixFormation = prixParType.get(typeCours) ?? 0;
+      const caTheorique = round2(nbApprenantsActifs * prixFormation);
+      return {
+        typeCours,
+        nbApprenantsActifs,
+        prixFormation,
+        caTheorique,
+        coutPrevu: round2(caTheorique * COUT_PCT_FORMATION),
+        beneficeNetEstaf: round2(caTheorique * MARGIN_PCT_FORMATION),
+      };
+    });
+  }
+
+  async updateTarifFormation(typeCours: string, prixFormation: number) {
+    return this.prisma.tarifFormation.upsert({
+      where: { typeCours },
+      create: { typeCours, prixFormation },
+      update: { prixFormation },
+    });
   }
 }

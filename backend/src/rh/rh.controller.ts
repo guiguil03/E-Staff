@@ -16,6 +16,7 @@ import { AssignFormateurDto } from './dto/assign-formateur.dto';
 import { UpdateTypeCoursDto } from './dto/update-type-cours.dto';
 import { UpdateVagueDatesDto } from './dto/update-vague-dates.dto';
 import { UpdateApprenantRhDto } from './dto/update-apprenant-rh.dto';
+import { UpdateTarifFormationDto } from './dto/update-tarif-formation.dto';
 
 @Controller('rh')
 @UseGuards(AdminGuard)
@@ -145,5 +146,18 @@ export class RhController {
   @Get('alertes-administratives')
   getAlertesAdministratives() {
     return this.service.getAlertesAdministratives();
+  }
+
+  @Get('etat-financier-formation')
+  getEtatFinancierFormation() {
+    return this.service.getEtatFinancierFormation();
+  }
+
+  @Put('tarif-formation/:typeCours')
+  updateTarifFormation(
+    @Param('typeCours') typeCours: string,
+    @Body() dto: UpdateTarifFormationDto,
+  ) {
+    return this.service.updateTarifFormation(typeCours, dto.prixFormation);
   }
 }

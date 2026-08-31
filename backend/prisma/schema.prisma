@@ -940,6 +940,20 @@ model CommissionDemarrageApporteur {
 // contrairement aux autres postes du tableau de bord (calculés
 // automatiquement depuis le CA), les montants théorique/réel sont saisis
 // directement par la RH — pas de formule, ce sont de vraies factures.
+// Prix catalogue par type de cours (Groupe.typeCours) — saisi/mis à jour
+// manuellement par la RH, comme les postes de ChargeInfrastructure (pas de
+// tarification automatique). Sert de base à l'état financier global de
+// l'Académie (voir RhService.getEtatFinancierFormation) : 0 par défaut tant
+// que la RH n'a pas renseigné de prix, jamais un montant inventé.
+model TarifFormation {
+  id String @id @default(cuid())
+
+  typeCours      String @unique
+  prixFormation  Float  @default(0)
+
+  updatedAt DateTime @updatedAt
+}
+
 model ChargeInfrastructure {
   id String @id @default(cuid())
 

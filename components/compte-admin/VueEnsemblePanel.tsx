@@ -6,6 +6,7 @@ import { apiGet } from "@/lib/api";
 import ComparativeBarChart from "./ComparativeBarChart";
 import AlerteAdministrativePanel from "./AlerteAdministrativePanel";
 import EtatFinancierProductionPanel from "./EtatFinancierProductionPanel";
+import EtatFinancierFormationPanel from "./EtatFinancierFormationPanel";
 import { adminHeaders } from "./adminHeaders";
 
 interface VueEnsemble {
@@ -200,6 +201,10 @@ export default function VueEnsemblePanel() {
 
       <Reveal delay={40}>
         <EtatFinancierProductionPanel />
+      </Reveal>
+
+      <Reveal delay={60}>
+        <EtatFinancierFormationPanel />
       </Reveal>
     </div>
   );
