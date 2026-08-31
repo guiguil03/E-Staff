@@ -58,6 +58,7 @@ export default function ApprenantDashboard() {
               alerteCompetence={ALERTE_PEDAGOGIQUE.competence}
               commentaire={COMMENTAIRE_FORMATEUR}
             />
+            <MesNotationsTable />
           </div>
 
           <div className="space-y-6">
@@ -78,7 +79,6 @@ export default function ApprenantDashboard() {
               quotaAnnulations={DOSSIER.quotaAnnulations}
               annulationsUtilisees={DOSSIER.annulationsUtilisees}
             />
-            <MesNotationsTable />
           </div>
         </div>
 

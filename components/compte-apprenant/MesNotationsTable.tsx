@@ -104,61 +104,73 @@ export default function MesNotationsTable() {
         )}
 
         {Array.isArray(seances) && (
-          <div className="mt-4 space-y-2">
-            {seances.map((s) => {
-              const scores = COMPETENCY_DEFS.map(
-                (c) => s.notations.find((n) => n.competence === c.key)?.scoreOn20 ?? null
-              );
-              const complete = scores.every((v) => v !== null);
-              const moyenne = complete
-                ? Math.round(((scores as number[]).reduce((a, b) => a + b, 0) / scores.length) * 100) / 100
-                : null;
-              return (
-                <div key={s.numero} className="rounded border border-white/10 bg-obsidian/40 p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-sans text-sm text-white">Séance n°{s.numero}</p>
-                      {s.startAt && (
-                        <p className="font-mono text-[10px] text-white/40">
-                          {new Date(s.startAt).toLocaleDateString("fr-FR")}
-                        </p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <p className="font-mono text-sm text-accent">{moyenne ?? "—"}</p>
-                      <p className="font-mono text-[10px] text-white/50">
-                        {moyenne !== null ? `${tauxAssimilation(moyenne)}%` : ""}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {COMPETENCY_DEFS.map((c) => {
-                      const n = s.notations.find((x) => x.competence === c.key);
-                      const label =
-                        n?.scoreOn20 !== undefined && n?.scoreOn20 !== null
-                          ? `${n.scoreOn20}`
-                          : n?.fileName
-                            ? "•"
-                            : GRID_COMPETENCIES.has(c.key)
-                              ? "…"
-                              : "—";
-                      const style = COMPETENCY_STYLE[c.key as keyof typeof COMPETENCY_STYLE];
-                      return (
-                        <button
-                          key={c.key}
-                          onClick={() => setSelected({ numero: s.numero, competence: c.key })}
-                          title={c.label}
-                          className="flex h-6 min-w-[1.5rem] items-center justify-center rounded px-1.5 font-mono text-[10px] font-semibold transition-opacity hover:opacity-80"
-                          style={{ backgroundColor: `${style.color}26`, color: style.color }}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[720px] font-sans text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-left text-xs text-white/40">
+                  <th className="py-2 pr-2 font-mono font-normal">Séance</th>
+                  {COMPETENCY_DEFS.map((c) => (
+                    <th key={c.key} className="py-2 pr-2 font-mono font-normal">
+                      {c.label}
+                    </th>
+                  ))}
+                  <th className="py-2 pr-2 font-mono font-normal text-right">Moyenne</th>
+                  <th className="py-2 font-mono font-normal text-right">Assimilation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {seances.map((s) => {
+                  const scores = COMPETENCY_DEFS.map(
+                    (c) => s.notations.find((n) => n.competence === c.key)?.scoreOn20 ?? null
+                  );
+                  const complete = scores.every((v) => v !== null);
+                  const moyenne = complete
+                    ? Math.round(((scores as number[]).reduce((a, b) => a + b, 0) / scores.length) * 100) / 100
+                    : null;
+                  return (
+                    <tr key={s.numero} className="border-b border-white/5">
+                      <td className="py-2 pr-2 text-white">
+                        n°{s.numero}
+                        {s.startAt && (
+                          <span className="block font-mono text-[10px] text-white/40">
+                            {new Date(s.startAt).toLocaleDateString("fr-FR")}
+                          </span>
+                        )}
+                      </td>
+                      {COMPETENCY_DEFS.map((c) => {
+                        const n = s.notations.find((x) => x.competence === c.key);
+                        const style = COMPETENCY_STYLE[c.key as keyof typeof COMPETENCY_STYLE];
+                        const label =
+                          n?.scoreOn20 !== undefined && n?.scoreOn20 !== null
+                            ? `${n.scoreOn20}/20`
+                            : n?.fileName
+                              ? "déposé"
+                              : GRID_COMPETENCIES.has(c.key)
+                                ? "à déposer"
+                                : "—";
+                        return (
+                          <td key={c.key} className="py-2 pr-2">
+                            <button
+                              onClick={() => setSelected({ numero: s.numero, competence: c.key })}
+                              className="rounded border px-2 py-1 font-mono text-xs transition-colors hover:opacity-80"
+                              style={{ borderColor: `${style.color}40`, color: style.color }}
+                            >
+                              {label}
+                            </button>
+                          </td>
+                        );
+                      })}
+                      <td className="py-2 pr-2 text-right font-mono text-sm text-accent">
+                        {moyenne ?? "—"}
+                      </td>
+                      <td className="py-2 text-right font-mono text-sm text-white/70">
+                        {moyenne !== null ? `${tauxAssimilation(moyenne)}%` : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
