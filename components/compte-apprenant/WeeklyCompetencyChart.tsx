@@ -25,7 +25,7 @@ const WEEK_SIZE = 3;
 // du thème sombre est l'accent or (voir tailwind.config.ts), donc ces teintes
 // sont définies en inline style plutôt qu'en classes Tailwind (nécessaire
 // pour des couleurs choisies dynamiquement par clé de compétence).
-const COMPETENCY_STYLE: Record<CompetencyKey, { color: string; short: string }> = {
+export const COMPETENCY_STYLE: Record<CompetencyKey, { color: string; short: string }> = {
   comprehension_orale: { color: "#4C8FE0", short: "Compr. orale" },
   expression_orale: { color: "#D9A62E", short: "Expr. orale" },
   comprehension_ecrite: { color: "#3FA872", short: "Compr. écrite" },
