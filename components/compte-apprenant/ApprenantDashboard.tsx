@@ -79,10 +79,9 @@ export default function ApprenantDashboard() {
               quotaAnnulations={DOSSIER.quotaAnnulations}
               annulationsUtilisees={DOSSIER.annulationsUtilisees}
             />
+            <ParametresPanel />
           </div>
         </div>
-
-        <ParametresPanel />
       </div>
     </div>
   );
