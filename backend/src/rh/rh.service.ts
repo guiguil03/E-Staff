@@ -9,6 +9,8 @@ import { NotationService } from '../notation/notation.service';
 import { UpsertReunionDto } from './dto/upsert-reunion.dto';
 import { UpsertFormateurDto } from './dto/upsert-formateur.dto';
 import { UpdateApprenantRhDto } from './dto/update-apprenant-rh.dto';
+import { CreateEncaissementDto } from './dto/create-encaissement.dto';
+import { UpdatePaiementFormateurDto } from './dto/update-paiement-formateur.dto';
 
 // Certification "vivier" — mêmes seuils/tiers que le pipeline d'admission
 // (voir evaluation/scoring.ts) : un candidat admis en niveau_c1 ou en
@@ -26,6 +28,58 @@ const MARGIN_PCT_FORMATION = 0.8;
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function currentPeriode(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// Étiquette de semaine ISO ("AAAA-Wss") — même formule que côté Production
+// (ProductionService.isoWeekLabel), dupliquée ici plutôt que partagée entre
+// modules (convention du projet, voir currentPeriode/round2 déjà dupliqués).
+function isoWeekLabel(d: Date): string {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(
+    ((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
+  );
+  return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+function moisLabel(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// Regroupement fixe demandé pour le tableau "Paie & Commissions" côté
+// Académie — un formateur est rattaché au bucket de son premier groupe
+// (trié par clé) dont le type de cours matche ; "Formation externe" sert de
+// repli pour tout type non reconnu ou absent (jamais un bucket inventé).
+const BUCKETS_PAIE_FORMATEURS = [
+  'TEF Canada',
+  'DELF DALF',
+  'DFP',
+  'FOL',
+  'Formation externe',
+] as const;
+
+function bucketTypeCours(typeCours: string | null): (typeof BUCKETS_PAIE_FORMATEURS)[number] {
+  if (!typeCours) return 'Formation externe';
+  const t = typeCours.toUpperCase();
+  if (t.includes('TEF') || t.includes('TCF')) return 'TEF Canada';
+  if (t.includes('DELF') || t.includes('DALF')) return 'DELF DALF';
+  if (t.includes('DFP')) return 'DFP';
+  if (t.includes('FOL')) return 'FOL';
+  return 'Formation externe';
+}
+
+function bucketFormateur(
+  groupes: { cle: string; typeCours: string | null }[],
+): (typeof BUCKETS_PAIE_FORMATEURS)[number] {
+  const premier = [...groupes].sort((a, b) => (a.cle < b.cle ? -1 : 1))[0];
+  return bucketTypeCours(premier?.typeCours ?? null);
 }
 
 // Statuts d'EvaluationAttempt considérés comme "recrutement en cours" — tout
@@ -839,5 +893,281 @@ export class RhService {
       create: { typeCours, prixFormation },
       update: { prixFormation },
     });
+  }
+
+  // ---- Encaissements formation (Facturation & Encaissement) -----------------
+  // Journal réel des versements reçus (voir EncaissementFormation) — comble
+  // le vide identifié dans getEtatFinancierFormation, qui ne calcule qu'un
+  // CA théorique. Saisi manuellement par la RH (pas de webhook, même
+  // principe que la confirmation de paiement du pipeline d'admission).
+
+  // Apprenants dont le groupe a un type de cours renseigné — seuls candidats
+  // pertinents pour enregistrer un encaissement (sert au menu déroulant du
+  // formulaire).
+  async listApprenantsPourEncaissement() {
+    const apprenants = await this.prisma.apprenant.findMany({
+      where: { groupe: { typeCours: { not: null } } },
+      include: { groupe: true },
+      orderBy: { nom: 'asc' },
+    });
+    return apprenants.map((a) => ({
+      id: a.id,
+      matricule: a.matricule,
+      nomComplet: `${a.prenom} ${a.nom}`,
+      typeCours: a.groupe.typeCours as string,
+    }));
+  }
+
+  async listEncaissements() {
+    const encaissements = await this.prisma.encaissementFormation.findMany({
+      include: { apprenant: { include: { groupe: true } } },
+      orderBy: { jour: 'desc' },
+    });
+    return encaissements.map((e) => ({
+      id: e.id,
+      apprenantNom: `${e.apprenant.prenom} ${e.apprenant.nom}`,
+      typeCours: e.apprenant.groupe.typeCours,
+      montant: e.montant,
+      jour: e.jour,
+      moyenPaiement: e.moyenPaiement,
+    }));
+  }
+
+  async createEncaissement(dto: CreateEncaissementDto) {
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { id: dto.apprenantId },
+    });
+    if (!apprenant) throw new NotFoundException('Apprenant introuvable.');
+    const jour = new Date(dto.jour);
+    jour.setUTCHours(0, 0, 0, 0);
+    return this.prisma.encaissementFormation.create({
+      data: {
+        apprenantId: dto.apprenantId,
+        montant: dto.montant,
+        jour,
+        moyenPaiement: dto.moyenPaiement ?? null,
+      },
+    });
+  }
+
+  // Tableau "par type de cours" — nb d'inscrits actifs (même définition que
+  // getEtatFinancierFormation) et total réellement encaissé, trié du plus
+  // rentable au moins rentable pour que le type de cours en tête soit
+  // directement identifiable comme celui qui a le plus rapporté.
+  async getEncaissementsFormation() {
+    const [groupes, encaissements] = await Promise.all([
+      this.prisma.groupe.findMany({
+        where: { typeCours: { not: null } },
+        include: { apprenants: { select: { statutAgent: true } } },
+      }),
+      this.prisma.encaissementFormation.findMany({
+        include: { apprenant: { include: { groupe: true } } },
+      }),
+    ]);
+
+    const nbInscritsParType = new Map<string, number>();
+    for (const g of groupes) {
+      if (!g.typeCours) continue;
+      const actifs = g.apprenants.filter((a) => a.statutAgent !== 'inactif').length;
+      nbInscritsParType.set(g.typeCours, (nbInscritsParType.get(g.typeCours) ?? 0) + actifs);
+    }
+
+    const totalParType = new Map<string, number>();
+    for (const e of encaissements) {
+      const typeCours = e.apprenant.groupe.typeCours;
+      if (!typeCours) continue;
+      totalParType.set(typeCours, (totalParType.get(typeCours) ?? 0) + e.montant);
+    }
+
+    const typesCours = new Set([...nbInscritsParType.keys(), ...totalParType.keys()]);
+
+    return Array.from(typesCours)
+      .map((typeCours) => ({
+        typeCours,
+        nbInscrits: nbInscritsParType.get(typeCours) ?? 0,
+        totalEncaisse: round2(totalParType.get(typeCours) ?? 0),
+      }))
+      .sort((a, b) => b.totalEncaisse - a.totalEncaisse);
+  }
+
+  // Comparatif hebdomadaire — 8 dernières semaines ISO ayant réellement un
+  // encaissement, jamais une semaine fabriquée pour remplir le tableau.
+  async getTendanceHebdomadaireFormation() {
+    const encaissements = await this.prisma.encaissementFormation.findMany();
+    const parSemaine = new Map<string, number>();
+    for (const e of encaissements) {
+      const semaine = isoWeekLabel(new Date(e.jour));
+      parSemaine.set(semaine, (parSemaine.get(semaine) ?? 0) + e.montant);
+    }
+    return Array.from(parSemaine.entries())
+      .map(([semaine, total]) => ({ semaine, totalEncaisse: round2(total) }))
+      .sort((a, b) => (a.semaine < b.semaine ? -1 : 1))
+      .slice(-8);
+  }
+
+  // Comparatif mensuel — mêmes règles (aucun mois fabriqué).
+  async getTendanceMensuelleFormation() {
+    const encaissements = await this.prisma.encaissementFormation.findMany();
+    const parMois = new Map<string, number>();
+    for (const e of encaissements) {
+      const mois = moisLabel(new Date(e.jour));
+      parMois.set(mois, (parMois.get(mois) ?? 0) + e.montant);
+    }
+    return Array.from(parMois.entries())
+      .map(([periode, total]) => ({ periode, totalEncaisse: round2(total) }))
+      .sort((a, b) => (a.periode < b.periode ? -1 : 1));
+  }
+
+  // ---- Paie Formateurs (page Paie & Commissions) -----------------------------
+  // Miroir de ProductionService.getDetailPaieAgents, mais regroupé par type
+  // de cours (BUCKETS_PAIE_FORMATEURS) plutôt que par contrat client, et
+  // sans retenue/prime calculées automatiquement (pas de pointage réel par
+  // formateur en base — voir PaiementFormateur). Matérialise (get-or-create)
+  // une ligne PaiementFormateur par formateur et par période au premier
+  // accès, base initiale = Formateur.tarifFixe.
+
+  private async getOrCreatePaiementFormateur(formateurId: string, periode: string) {
+    const existing = await this.prisma.paiementFormateur.findUnique({
+      where: { formateurId_periode: { formateurId, periode } },
+    });
+    if (existing) return existing;
+    const formateur = await this.prisma.formateur.findUnique({ where: { id: formateurId } });
+    return this.prisma.paiementFormateur.create({
+      data: { formateurId, periode, montantBase: formateur?.tarifFixe ?? 0 },
+    });
+  }
+
+  // Heures réellement programmées (Seance.dureeMinutes, startAt renseigné)
+  // sur un groupe pendant le mois de paie — seule donnée fiable pour "heures
+  // effectuées" (la Presence issue des webhooks Daily n'est pas rattachée à
+  // un Formateur par id, seulement à un rôle/displayName, trop fragile pour
+  // servir de base de paie).
+  private async heuresGroupeSurPeriode(groupeId: string, periode: string): Promise<number> {
+    const [year, month] = periode.split('-').map(Number);
+    const debut = new Date(Date.UTC(year, month - 1, 1));
+    const fin = new Date(Date.UTC(year, month, 1));
+    const seances = await this.prisma.seance.findMany({
+      where: { groupeId, startAt: { gte: debut, lt: fin } },
+    });
+    return round2(seances.reduce((sum, s) => sum + s.dureeMinutes, 0) / 60);
+  }
+
+  async getTableauPaieFormateurs(periode?: string) {
+    const p = periode ?? currentPeriode();
+    const formateurs = await this.prisma.formateur.findMany({
+      include: { groupes: true },
+      orderBy: { nom: 'asc' },
+    });
+
+    const parBucket = new Map<string, typeof formateurs>();
+    for (const f of formateurs) {
+      const bucket = bucketFormateur(f.groupes);
+      const list = parBucket.get(bucket) ?? [];
+      list.push(f);
+      parBucket.set(bucket, list);
+    }
+
+    return Promise.all(
+      BUCKETS_PAIE_FORMATEURS.map(async (bucket) => {
+        const list = parBucket.get(bucket) ?? [];
+        let netAPayerTotal = 0;
+        let payes = 0;
+        for (const f of list) {
+          const row = await this.getOrCreatePaiementFormateur(f.id, p);
+          netAPayerTotal += row.montantBase + row.montantPrime - row.retenue;
+          if (row.statut === 'paye') payes += 1;
+        }
+        return {
+          bucket,
+          nbFormateurs: list.length,
+          netAPayerTotal: round2(netAPayerTotal),
+          payes,
+          enAttente: list.length - payes,
+        };
+      }),
+    );
+  }
+
+  async getDetailPaieFormateurs(bucket: string, periode?: string) {
+    const p = periode ?? currentPeriode();
+    const formateurs = await this.prisma.formateur.findMany({
+      include: { groupes: true },
+      orderBy: { nom: 'asc' },
+    });
+    const filtres = formateurs.filter((f) => bucketFormateur(f.groupes) === bucket);
+
+    const lignes = await Promise.all(
+      filtres.map(async (f) => {
+        const groupesDetail = await Promise.all(
+          f.groupes.map(async (g) => ({
+            groupeLabel: g.label,
+            typeCours: g.typeCours,
+            heuresEffectuees: await this.heuresGroupeSurPeriode(g.id, p),
+          })),
+        );
+        const heuresTotal = round2(groupesDetail.reduce((sum, g) => sum + g.heuresEffectuees, 0));
+
+        const row = await this.getOrCreatePaiementFormateur(f.id, p);
+        const netAPayer = round2(row.montantBase + row.montantPrime - row.retenue);
+
+        return {
+          formateurId: f.id,
+          matricule: f.matricule,
+          formateurNom: `${f.prenom} ${f.nom}`,
+          groupes: groupesDetail,
+          heuresTotal,
+          montantBase: row.montantBase,
+          montantPrime: row.montantPrime,
+          retenue: row.retenue,
+          moyenPaiement: row.moyenPaiement,
+          netAPayer,
+          statut: row.statut,
+          datePaiement: row.datePaiement,
+        };
+      }),
+    );
+
+    return { periode: p, bucket, lignes };
+  }
+
+  async updatePaiementFormateur(
+    formateurId: string,
+    periode: string,
+    dto: UpdatePaiementFormateurDto,
+  ) {
+    const existing = await this.prisma.paiementFormateur.findUnique({
+      where: { formateurId_periode: { formateurId, periode } },
+    });
+    if (!existing) throw new NotFoundException('Ligne de paie introuvable.');
+    return this.prisma.paiementFormateur.update({
+      where: { formateurId_periode: { formateurId, periode } },
+      data: {
+        montantBase: dto.montantBase ?? undefined,
+        montantPrime: dto.montantPrime ?? undefined,
+        retenue: dto.retenue ?? undefined,
+        moyenPaiement: dto.moyenPaiement === undefined ? undefined : dto.moyenPaiement,
+      },
+    });
+  }
+
+  async payerFormateur(formateurId: string, periode: string) {
+    const existing = await this.prisma.paiementFormateur.findUnique({
+      where: { formateurId_periode: { formateurId, periode } },
+    });
+    if (!existing) throw new NotFoundException('Ligne de paie introuvable.');
+    return this.prisma.paiementFormateur.update({
+      where: { formateurId_periode: { formateurId, periode } },
+      data: { statut: 'paye', datePaiement: new Date() },
+    });
+  }
+
+  async payerTousFormateurs(bucket: string, periode: string) {
+    const detail = await this.getDetailPaieFormateurs(bucket, periode);
+    const formateurIds = detail.lignes.filter((l) => l.statut !== 'paye').map((l) => l.formateurId);
+    await this.prisma.paiementFormateur.updateMany({
+      where: { formateurId: { in: formateurIds }, periode },
+      data: { statut: 'paye', datePaiement: new Date() },
+    });
+    return this.getDetailPaieFormateurs(bucket, periode);
   }
 }

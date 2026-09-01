@@ -5,6 +5,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { AdminGuard } from '../common/admin.guard';
@@ -17,6 +18,8 @@ import { UpdateTypeCoursDto } from './dto/update-type-cours.dto';
 import { UpdateVagueDatesDto } from './dto/update-vague-dates.dto';
 import { UpdateApprenantRhDto } from './dto/update-apprenant-rh.dto';
 import { UpdateTarifFormationDto } from './dto/update-tarif-formation.dto';
+import { CreateEncaissementDto } from './dto/create-encaissement.dto';
+import { UpdatePaiementFormateurDto } from './dto/update-paiement-formateur.dto';
 
 @Controller('rh')
 @UseGuards(AdminGuard)
@@ -159,5 +162,80 @@ export class RhController {
     @Body() dto: UpdateTarifFormationDto,
   ) {
     return this.service.updateTarifFormation(typeCours, dto.prixFormation);
+  }
+
+  // ---- Encaissements formation (Facturation & Encaissement) ----------------
+
+  @Get('apprenants-pour-encaissement')
+  listApprenantsPourEncaissement() {
+    return this.service.listApprenantsPourEncaissement();
+  }
+
+  @Get('encaissements')
+  listEncaissements() {
+    return this.service.listEncaissements();
+  }
+
+  @Post('encaissements')
+  createEncaissement(@Body() dto: CreateEncaissementDto) {
+    return this.service.createEncaissement(dto);
+  }
+
+  @Get('encaissements-formation')
+  getEncaissementsFormation() {
+    return this.service.getEncaissementsFormation();
+  }
+
+  @Get('encaissements/tendance-hebdomadaire')
+  getTendanceHebdomadaireFormation() {
+    return this.service.getTendanceHebdomadaireFormation();
+  }
+
+  @Get('encaissements/tendance-mensuelle')
+  getTendanceMensuelleFormation() {
+    return this.service.getTendanceMensuelleFormation();
+  }
+
+  // ---- Paie Formateurs (Paie & Commissions) ---------------------------------
+
+  @Get('paie-formateurs')
+  getTableauPaieFormateurs(@Query('periode') periode?: string) {
+    return this.service.getTableauPaieFormateurs(periode);
+  }
+
+  @Get('paie-formateurs/:bucket')
+  getDetailPaieFormateurs(
+    @Param('bucket') bucket: string,
+    @Query('periode') periode?: string,
+  ) {
+    return this.service.getDetailPaieFormateurs(decodeURIComponent(bucket), periode);
+  }
+
+  @Put('paie-formateurs/:formateurId/:periode')
+  updatePaiementFormateur(
+    @Param('formateurId') formateurId: string,
+    @Param('periode') periode: string,
+    @Body() dto: UpdatePaiementFormateurDto,
+  ) {
+    return this.service.updatePaiementFormateur(formateurId, periode, dto);
+  }
+
+  @Post('paie-formateurs/:formateurId/:periode/payer')
+  payerFormateur(
+    @Param('formateurId') formateurId: string,
+    @Param('periode') periode: string,
+  ) {
+    return this.service.payerFormateur(formateurId, periode);
+  }
+
+  @Post('paie-formateurs/:bucket/payer-tout')
+  payerTousFormateurs(
+    @Param('bucket') bucket: string,
+    @Query('periode') periode?: string,
+  ) {
+    return this.service.payerTousFormateurs(
+      decodeURIComponent(bucket),
+      periode ?? new Date().toISOString().slice(0, 7),
+    );
   }
 }

@@ -380,7 +380,46 @@ model Formateur {
   nom       String
   email     String
 
-  groupes Groupe[]
+  // Fixe mensuel négocié — base du Net à Payer (voir PaiementFormateur),
+  // même principe que Superviseur.tarifFixe côté Production. Nullable tant
+  // que la RH ne l'a pas renseigné.
+  tarifFixe Float?
+
+  groupes   Groupe[]
+  paiements PaiementFormateur[]
+}
+
+// Paie individuelle d'un formateur pour une période — miroir de PaiementAgent
+// côté Production, mais rattachée directement au Formateur (pas à une
+// Mission) puisqu'un formateur encadre des groupes, pas des contrats
+// clients. Regroupée côté service par "type de cours" (TEF Canada, DELF
+// DALF, DFP, FOL, Formation externe — voir bucketTypeCoursPaie dans
+// RhService) pour le tableau de la page Paie & Commissions. Contrairement à
+// PaiementAgent, retenue/prime restent des montants saisis/corrigés par la
+// RH plutôt que calculés automatiquement : il n'existe pas de pointage réel
+// (absence/retard) par formateur en base, seules les heures effectuées
+// (dérivées des Seance réellement programmées sur ses groupes) sont réelles.
+model PaiementFormateur {
+  id String @id @default(cuid())
+
+  formateurId String
+  formateur   Formateur @relation(fields: [formateurId], references: [id])
+
+  periode String // "AAAA-MM"
+
+  montantBase  Float @default(0)
+  montantPrime Float @default(0)
+  retenue      Float @default(0)
+
+  moyenPaiement String? // "Mobile Money", "Virement bancaire", "Espèces", etc.
+
+  statut       String    @default("en_attente")
+  datePaiement DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([formateurId, periode])
 }
 
 model Apprenant {
@@ -447,6 +486,11 @@ model Apprenant {
   // applicable (pipeline post-test) — absent pour les apprenants seedés/
   // créés manuellement.
   evaluationAttempt EvaluationAttempt?
+
+  // Versements réels reçus pour la formation (voir EncaissementFormation) —
+  // un apprenant peut payer en plusieurs fois (mensualités), d'où une
+  // relation 1-N plutôt qu'un montant unique sur l'Apprenant.
+  encaissements EncaissementFormation[]
 
   // Missions de production (voir Mission) — un apprenant diplômé peut
   // enchaîner plusieurs missions dans le temps (dateFin renseignée = mission
@@ -952,6 +996,30 @@ model TarifFormation {
   prixFormation  Float  @default(0)
 
   updatedAt DateTime @updatedAt
+}
+
+// Encaissement réel d'un versement de formation par un apprenant — comble le
+// vide identifié dans EtatFinancierFormationPanel (jusqu'ici aucune
+// facture/paiement numérique réel côté Académie, seulement un CA théorique
+// basé sur TarifFormation). Saisi manuellement par la RH (pas de webhook
+// Mobile Money, même principe que la confirmation de paiement du pipeline
+// d'admission) — un apprenant peut régler en plusieurs fois, d'où plusieurs
+// lignes possibles par apprenant plutôt qu'un solde unique. `jour` sert à la
+// fois de journal (tableau "jours") et de base aux comparatifs
+// hebdomadaire/mensuel (voir RhService.getTendanceHebdomadaireFormation /
+// getTendanceMensuelleFormation).
+model EncaissementFormation {
+  id String @id @default(cuid())
+
+  apprenantId String
+  apprenant   Apprenant @relation(fields: [apprenantId], references: [id])
+
+  montant Float
+  jour    DateTime // date du versement (normalisée à minuit)
+
+  moyenPaiement String? // "Mobile Money", "Virement bancaire", "Espèces", etc.
+
+  createdAt DateTime @default(now())
 }
 
 model ChargeInfrastructure {
