@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
-import { apiGet, apiPostAuthed } from "@/lib/api";
+import { apiGet, apiPostAuthed, apiPut } from "@/lib/api";
 import { adminHeaders } from "./adminHeaders";
 
 interface LigneTypeCours {
@@ -83,6 +83,9 @@ export default function EncaissementsFormationPanel() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editMontant, setEditMontant] = useState("");
+  const [editStatus, setEditStatus] = useState<"idle" | "saving" | "error">("idle");
 
   function refresh() {
     apiGet<LigneTypeCours[]>("/rh/encaissements-formation", adminHeaders())
@@ -124,6 +127,33 @@ export default function EncaissementsFormationPanel() {
       refresh();
     } catch {
       setStatus("error");
+    }
+  }
+
+  function startEditMontant(e: Encaissement) {
+    setEditingId(e.id);
+    setEditMontant(String(e.montant));
+    setEditStatus("idle");
+  }
+
+  function cancelEditMontant() {
+    setEditingId(null);
+    setEditMontant("");
+    setEditStatus("idle");
+  }
+
+  async function saveMontant(id: string) {
+    const montant = Number(editMontant);
+    if (!editMontant || Number.isNaN(montant)) return;
+    setEditStatus("saving");
+    try {
+      await apiPut(`/rh/encaissements/${id}`, { montant }, adminHeaders());
+      setEditingId(null);
+      setEditMontant("");
+      setEditStatus("idle");
+      refresh();
+    } catch {
+      setEditStatus("error");
     }
   }
 
@@ -338,7 +368,45 @@ export default function EncaissementsFormationPanel() {
                       {e.moyenPaiement && ` · ${e.moyenPaiement}`}
                     </p>
                   </div>
-                  <span className="font-mono text-sm text-accent">{fmtMontant(e.montant)}</span>
+                  {editingId === e.id ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        autoFocus
+                        value={editMontant}
+                        onChange={(ev) => setEditMontant(ev.target.value)}
+                        onKeyDown={(ev) => {
+                          if (ev.key === "Enter") saveMontant(e.id);
+                          if (ev.key === "Escape") cancelEditMontant();
+                        }}
+                        className="w-32 rounded border border-white/20 bg-obsidianCard px-2 py-1 font-mono text-sm text-white outline-none focus:border-accent"
+                      />
+                      <button
+                        onClick={() => saveMontant(e.id)}
+                        disabled={editStatus === "saving"}
+                        className="font-mono text-[11px] uppercase tracking-widest text-accent hover:underline"
+                      >
+                        {editStatus === "saving" ? "..." : "OK"}
+                      </button>
+                      <button
+                        onClick={cancelEditMontant}
+                        className="font-mono text-[11px] uppercase tracking-widest text-white/40 hover:underline"
+                      >
+                        Annuler
+                      </button>
+                      {editStatus === "error" && (
+                        <span className="font-mono text-[11px] text-accent">Erreur</span>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => startEditMontant(e)}
+                      className="font-mono text-sm text-accent hover:underline"
+                      title="Modifier le montant"
+                    >
+                      {fmtMontant(e.montant)}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

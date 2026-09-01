@@ -19,6 +19,7 @@ import { UpdateVagueDatesDto } from './dto/update-vague-dates.dto';
 import { UpdateApprenantRhDto } from './dto/update-apprenant-rh.dto';
 import { UpdateTarifFormationDto } from './dto/update-tarif-formation.dto';
 import { CreateEncaissementDto } from './dto/create-encaissement.dto';
+import { UpdateEncaissementDto } from './dto/update-encaissement.dto';
 import { UpdatePaiementFormateurDto } from './dto/update-paiement-formateur.dto';
 
 @Controller('rh')
@@ -179,6 +180,11 @@ export class RhController {
   @Post('encaissements')
   createEncaissement(@Body() dto: CreateEncaissementDto) {
     return this.service.createEncaissement(dto);
+  }
+
+  @Put('encaissements/:id')
+  updateEncaissement(@Param('id') id: string, @Body() dto: UpdateEncaissementDto) {
+    return this.service.updateEncaissement(id, dto);
   }
 
   @Get('encaissements-formation')

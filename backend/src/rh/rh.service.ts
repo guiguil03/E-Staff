@@ -10,6 +10,7 @@ import { UpsertReunionDto } from './dto/upsert-reunion.dto';
 import { UpsertFormateurDto } from './dto/upsert-formateur.dto';
 import { UpdateApprenantRhDto } from './dto/update-apprenant-rh.dto';
 import { CreateEncaissementDto } from './dto/create-encaissement.dto';
+import { UpdateEncaissementDto } from './dto/update-encaissement.dto';
 import { UpdatePaiementFormateurDto } from './dto/update-paiement-formateur.dto';
 
 // Certification "vivier" — mêmes seuils/tiers que le pipeline d'admission
@@ -947,6 +948,15 @@ export class RhService {
         jour,
         moyenPaiement: dto.moyenPaiement ?? null,
       },
+    });
+  }
+
+  async updateEncaissement(id: string, dto: UpdateEncaissementDto) {
+    const existing = await this.prisma.encaissementFormation.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Encaissement introuvable.');
+    return this.prisma.encaissementFormation.update({
+      where: { id },
+      data: { montant: dto.montant },
     });
   }
 
