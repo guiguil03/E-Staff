@@ -34,6 +34,7 @@ import { FormateurGuard } from "../common/formateur.guard";
 // mémoire (pas de config disque ici, cohérent avec l'upload audio existant),
 // donc une limite explicite est nécessaire pour éviter un upload sans borne.
 const MAX_VIDEO_UPLOAD_BYTES = 300 * 1024 * 1024; // 300 Mo
+const MAX_CV_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
 
 @Controller("evaluation")
 export class EvaluationController {
@@ -86,6 +87,34 @@ export class EvaluationController {
   @Post("candidats")
   createCandidat(@Body() dto: CreateCandidatDto) {
     return this.service.createCandidat(dto);
+  }
+
+  @Post("candidats/:id/cv")
+  @UseInterceptors(
+    FileInterceptor("cv", {
+      limits: { fileSize: MAX_CV_UPLOAD_BYTES },
+      fileFilter: (_req, file, cb) => {
+        cb(null, file.mimetype === "application/pdf");
+      },
+    })
+  )
+  uploadCv(@Param("id") id: string, @UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException(
+        "Fichier CV manquant, trop volumineux (10 Mo max) ou pas au format PDF."
+      );
+    }
+    return this.service.uploadCv(id, file);
+  }
+
+  // Consultation du CV depuis la fiche RH (Cycle complet) — même principe
+  // que le streaming audio/vidéo existant, pas de garde (voir commentaire
+  // TrainerGuard plus bas).
+  @Get("candidats/:id/cv")
+  async streamCv(@Param("id") id: string, @Res() res: Response) {
+    const { stream, contentType } = await this.service.getCvStream(id);
+    res.set("Content-Type", contentType ?? "application/pdf");
+    stream.pipe(res);
   }
 
   @Post("attempts/:id/submit")
@@ -161,6 +190,11 @@ export class EvaluationController {
   @Get("attempts/:id")
   getAttempt(@Param("id") id: string) {
     return this.service.getAttemptForGrading(id);
+  }
+
+  @Post("attempts/:id/notify-rh")
+  notifyRh(@Param("id") id: string) {
+    return this.service.notifyRh(id);
   }
 
   @Get("questions-corrigees")

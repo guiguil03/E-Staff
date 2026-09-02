@@ -208,6 +208,7 @@ function QcmBlock({
 export default function EvaluationFlow() {
   const [step, setStep] = useState<Step>("coordonnees");
   const [coordonnees, setCoordonnees] = useState(initialCoordonnees);
+  const [cvFile, setCvFile] = useState<File | null>(null);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -273,6 +274,13 @@ export default function EvaluationFlow() {
         "/evaluation/candidats",
         coordonnees
       );
+      if (cvFile) {
+        // Dépôt optionnel — un échec ici ne doit pas bloquer le candidat qui
+        // vient de créer son dossier, le CV pourra être redéposé plus tard.
+        const formData = new FormData();
+        formData.append("cv", cvFile, cvFile.name);
+        await apiUpload(`/evaluation/candidats/${res.candidatId}/cv`, formData).catch(() => {});
+      }
       setAttemptId(res.attemptId);
       setStep("intro");
     } catch (err) {
@@ -465,6 +473,17 @@ export default function EvaluationFlow() {
               setCoordonnees((v) => ({ ...v, phone: e.target.value }))
             }
           />
+          <div className="sm:col-span-2">
+            <label className="block font-sans text-xs text-white/60">
+              CV (PDF, facultatif)
+            </label>
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={(e) => setCvFile(e.target.files?.[0] ?? null)}
+              className="mt-1 w-full text-sm text-white/70 file:mr-3 file:rounded file:border file:border-white/20 file:bg-obsidian file:px-3 file:py-1.5 file:text-xs file:text-white file:outline-none"
+            />
+          </div>
         </div>
         {error && <p className="mt-4 text-sm text-accent">{error}</p>}
         <div className="mt-6">

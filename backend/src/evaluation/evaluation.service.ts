@@ -171,6 +171,33 @@ export class EvaluationService {
     return { candidatId: candidat.id, attemptId: attempt.id };
   }
 
+  // CV facultatif, déposé à l'étape "Coordonnées" — même stockage S3 que
+  // l'audio/vidéo du test (voir StorageService), clé stable (écrasée en cas
+  // de redépôt) plutôt qu'un historique de versions.
+  async uploadCv(candidatId: string, file: Express.Multer.File) {
+    const candidat = await this.prisma.candidat.findUnique({ where: { id: candidatId } });
+    if (!candidat) throw new NotFoundException("Candidat introuvable.");
+
+    const key = `candidats/${candidatId}/cv.pdf`;
+    await this.storage.uploadBuffer(key, file.buffer, "application/pdf");
+
+    return this.prisma.candidat.update({
+      where: { id: candidatId },
+      data: { cvKey: key, cvUploadedAt: new Date() },
+    });
+  }
+
+  async getCvStream(candidatId: string) {
+    const candidat = await this.prisma.candidat.findUnique({ where: { id: candidatId } });
+    if (!candidat?.cvKey) throw new NotFoundException("CV introuvable.");
+
+    try {
+      return await this.storage.getObjectStream(candidat.cvKey);
+    } catch {
+      throw new NotFoundException("Fichier CV introuvable.");
+    }
+  }
+
   private async getAttemptOrThrow(attemptId: string) {
     const attempt = await this.prisma.evaluationAttempt.findUnique({
       where: { id: attemptId },
@@ -668,6 +695,36 @@ export class EvaluationService {
     // la tentative en attente de validation RH (voir validateContract) — le
     // résultat et le contrat partent ensemble, une fois validés, au cron de
     // 20h (voir ContractCronService).
+  }
+
+  // Notification explicite du formateur vers la RH, déclenchée par le
+  // bouton "Envoyer les résultats vers RH" sur l'écran de correction — la
+  // tentative "corrige" est déjà visible dans le tableau de validation RH,
+  // mais rien ne prévenait activement la RH qu'un dossier attendait. Simple
+  // e-mail interne (pas de notification si RH_NOTIFICATION_EMAIL n'est pas
+  // configurée — voir EmailService, même principe de mode simulation).
+  async notifyRh(attemptId: string) {
+    const attempt = await this.getAttemptOrThrow(attemptId);
+    if (attempt.status !== "corrige") {
+      throw new BadRequestException(
+        "Cette tentative n'est pas encore entièrement corrigée."
+      );
+    }
+
+    const rhEmail = process.env.RH_NOTIFICATION_EMAIL;
+    if (rhEmail) {
+      const tierLabel = attempt.tier ? TIER_LABELS[attempt.tier] ?? attempt.tier : "—";
+      await this.email.send({
+        to: rhEmail,
+        subject: `Résultats prêts — ${attempt.candidat.firstName} ${attempt.candidat.lastName}`,
+        text: `Un test vient d'être corrigé et attend une décision RH.\n\nCandidat : ${attempt.candidat.firstName} ${attempt.candidat.lastName}\nScore : ${attempt.totalScore ?? "—"}/100\nRésultat : ${tierLabel}\n\nÀ traiter dans le tableau de validation RH.`,
+      });
+    }
+
+    return this.prisma.evaluationAttempt.update({
+      where: { id: attemptId },
+      data: { rhNotifiedAt: new Date() },
+    });
   }
 
   // ---- Pipeline post-test : validation RH -> contrat -> paiement --------

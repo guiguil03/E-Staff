@@ -21,6 +21,7 @@ import { UpdateTarifFormationDto } from './dto/update-tarif-formation.dto';
 import { CreateEncaissementDto } from './dto/create-encaissement.dto';
 import { UpdateEncaissementDto } from './dto/update-encaissement.dto';
 import { UpdatePaiementFormateurDto } from './dto/update-paiement-formateur.dto';
+import { EnvoyerResultatsDto } from './dto/envoyer-resultats.dto';
 
 @Controller('rh')
 @UseGuards(AdminGuard)
@@ -150,6 +151,19 @@ export class RhController {
   @Get('alertes-administratives')
   getAlertesAdministratives() {
     return this.service.getAlertesAdministratives();
+  }
+
+  @Post('cycle/:attemptId/envoyer-resultats')
+  envoyerResultats(
+    @Param('attemptId') attemptId: string,
+    @Body() dto: EnvoyerResultatsDto,
+  ) {
+    return this.service.envoyerResultatsCandidat(attemptId, dto);
+  }
+
+  @Get('coordonnees')
+  getCoordonnees() {
+    return this.service.getCoordonnees();
   }
 
   @Get('etat-financier-formation')

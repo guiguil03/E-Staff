@@ -73,6 +73,7 @@ interface Attempt {
   totalScore: number | null;
   tier: string | null;
   submittedAt: string | null;
+  rhNotifiedAt: string | null;
   candidat: Candidat;
   situationResponses: SituationResponse[];
   videoResponses: VideoResponse[];
@@ -215,6 +216,12 @@ const ESSAY_GRADING_LEVELS = [
 export default function TrainerDashboard() {
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Une fois la correction terminée, la tentative sort de la file
+  // ("corrige" n'est plus dans le filtre soumis/en_correction de
+  // /evaluation/attempts) — cet état garde sa version à jour affichée
+  // (score final, bouton "Envoyer vers RH") jusqu'à ce que le formateur
+  // sélectionne autre chose.
+  const [openAttempt, setOpenAttempt] = useState<Attempt | null>(null);
   const [situations, setSituations] = useState<Situation[]>([]);
   const [videoTasks, setVideoTasks] = useState<VideoTask[]>([]);
   const [essaySubjects, setEssaySubjects] = useState<EssaySubject[]>([]);
@@ -264,7 +271,20 @@ export default function TrainerDashboard() {
     }
   }
 
-  const selected = attempts.find((a) => a.id === selectedId) ?? null;
+  const selected =
+    attempts.find((a) => a.id === selectedId) ??
+    (openAttempt?.id === selectedId ? openAttempt : null);
+
+  async function refreshSelectedAttempt() {
+    if (!selectedId) return;
+    try {
+      const updated = await apiGet<Attempt>(`/evaluation/attempts/${selectedId}`);
+      setOpenAttempt(updated);
+    } catch {
+      // le tableau principal reste à jour même si ce fetch ponctuel échoue
+    }
+    refreshList();
+  }
 
   return (
     <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
@@ -288,7 +308,10 @@ export default function TrainerDashboard() {
             return (
               <li key={a.id}>
                 <button
-                  onClick={() => setSelectedId(a.id)}
+                  onClick={() => {
+                    setSelectedId(a.id);
+                    setOpenAttempt(null);
+                  }}
                   className={`w-full rounded border px-3 py-2 text-left text-sm transition-colors ${
                     selectedId === a.id
                       ? "border-accent bg-obsidian text-white"
@@ -324,7 +347,7 @@ export default function TrainerDashboard() {
             videoCriteria={videoCriteria}
             essayCriteria={essayCriteria}
             partieOuverteCriteria={partieOuverteCriteria}
-            onGraded={refreshList}
+            onGraded={refreshSelectedAttempt}
           />
         ) : (
           <p className="text-sm text-white/50">
@@ -353,6 +376,45 @@ function itemIsGraded(item: CarouselItem): boolean {
   // Un QCM est "noté" dès la soumission (correction automatique) — jamais en
   // attente de correction manuelle.
   return item.type === "qcm" ? true : Boolean(item.response.gradedAt);
+}
+
+// Bouton affiché une fois la correction terminée (statut "corrige") —
+// prévient explicitement la RH par e-mail (voir EvaluationService.notifyRh)
+// au lieu de compter uniquement sur le passage régulier de la RH dans son
+// tableau de validation.
+function NotifyRhButton({ attempt, onSent }: { attempt: Attempt; onSent: () => void }) {
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(false);
+
+  async function send() {
+    setSending(true);
+    setError(false);
+    try {
+      await apiPost(`/evaluation/attempts/${attempt.id}/notify-rh`, {});
+      onSent();
+    } catch {
+      setError(true);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (attempt.rhNotifiedAt) {
+    return (
+      <p className="mt-2 font-mono text-[11px] text-white/40">
+        RH prévenue le {new Date(attempt.rhNotifiedAt).toLocaleDateString("fr-FR")}
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-3">
+      <Button variant="ghostDark" onClick={send} disabled={sending}>
+        {sending ? "Envoi..." : "Envoyer les résultats vers RH"}
+      </Button>
+      {error && <p className="mt-1 text-xs text-accent">Échec de l&apos;envoi — réessayer.</p>}
+    </div>
+  );
 }
 
 // Carrousel plutôt qu'un long scroll vertical (rendus empilés — 5 mises en
@@ -457,6 +519,9 @@ function AttemptDetail({
           <p className="mt-2 text-sm text-accent">
             Total : {attempt.totalScore}/100 — {(attempt.tier && TIER_LABELS[attempt.tier]) ?? attempt.tier ?? "—"}
           </p>
+        )}
+        {attempt.status === "corrige" && (
+          <NotifyRhButton attempt={attempt} onSent={onGraded} />
         )}
       </div>
 

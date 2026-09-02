@@ -160,6 +160,11 @@ model Candidat {
   phone     String
   createdAt DateTime @default(now())
 
+  // CV déposé à l'étape "Coordonnées" du test (optionnel, PDF) — même
+  // stockage S3/Railway que l'audio/vidéo du test. Clé S3, pas le fichier.
+  cvKey        String?
+  cvUploadedAt DateTime?
+
   attempts EvaluationAttempt[]
 }
 
@@ -204,6 +209,20 @@ model EvaluationAttempt {
   submittedAt       DateTime?
   gradedAt          DateTime?
   resultEmailSentAt DateTime?
+
+  // Notification interne au formateur -> RH ("Envoyer les résultats vers
+  // RH", écran de correction) — distincte de l'envoi des résultats au
+  // candidat ci-dessous.
+  rhNotifiedAt DateTime?
+
+  // Envoi des résultats au candidat depuis la fiche RH (Cycle complet),
+  // avec choix du modèle de message et du canal — indépendant de l'envoi du
+  // contrat (contractSentAt) : peut se faire avant que le contrat soit prêt.
+  // resultatsCanal: "mail" | "whatsapp" — resultatsModele: "delf_dalf" |
+  // "tef" | "dfp" | "postulant_prod"
+  resultatsEnvoyesLe DateTime?
+  resultatsCanal     String?
+  resultatsModele    String?
 
   // ---------------------------------------------------------------------
   // Pipeline post-test — validation RH -> contrat -> paiement -> matricule

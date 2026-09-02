@@ -6,6 +6,9 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CockpitService } from '../cockpit/cockpit.service';
 import { NotationService } from '../notation/notation.service';
+import { EmailService } from '../common/email.service';
+import { TIER_LABELS } from '../evaluation/evaluation.service';
+import { EnvoyerResultatsDto } from './dto/envoyer-resultats.dto';
 import { UpsertReunionDto } from './dto/upsert-reunion.dto';
 import { UpsertFormateurDto } from './dto/upsert-formateur.dto';
 import { UpdateApprenantRhDto } from './dto/update-apprenant-rh.dto';
@@ -102,6 +105,7 @@ export class RhService {
     private readonly prisma: PrismaService,
     private readonly cockpit: CockpitService,
     private readonly notation: NotationService,
+    private readonly email: EmailService,
   ) {}
 
   // ---- Vue d'ensemble -----------------------------------------------------
@@ -614,6 +618,11 @@ export class RhService {
         conditions: attempt.contractConditions,
         envoyeLe: attempt.contractSentAt,
       },
+      resultats: {
+        envoyesLe: attempt.resultatsEnvoyesLe,
+        canal: attempt.resultatsCanal,
+        modele: attempt.resultatsModele,
+      },
       paiement: {
         reference: attempt.paymentReference,
         confirmeLe: attempt.paymentConfirmedAt,
@@ -621,6 +630,110 @@ export class RhService {
       formation,
       production,
     };
+  }
+
+  // ---- Envoi des résultats au candidat (Cycle complet) ---------------------
+  // Distinct de l'envoi du contrat (EvaluationService.sendContractNow) — la
+  // RH peut vouloir prévenir le candidat de son résultat par mail ou
+  // WhatsApp avant même que le contrat soit prêt, avec un message adapté au
+  // type de parcours (voir MODELES_ENVOI_RESULTATS). Pas d'API WhatsApp
+  // payante branchée : le canal "whatsapp" ne fait rien envoyer côté
+  // serveur, il compose juste le message et renvoie un lien wa.me que la RH
+  // ouvre elle-même pour envoyer depuis son propre compte.
+  private composerMessageResultats(
+    modele: EnvoyerResultatsDto['modele'],
+    attempt: {
+      candidat: { firstName: string };
+      totalScore: number | null;
+      tier: string | null;
+    },
+  ): string {
+    const tierLabel = attempt.tier
+      ? TIER_LABELS[attempt.tier] ?? attempt.tier
+      : 'en cours d\'évaluation';
+    const scoreLine = `Résultat de votre évaluation e-Staf : ${attempt.totalScore ?? '—'}/100 — ${tierLabel}.`;
+
+    const suites: Record<EnvoyerResultatsDto['modele'], string> = {
+      delf_dalf:
+        "Prochaine étape : votre préparation DELF/DALF va démarrer, l'équipe pédagogique vous recontactera pour l'affectation de groupe et le calendrier des séances.",
+      tef: "Prochaine étape : votre préparation TEF Canada/TCF va démarrer, l'équipe pédagogique vous recontactera pour l'affectation de groupe et le calendrier des séances.",
+      dfp: "Prochaine étape : votre préparation DFP va démarrer, l'équipe pédagogique vous recontactera pour l'affectation de groupe et le calendrier des séances.",
+      postulant_prod:
+        'Prochaine étape : vous êtes orienté(e) directement vers un placement en production, notre équipe vous recontactera pour les modalités de contrat.',
+    };
+
+    return `Bonjour ${attempt.candidat.firstName},\n\n${scoreLine}\n\n${suites[modele]}\n\nL'équipe e-Staf`;
+  }
+
+  // Heuristique Madagascar : un numéro local commence par 0 (ex.
+  // "034 12 345 67") — wa.me exige l'indicatif pays sans le 0. Un numéro
+  // déjà au format international (commence par autre chose que 0) est
+  // laissé tel quel.
+  private toWhatsAppNumber(phone: string): string {
+    const digits = phone.replace(/\D/g, '');
+    return digits.startsWith('0') ? `261${digits.slice(1)}` : digits;
+  }
+
+  async envoyerResultatsCandidat(attemptId: string, dto: EnvoyerResultatsDto) {
+    const attempt = await this.prisma.evaluationAttempt.findUnique({
+      where: { id: attemptId },
+      include: { candidat: true },
+    });
+    if (!attempt) throw new NotFoundException('Tentative introuvable.');
+
+    const message = this.composerMessageResultats(dto.modele, attempt);
+    let waLink: string | undefined;
+
+    if (dto.canal === 'mail') {
+      await this.email.send({
+        to: attempt.candidat.email,
+        subject: 'Vos résultats e-Staf',
+        text: message,
+      });
+    } else {
+      const number = this.toWhatsAppNumber(attempt.candidat.phone);
+      waLink = `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
+    }
+
+    await this.prisma.evaluationAttempt.update({
+      where: { id: attemptId },
+      data: {
+        resultatsEnvoyesLe: new Date(),
+        resultatsCanal: dto.canal,
+        resultatsModele: dto.modele,
+      },
+    });
+
+    return { message, waLink };
+  }
+
+  // ---- Coordonnées consolidées (candidats + CV + vidéos de test) -----------
+  // Une ligne par tentative d'évaluation (même granularité que
+  // getCycleComplet) — regroupe ce qui est aujourd'hui éparpillé entre
+  // plusieurs casiers : coordonnées, lien CV (si déposé, voir Candidat.cvKey)
+  // et liens vers les vidéos du Bloc 5, streamées via les endpoints déjà
+  // utilisés par le formateur (GET /evaluation/video-responses/:id/video).
+  async getCoordonnees() {
+    const attempts = await this.prisma.evaluationAttempt.findMany({
+      include: {
+        candidat: true,
+        videoResponses: { orderBy: { taskIndex: 'asc' } },
+        apprenant: { include: { groupe: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return attempts.map((a) => ({
+      attemptId: a.id,
+      candidatId: a.candidatId,
+      nomComplet: `${a.candidat.firstName} ${a.candidat.lastName}`,
+      email: a.candidat.email,
+      phone: a.candidat.phone,
+      cvDisponible: Boolean(a.candidat.cvKey),
+      videoResponseIds: a.videoResponses.map((v) => v.id),
+      matricule: a.apprenant?.matricule ?? null,
+      typeCours: a.apprenant?.groupe.typeCours ?? null,
+    }));
   }
 
   // ---- Casiers avec historique ---------------------------------------------

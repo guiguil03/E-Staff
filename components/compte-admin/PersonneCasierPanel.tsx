@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
-import { apiGet } from "@/lib/api";
+import Button from "@/components/ui/Button";
+import { apiGet, apiPostAuthed } from "@/lib/api";
 import { COMPETENCY_DEFS } from "@/components/compte-formateur/gradingGrids";
 import { adminHeaders } from "./adminHeaders";
 
@@ -62,6 +63,11 @@ interface PersonneCasier {
     conditions: string | null;
     envoyeLe: string | null;
   };
+  resultats: {
+    envoyesLe: string | null;
+    canal: string | null;
+    modele: string | null;
+  };
   paiement: {
     reference: string | null;
     confirmeLe: string | null;
@@ -100,6 +106,15 @@ const BLOC_LABELS: { key: keyof PersonneCasier["test"]; label: string }[] = [
 
 const COMPETENCY_LABELS = Object.fromEntries(COMPETENCY_DEFS.map((c) => [c.key, c.label]));
 
+const MODELE_OPTIONS: { value: string; label: string }[] = [
+  { value: "delf_dalf", label: "DELF/DALF" },
+  { value: "tef", label: "TEF Canada" },
+  { value: "dfp", label: "DFP" },
+  { value: "postulant_prod", label: "Postulant production" },
+];
+const MODELE_LABELS = Object.fromEntries(MODELE_OPTIONS.map((m) => [m.value, m.label]));
+const CANAL_LABELS: Record<string, string> = { mail: "mail", whatsapp: "WhatsApp" };
+
 function fmtDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString("fr-FR") : "—";
 }
@@ -121,11 +136,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export default function PersonneCasierPanel({ attemptId }: { attemptId: string }) {
   const [casier, setCasier] = useState<PersonneCasier | "loading" | "erreur">("loading");
 
-  useEffect(() => {
+  function refresh() {
     apiGet<PersonneCasier>(`/rh/cycle/${attemptId}`, adminHeaders())
       .then(setCasier)
       .catch(() => setCasier("erreur"));
-  }, [attemptId]);
+  }
+
+  useEffect(refresh, [attemptId]);
 
   if (casier === "loading") return <p className="font-sans text-sm text-white/50">Chargement...</p>;
   if (casier === "erreur")
@@ -180,6 +197,15 @@ export default function PersonneCasierPanel({ attemptId }: { attemptId: string }
             Soumis le {fmtDate(casier.test.submittedAt)}
             {casier.test.gradedAt && ` · Corrigé le ${fmtDate(casier.test.gradedAt)}`}
           </p>
+
+          {casier.test.gradedAt && (
+            <EnvoyerResultatsForm
+              attemptId={attemptId}
+              phone={casier.candidat.phone}
+              resultats={casier.resultats}
+              onSent={refresh}
+            />
+          )}
         </Section>
       </Reveal>
 
@@ -302,6 +328,87 @@ export default function PersonneCasierPanel({ attemptId }: { attemptId: string }
           </Section>
         </Reveal>
       )}
+    </div>
+  );
+}
+
+// Envoi des résultats au candidat — indépendant de l'envoi du contrat
+// (section "Contrat" plus haut) : la RH peut prévenir le candidat de son
+// résultat avant même que le contrat soit prêt. Le mail part réellement
+// (Resend, voir RhService.envoyerResultatsCandidat) ; WhatsApp n'a pas
+// d'API payante branchée, donc le bouton ouvre juste un lien wa.me
+// pré-rempli que la RH envoie elle-même.
+function EnvoyerResultatsForm({
+  attemptId,
+  phone,
+  resultats,
+  onSent,
+}: {
+  attemptId: string;
+  phone: string;
+  resultats: PersonneCasier["resultats"];
+  onSent: () => void;
+}) {
+  const [modele, setModele] = useState(resultats.modele ?? "delf_dalf");
+  const [status, setStatus] = useState<"idle" | "sending-mail" | "sending-whatsapp" | "error">(
+    "idle"
+  );
+
+  async function envoyer(canal: "mail" | "whatsapp") {
+    setStatus(canal === "mail" ? "sending-mail" : "sending-whatsapp");
+    try {
+      const res = await apiPostAuthed<{ waLink?: string }>(
+        `/rh/cycle/${attemptId}/envoyer-resultats`,
+        { canal, modele },
+        adminHeaders()
+      );
+      if (canal === "whatsapp" && res.waLink) {
+        window.open(res.waLink, "_blank", "noopener,noreferrer");
+      }
+      setStatus("idle");
+      onSent();
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  const sending = status === "sending-mail" || status === "sending-whatsapp";
+
+  return (
+    <div className="mt-4 border-t border-white/10 pt-4">
+      <p className="font-mono text-xs uppercase tracking-widest text-white/50">
+        Envoyer les résultats au candidat
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <select
+          value={modele}
+          onChange={(e) => setModele(e.target.value)}
+          className="rounded border border-white/20 bg-obsidian px-3 py-1.5 font-sans text-sm text-white outline-none focus:border-accent"
+        >
+          {MODELE_OPTIONS.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+        <Button variant="ghostDark" onClick={() => envoyer("mail")} disabled={sending}>
+          {status === "sending-mail" ? "Envoi..." : "Envoyer par mail"}
+        </Button>
+        <Button variant="ghostDark" onClick={() => envoyer("whatsapp")} disabled={sending}>
+          {status === "sending-whatsapp" ? "Ouverture..." : "Envoyer par WhatsApp"}
+        </Button>
+      </div>
+      {status === "error" && (
+        <p className="mt-2 font-mono text-xs text-accent">Échec de l&apos;envoi — réessayer.</p>
+      )}
+      {resultats.envoyesLe && (
+        <p className="mt-2 font-mono text-[11px] text-white/40">
+          Dernier envoi : {fmtDate(resultats.envoyesLe)} par{" "}
+          {resultats.canal ? CANAL_LABELS[resultats.canal] ?? resultats.canal : "—"}
+          {resultats.modele && ` — modèle ${MODELE_LABELS[resultats.modele] ?? resultats.modele}`}
+        </p>
+      )}
+      <p className="mt-1 font-mono text-[11px] text-white/30">Téléphone : {phone}</p>
     </div>
   );
 }
