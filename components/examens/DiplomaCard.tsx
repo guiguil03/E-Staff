@@ -1,14 +1,25 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import Button from "@/components/ui/Button";
+import Modal from "@/components/ui/Modal";
 import RegistrationForm from "@/components/RegistrationForm";
+import { PROGRAM_TYPE_OPTIONS } from "@/components/examens/programTypes";
 
-interface ActionConfig {
-  /** Text shown on the button itself. */
-  label: string;
-  /** Passed through as the RegistrationForm's own submit-button label. */
-  ctaLabel: string;
+export interface ProgramDetails {
+  /** Taille du groupe, ex. 5. */
+  groupSize: number;
+  /** Date de la prochaine vague, ex. "26 septembre 2026" — omis quand les
+   * inscriptions sont ouvertes en continu sans date fixe (ex. TEF Canada). */
+  nextCohort?: string;
+  /** Ex. "1h par jour". */
+  frequency: string;
+  /** Ex. "5 semaines". */
+  duration: string;
+  /** Créneaux horaires proposés, ex. ["6h", "7h", ... "19h", "20h", "21h"]. */
+  timeSlots: string[];
+  /** Tarif affiché tel quel, ex. "50 €". */
+  price: string;
 }
 
 interface DiplomaCardProps {
@@ -25,7 +36,12 @@ interface DiplomaCardProps {
   statusDetail?: string;
   statusTone: "success" | "accent";
   segment: string;
-  actions: [ActionConfig, ActionConfig];
+  details: ProgramDetails;
+  /** Valeur pré-sélectionnée dans le menu "Type de formation" de la modale —
+   * doit correspondre à l'un des PROGRAM_TYPE_OPTIONS. */
+  typeFormationValue: string;
+  /** Libellé du bouton unique de la carte. */
+  ctaLabel?: string;
   id?: string;
   className?: string;
 }
@@ -40,21 +56,13 @@ export default function DiplomaCard({
   statusDetail,
   statusTone,
   segment,
-  actions,
+  details,
+  typeFormationValue,
+  ctaLabel = "Découvrir la formation",
   id,
   className = "",
 }: DiplomaCardProps) {
-  const [formOpen, setFormOpen] = useState(false);
-  const [activeCtaLabel, setActiveCtaLabel] = useState(actions[0].ctaLabel);
-  const formRef = useRef<HTMLDivElement>(null);
-
-  function openForm(ctaLabel: string) {
-    setActiveCtaLabel(ctaLabel);
-    setFormOpen(true);
-    requestAnimationFrame(() => {
-      formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
-  }
+  const [modalOpen, setModalOpen] = useState(false);
 
   // The shared Badge component's "success" tone (emerald green) loses too
   // much contrast on the obsidian background, so status pills are rendered
@@ -117,20 +125,54 @@ export default function DiplomaCard({
         )}
       </div>
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-        <Button variant="dark" onClick={() => openForm(actions[0].ctaLabel)}>
-          {actions[0].label}
-        </Button>
-        <Button variant="ghostDark" onClick={() => openForm(actions[1].ctaLabel)}>
-          {actions[1].label}
+      <div className="mt-6">
+        <Button variant="dark" onClick={() => setModalOpen(true)}>
+          {ctaLabel}
         </Button>
       </div>
 
-      {formOpen && (
-        <div ref={formRef} className="mt-6">
-          <RegistrationForm segment={segment} ctaLabel={activeCtaLabel} tone="dark" />
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={title}>
+        <h3 className="font-display text-xl font-bold text-accent">{title}</h3>
+        <p className="mt-1 font-sans text-sm italic text-white/50">{subtitle}</p>
+
+        <dl className="mt-5 space-y-2.5 font-sans text-sm text-white/80">
+          <div className="flex gap-2">
+            <dt className="font-semibold text-accent">Groupe :</dt>
+            <dd>en groupe de {details.groupSize}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="font-semibold text-accent">Prochaine vague :</dt>
+            <dd>{details.nextCohort ?? "Sessions en continu — rejoignez la prochaine cohorte"}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="font-semibold text-accent">Fréquence :</dt>
+            <dd>{details.frequency}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="font-semibold text-accent">Durée :</dt>
+            <dd>{details.duration}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="font-semibold text-accent">Créneaux au choix :</dt>
+            <dd>{details.timeSlots.join(", ")}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="font-semibold text-accent">Tarif :</dt>
+            <dd>{details.price}</dd>
+          </div>
+        </dl>
+
+        <div className="mt-6">
+          <RegistrationForm
+            segment={segment}
+            ctaLabel="S'inscrire"
+            tone="dark"
+            showCv
+            typeFormationOptions={PROGRAM_TYPE_OPTIONS}
+            defaultTypeFormation={typeFormationValue}
+          />
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

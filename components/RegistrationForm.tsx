@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Button from "@/components/ui/Button";
-import { apiPost } from "@/lib/api";
+import { apiPost, apiUpload } from "@/lib/api";
+import type { ProgramTypeOption } from "@/components/examens/programTypes";
 
 interface RegistrationFormProps {
   /** Identifies which funnel submitted this — e.g. "delf-dalf", "tef-canada",
@@ -12,6 +13,15 @@ interface RegistrationFormProps {
   /** Pass "dark" to render on an obsidian background (FOL / Studio Métier). */
   tone?: "light" | "dark";
   className?: string;
+  /** When provided, renders a mandatory "Type de formation" dropdown — only
+   * the Examens funnel uses this (see DiplomaCard.tsx). */
+  typeFormationOptions?: ProgramTypeOption[];
+  /** Pre-selected value in typeFormationOptions, e.g. the program whose card
+   * was clicked — stays changeable by the candidate. */
+  defaultTypeFormation?: string;
+  /** When true, renders an optional CV (PDF) upload input next to the "Type
+   * de formation" dropdown — only the Examens funnel uses this. */
+  showCv?: boolean;
 }
 
 export default function RegistrationForm({
@@ -19,10 +29,17 @@ export default function RegistrationForm({
   ctaLabel = "Passer le test",
   tone = "light",
   className = "",
+  typeFormationOptions,
+  defaultTypeFormation,
+  showCv = false,
 }: RegistrationFormProps) {
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [typeFormation, setTypeFormation] = useState(
+    defaultTypeFormation ?? typeFormationOptions?.[0]?.value ?? ""
+  );
+  const [cvFile, setCvFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
     "idle"
   );
@@ -33,7 +50,17 @@ export default function RegistrationForm({
     e.preventDefault();
     setStatus("sending");
     try {
-      await apiPost("/registrations", { segment, firstName, email, phone });
+      const body: Record<string, unknown> = { segment, firstName, email, phone };
+      if (typeFormationOptions) body.typeFormation = typeFormation;
+      const res = await apiPost<{ id: string }>("/registrations", body);
+      if (cvFile) {
+        // Dépôt facultatif — un échec ici ne doit pas empêcher l'inscription
+        // d'être considérée comme réussie (même principe que le CV du test
+        // de recrutement, voir EvaluationFlow.tsx).
+        const formData = new FormData();
+        formData.append("cv", cvFile, cvFile.name);
+        await apiUpload(`/registrations/${res.id}/cv`, formData).catch(() => {});
+      }
       setStatus("sent");
     } catch {
       setStatus("error");
@@ -67,6 +94,13 @@ export default function RegistrationForm({
       ? "border-white/20 bg-obsidian text-white placeholder:text-white/30 focus:border-accent"
       : "border-muted/30 bg-white text-ink placeholder:text-muted/60 focus:border-primary"
   } outline-none transition-colors`;
+  const fileInputClass = `w-full font-sans text-sm ${
+    isDark ? "text-white/70" : "text-ink/70"
+  } file:mr-3 file:rounded file:border file:px-3 file:py-1.5 file:text-xs file:outline-none ${
+    isDark
+      ? "file:border-white/20 file:bg-obsidian file:text-white"
+      : "file:border-muted/30 file:bg-white file:text-ink"
+  }`;
 
   return (
     <form
@@ -115,6 +149,45 @@ export default function RegistrationForm({
           />
         </div>
       </div>
+
+      {(showCv || typeFormationOptions) && (
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {showCv && (
+            <div>
+              <label className={labelClass} htmlFor={`${segment}-cv`}>
+                CV (PDF, facultatif)
+              </label>
+              <input
+                id={`${segment}-cv`}
+                type="file"
+                accept="application/pdf"
+                onChange={(e) => setCvFile(e.target.files?.[0] ?? null)}
+                className={fileInputClass}
+              />
+            </div>
+          )}
+          {typeFormationOptions && (
+            <div>
+              <label className={labelClass} htmlFor={`${segment}-type-formation`}>
+                Type de formation
+              </label>
+              <select
+                id={`${segment}-type-formation`}
+                required
+                value={typeFormation}
+                onChange={(e) => setTypeFormation(e.target.value)}
+                className={inputClass}
+              >
+                {typeFormationOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
 
       {status === "error" && (
         <p className={`mt-3 text-sm ${isDark ? "text-accent" : "text-primary"}`}>

@@ -89,6 +89,19 @@ model Registration {
   email     String
   phone     String
 
+  // Libellé lisible du programme choisi dans le menu déroulant "Type de
+  // formation" (ex. "DFP Santé") — uniquement rempli par le funnel Examens
+  // (obligatoire côté UI là-bas, voir DiplomaCard.tsx) ; les autres funnels
+  // (FOL, entreprises, Studio Métier) ne l'envoient pas, d'où le champ
+  // optionnel ici plutôt qu'imposé à tout le monde.
+  typeFormation String?
+
+  // CV facultatif, déposé au même moment que l'inscription — même stockage
+  // S3 et même principe de clé stable que Candidat.cvKey (voir
+  // EvaluationService.uploadCv).
+  cvKey        String?
+  cvUploadedAt DateTime?
+
   // "nouveau" | "contacte" | "converti"
   status    String   @default("nouveau")
   createdAt DateTime @default(now())

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Reveal from "@/components/Reveal";
 import Hero from "@/components/examens/Hero";
-import DiplomaCard from "@/components/examens/DiplomaCard";
+import DiplomaCard, { type ProgramDetails } from "@/components/examens/DiplomaCard";
 import DfpOverviewCard from "@/components/examens/DfpOverviewCard";
 import CtaBlock from "@/components/examens/CtaBlock";
 
@@ -9,6 +9,32 @@ export const metadata: Metadata = {
   title: "Se préparer aux examens — e-Staf",
   description:
     "Préparations officielles DELF/DALF, TEF Canada/TCF et DFP (Diplômes de Français Professionnel) : décrochez votre certification internationale avec e-Staf.",
+};
+
+// Créneaux et rythme communs aux 3 offres (seuls la durée, le tarif et la
+// prochaine vague changent d'une offre à l'autre) — voir discussion RH du
+// 2026-09-04.
+const COMMON_TIME_SLOTS = ["6h", "7h", "8h", "9h", "10h", "19h", "20h", "21h"];
+const COMMON_FREQUENCY = "1h par jour";
+const COMMON_GROUP_SIZE = 5;
+
+const DELF_DALF_DETAILS: ProgramDetails = {
+  groupSize: COMMON_GROUP_SIZE,
+  nextCohort: "26 septembre 2026",
+  frequency: COMMON_FREQUENCY,
+  duration: "5 semaines",
+  timeSlots: COMMON_TIME_SLOTS,
+  price: "50 €",
+};
+
+const TEF_CANADA_DETAILS: ProgramDetails = {
+  groupSize: COMMON_GROUP_SIZE,
+  // Pas de date de prochaine vague fixe pour l'instant — inscriptions en
+  // continu (voir statusDetail "Boost spécial immigration" ci-dessous).
+  frequency: COMMON_FREQUENCY,
+  duration: "6 semaines",
+  timeSlots: COMMON_TIME_SLOTS,
+  price: "120 €",
 };
 
 const DFP_PROGRAMS = [
@@ -23,16 +49,7 @@ const DFP_PROGRAMS = [
     statusLabel: "PROCHAINE COHORTE FIXÉE AU 10 SEPTEMBRE 2026",
     statusDetail: "(Inscriptions ouvertes pour bloquer la date)",
     segment: "dfp-affaires",
-    actions: [
-      {
-        label: "S'inscrire pour le 10 Septembre",
-        ctaLabel: "S'inscrire pour le 10 Septembre",
-      },
-      { label: "Réserver ma Place", ctaLabel: "Réserver ma Place" },
-    ] as [
-      { label: string; ctaLabel: string },
-      { label: string; ctaLabel: string },
-    ],
+    nextCohort: "10 septembre 2026",
   },
   {
     id: "dfp-ri",
@@ -45,16 +62,7 @@ const DFP_PROGRAMS = [
       "Maîtrisez le langage diplomatique, la rédaction de notes de synthèse, les comptes-rendus officiels et la négociation bilatérale ou multilatérale.",
     statusLabel: "PROCHAINE COHORTE FIXÉE AU 1ER OCTOBRE 2026",
     segment: "dfp-ri",
-    actions: [
-      {
-        label: "S'inscrire pour le 1er Octobre",
-        ctaLabel: "S'inscrire pour le 1er Octobre",
-      },
-      { label: "Réserver ma Place", ctaLabel: "Réserver ma Place" },
-    ] as [
-      { label: string; ctaLabel: string },
-      { label: string; ctaLabel: string },
-    ],
+    nextCohort: "1er octobre 2026",
   },
   {
     id: "dfp-tourisme",
@@ -67,16 +75,7 @@ const DFP_PROGRAMS = [
       "Gérez la clientèle exigeante, résolvez les litiges, commercialisez des prestations touristiques et pilotez l'accueil avec un raffinement irréprochable.",
     statusLabel: "PROCHAINE COHORTE FIXÉE AU 15 SEPTEMBRE 2026",
     segment: "dfp-tourisme",
-    actions: [
-      {
-        label: "S'inscrire pour le 15 Septembre",
-        ctaLabel: "S'inscrire pour le 15 Septembre",
-      },
-      { label: "Réserver ma Place", ctaLabel: "Réserver ma Place" },
-    ] as [
-      { label: string; ctaLabel: string },
-      { label: string; ctaLabel: string },
-    ],
+    nextCohort: "15 septembre 2026",
   },
   {
     id: "dfp-sante",
@@ -89,18 +88,19 @@ const DFP_PROGRAMS = [
       "Maîtrisez le lexique médical, rédigez des dossiers patients, communiquez avec les confrères et interagissez avec rigueur auprès des patients.",
     statusLabel: "PROCHAINE COHORTE FIXÉE AU 1ER OCTOBRE 2026",
     segment: "dfp-sante",
-    actions: [
-      {
-        label: "S'inscrire pour le 1er Octobre",
-        ctaLabel: "S'inscrire pour le 1er Octobre",
-      },
-      { label: "Réserver ma Place", ctaLabel: "Réserver ma Place" },
-    ] as [
-      { label: string; ctaLabel: string },
-      { label: string; ctaLabel: string },
-    ],
+    nextCohort: "1er octobre 2026",
   },
-];
+].map((program) => ({
+  ...program,
+  details: {
+    groupSize: COMMON_GROUP_SIZE,
+    nextCohort: program.nextCohort,
+    frequency: COMMON_FREQUENCY,
+    duration: "6 semaines",
+    timeSlots: COMMON_TIME_SLOTS,
+    price: "100 €",
+  } satisfies ProgramDetails,
+}));
 
 export default function ExamensPage() {
   return (
@@ -128,16 +128,8 @@ export default function ExamensPage() {
                 statusDetail="(Sessions en continu / Passage des examens planifié)"
                 statusTone="success"
                 segment="delf-dalf"
-                actions={[
-                  {
-                    label: "S'inscrire à la Préparation DELF/DALF",
-                    ctaLabel: "S'inscrire à la Préparation DELF/DALF",
-                  },
-                  {
-                    label: "Réserver mon Évaluation Initiale",
-                    ctaLabel: "Réserver mon Évaluation Initiale",
-                  },
-                ]}
+                details={DELF_DALF_DETAILS}
+                typeFormationValue="delf-dalf"
                 className="h-full"
               />
             </Reveal>
@@ -152,16 +144,8 @@ export default function ExamensPage() {
                 statusDetail="(Boost spécial immigration)"
                 statusTone="success"
                 segment="tef-canada"
-                actions={[
-                  {
-                    label: "Maximiser mon Score TEF/TCF",
-                    ctaLabel: "Maximiser mon Score TEF/TCF",
-                  },
-                  {
-                    label: "Réserver ma Session d'Entraînement",
-                    ctaLabel: "Réserver ma Session d'Entraînement",
-                  },
-                ]}
+                details={TEF_CANADA_DETAILS}
+                typeFormationValue="tef-canada"
                 className="h-full"
               />
             </Reveal>
@@ -198,7 +182,8 @@ export default function ExamensPage() {
                     statusDetail={program.statusDetail}
                     statusTone="accent"
                     segment={program.segment}
-                    actions={program.actions}
+                    details={program.details}
+                    typeFormationValue={program.segment}
                     className="h-full"
                   />
                 </Reveal>
