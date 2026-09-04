@@ -3,7 +3,6 @@ import Link from "next/link";
 import Reveal from "@/components/Reveal";
 import {
   BadgeDiplomaIcon,
-  BriefcaseIcon,
   DoveIcon,
   GearPairIcon,
   HandshakeIcon,
@@ -115,8 +114,11 @@ export default function Vision() {
             </div>
           </Reveal>
 
+          {/* Carte "Postuler à un métier" (/offres/carrieres) retirée le
+              2026-09-05 — Studio Métier masqué le temps de trouver du
+              contenu à y mettre, voir app/offres/carrieres/page.tsx. */}
           <Reveal className="md:col-start-1 md:row-start-2">
-            <div className="grid w-full grid-cols-1 gap-6 sm:grid-cols-3 md:grid-cols-1 lg:grid-cols-3">
+            <div className="grid w-full grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
               <VisionCard
                 href="/offres/examens"
                 accent="success"
@@ -130,13 +132,6 @@ export default function Vision() {
                 icon={<MicrophoneIcon className="h-full w-full" />}
               >
                 Se former aux FOL - Français : Oratoire des Leaders
-              </VisionCard>
-              <VisionCard
-                href="/offres/carrieres"
-                accent="success"
-                icon={<BriefcaseIcon className="h-full w-full" />}
-              >
-                Postuler à un métier
               </VisionCard>
             </div>
           </Reveal>

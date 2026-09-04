@@ -2,9 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 import AuthNavItem from "./AuthNavItem";
 
+// "Forum" retiré du menu public le 2026-09-05 (masqué le temps de trouver
+// du contenu à y mettre, voir ForumAccessGate) — reste accessible aux
+// apprenants connectés via QuickActions sur leur tableau de bord.
 const NAV_ITEMS = [
   { label: "Communauté", href: "/communaute" },
-  { label: "Forum", href: "/forum" },
   { label: "Se préparer aux examens", href: "/offres/examens" },
   { label: "Proposer un partenariat", href: "/entreprises" },
 ];

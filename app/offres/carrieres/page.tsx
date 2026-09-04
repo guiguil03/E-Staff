@@ -1,12 +1,8 @@
-import type { Metadata } from "next";
-import StudioMetier from "@/components/studio-metier/StudioMetier";
+import { notFound } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Studio Métier — Candidater | e-Staf",
-  description:
-    "Choisissez votre voie parmi nos missions à long terme et à court terme, passez le test de sélection C1, et déposez votre candidature.",
-};
-
+// Masqué le temps de préparer du contenu à mettre dessus (2026-09-05) — le
+// composant StudioMetier reste en place, prêt à être réactivé en retirant
+// ce notFound() et en restaurant le rendu ci-dessous.
 export default function CarrieresPage() {
-  return <StudioMetier />;
+  notFound();
 }
