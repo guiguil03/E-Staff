@@ -4,6 +4,38 @@ import Hero from "@/components/examens/Hero";
 import DiplomaCard from "@/components/examens/DiplomaCard";
 import DfpOverviewCard from "@/components/examens/DfpOverviewCard";
 import CtaBlock from "@/components/examens/CtaBlock";
+import type { ProgrammeDetails } from "@/components/examens/FormationDetailsModal";
+
+const CRENEAUX_STANDARD = ["6h", "7h", "8h", "9h", "10h", "19h", "20h", "21h"];
+
+const DELF_DALF_DETAILS: ProgrammeDetails = {
+  format: "Groupe de 5 apprenants",
+  prochaineVague: "26 septembre 2026",
+  frequence: "1h par jour",
+  duree: "5 semaines",
+  creneaux: CRENEAUX_STANDARD,
+  tarif: "50 €",
+};
+
+const TEF_CANADA_DETAILS: ProgrammeDetails = {
+  format: "Groupe de 5 apprenants",
+  prochaineVague: "26 septembre 2026",
+  frequence: "1h par jour",
+  duree: "6 semaines",
+  creneaux: CRENEAUX_STANDARD,
+  tarif: "120 €",
+};
+
+function dfpDetails(prochaineVague: string): ProgrammeDetails {
+  return {
+    format: "Groupe de 5 apprenants",
+    prochaineVague,
+    frequence: "1h par jour",
+    duree: "5 semaines",
+    creneaux: CRENEAUX_STANDARD,
+    tarif: "100 €",
+  };
+}
 
 export const metadata: Metadata = {
   title: "Se préparer aux examens — e-Staf",
@@ -23,16 +55,9 @@ const DFP_PROGRAMS = [
     statusLabel: "PROCHAINE COHORTE FIXÉE AU 10 SEPTEMBRE 2026",
     statusDetail: "(Inscriptions ouvertes pour bloquer la date)",
     segment: "dfp-affaires",
-    actions: [
-      {
-        label: "S'inscrire pour le 10 Septembre",
-        ctaLabel: "S'inscrire pour le 10 Septembre",
-      },
-      { label: "Réserver ma Place", ctaLabel: "Réserver ma Place" },
-    ] as [
-      { label: string; ctaLabel: string },
-      { label: string; ctaLabel: string },
-    ],
+    ctaLabel: "Voir le programme et les tarifs",
+    inscriptionCtaLabel: "S'inscrire pour le 10 Septembre",
+    details: dfpDetails("10 septembre 2026"),
   },
   {
     id: "dfp-ri",
@@ -45,16 +70,9 @@ const DFP_PROGRAMS = [
       "Maîtrisez le langage diplomatique, la rédaction de notes de synthèse, les comptes-rendus officiels et la négociation bilatérale ou multilatérale.",
     statusLabel: "PROCHAINE COHORTE FIXÉE AU 1ER OCTOBRE 2026",
     segment: "dfp-ri",
-    actions: [
-      {
-        label: "S'inscrire pour le 1er Octobre",
-        ctaLabel: "S'inscrire pour le 1er Octobre",
-      },
-      { label: "Réserver ma Place", ctaLabel: "Réserver ma Place" },
-    ] as [
-      { label: string; ctaLabel: string },
-      { label: string; ctaLabel: string },
-    ],
+    ctaLabel: "Voir le programme et les tarifs",
+    inscriptionCtaLabel: "S'inscrire pour le 1er Octobre",
+    details: dfpDetails("1er octobre 2026"),
   },
   {
     id: "dfp-tourisme",
@@ -67,16 +85,9 @@ const DFP_PROGRAMS = [
       "Gérez la clientèle exigeante, résolvez les litiges, commercialisez des prestations touristiques et pilotez l'accueil avec un raffinement irréprochable.",
     statusLabel: "PROCHAINE COHORTE FIXÉE AU 15 SEPTEMBRE 2026",
     segment: "dfp-tourisme",
-    actions: [
-      {
-        label: "S'inscrire pour le 15 Septembre",
-        ctaLabel: "S'inscrire pour le 15 Septembre",
-      },
-      { label: "Réserver ma Place", ctaLabel: "Réserver ma Place" },
-    ] as [
-      { label: string; ctaLabel: string },
-      { label: string; ctaLabel: string },
-    ],
+    ctaLabel: "Voir le programme et les tarifs",
+    inscriptionCtaLabel: "S'inscrire pour le 15 Septembre",
+    details: dfpDetails("15 septembre 2026"),
   },
   {
     id: "dfp-sante",
@@ -89,16 +100,9 @@ const DFP_PROGRAMS = [
       "Maîtrisez le lexique médical, rédigez des dossiers patients, communiquez avec les confrères et interagissez avec rigueur auprès des patients.",
     statusLabel: "PROCHAINE COHORTE FIXÉE AU 1ER OCTOBRE 2026",
     segment: "dfp-sante",
-    actions: [
-      {
-        label: "S'inscrire pour le 1er Octobre",
-        ctaLabel: "S'inscrire pour le 1er Octobre",
-      },
-      { label: "Réserver ma Place", ctaLabel: "Réserver ma Place" },
-    ] as [
-      { label: string; ctaLabel: string },
-      { label: string; ctaLabel: string },
-    ],
+    ctaLabel: "Voir le programme et les tarifs",
+    inscriptionCtaLabel: "S'inscrire pour le 1er Octobre",
+    details: dfpDetails("1er octobre 2026"),
   },
 ];
 
@@ -128,16 +132,9 @@ export default function ExamensPage() {
                 statusDetail="(Sessions en continu / Passage des examens planifié)"
                 statusTone="success"
                 segment="delf-dalf"
-                actions={[
-                  {
-                    label: "S'inscrire à la Préparation DELF/DALF",
-                    ctaLabel: "S'inscrire à la Préparation DELF/DALF",
-                  },
-                  {
-                    label: "Réserver mon Évaluation Initiale",
-                    ctaLabel: "Réserver mon Évaluation Initiale",
-                  },
-                ]}
+                ctaLabel="Voir le programme et les tarifs"
+                inscriptionCtaLabel="S'inscrire à la Préparation DELF/DALF"
+                details={DELF_DALF_DETAILS}
                 className="h-full"
               />
             </Reveal>
@@ -152,16 +149,9 @@ export default function ExamensPage() {
                 statusDetail="(Boost spécial immigration)"
                 statusTone="success"
                 segment="tef-canada"
-                actions={[
-                  {
-                    label: "Maximiser mon Score TEF/TCF",
-                    ctaLabel: "Maximiser mon Score TEF/TCF",
-                  },
-                  {
-                    label: "Réserver ma Session d'Entraînement",
-                    ctaLabel: "Réserver ma Session d'Entraînement",
-                  },
-                ]}
+                ctaLabel="Voir le programme et les tarifs"
+                inscriptionCtaLabel="Maximiser mon Score TEF/TCF"
+                details={TEF_CANADA_DETAILS}
                 className="h-full"
               />
             </Reveal>
@@ -198,7 +188,9 @@ export default function ExamensPage() {
                     statusDetail={program.statusDetail}
                     statusTone="accent"
                     segment={program.segment}
-                    actions={program.actions}
+                    ctaLabel={program.ctaLabel}
+                    inscriptionCtaLabel={program.inscriptionCtaLabel}
+                    details={program.details}
                     className="h-full"
                   />
                 </Reveal>

@@ -1,15 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import Button from "@/components/ui/Button";
-import RegistrationForm from "@/components/RegistrationForm";
-
-interface ActionConfig {
-  /** Text shown on the button itself. */
-  label: string;
-  /** Passed through as the RegistrationForm's own submit-button label. */
-  ctaLabel: string;
-}
+import FormationDetailsModal, {
+  type ProgrammeDetails,
+} from "@/components/examens/FormationDetailsModal";
 
 interface DiplomaCardProps {
   /** Short lines rendered stacked inside the circular badge, e.g. ["DELF", "DALF"]. */
@@ -25,7 +20,12 @@ interface DiplomaCardProps {
   statusDetail?: string;
   statusTone: "success" | "accent";
   segment: string;
-  actions: [ActionConfig, ActionConfig];
+  /** Label of the single card button that opens the details modal, e.g. "Découvrir la formation". */
+  ctaLabel: string;
+  /** Label of the inscription button/submit inside the modal, e.g. "S'inscrire à la Préparation DELF/DALF". */
+  inscriptionCtaLabel: string;
+  /** Programme details (format, vague, tarif...) shown in the modal. */
+  details: ProgrammeDetails;
   id?: string;
   className?: string;
 }
@@ -40,21 +40,13 @@ export default function DiplomaCard({
   statusDetail,
   statusTone,
   segment,
-  actions,
+  ctaLabel,
+  inscriptionCtaLabel,
+  details,
   id,
   className = "",
 }: DiplomaCardProps) {
-  const [formOpen, setFormOpen] = useState(false);
-  const [activeCtaLabel, setActiveCtaLabel] = useState(actions[0].ctaLabel);
-  const formRef = useRef<HTMLDivElement>(null);
-
-  function openForm(ctaLabel: string) {
-    setActiveCtaLabel(ctaLabel);
-    setFormOpen(true);
-    requestAnimationFrame(() => {
-      formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
-  }
+  const [modalOpen, setModalOpen] = useState(false);
 
   // The shared Badge component's "success" tone (emerald green) loses too
   // much contrast on the obsidian background, so status pills are rendered
@@ -117,19 +109,22 @@ export default function DiplomaCard({
         )}
       </div>
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-        <Button variant="dark" onClick={() => openForm(actions[0].ctaLabel)}>
-          {actions[0].label}
-        </Button>
-        <Button variant="ghostDark" onClick={() => openForm(actions[1].ctaLabel)}>
-          {actions[1].label}
+      <div className="mt-6">
+        <Button variant="dark" onClick={() => setModalOpen(true)}>
+          {ctaLabel}
         </Button>
       </div>
 
-      {formOpen && (
-        <div ref={formRef} className="mt-6">
-          <RegistrationForm segment={segment} ctaLabel={activeCtaLabel} tone="dark" />
-        </div>
+      {modalOpen && (
+        <FormationDetailsModal
+          badgeLines={badgeLines}
+          title={title}
+          subtitle={subtitle}
+          details={details}
+          segment={segment}
+          ctaLabel={inscriptionCtaLabel}
+          onClose={() => setModalOpen(false)}
+        />
       )}
     </div>
   );
