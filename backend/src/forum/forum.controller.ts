@@ -1,8 +1,10 @@
 import { Body, Controller, Get, Headers, Param, Post, Put, UseGuards } from "@nestjs/common";
+import { ApiTags } from "@nestjs/swagger";
 import { AdminGuard } from "../common/admin.guard";
 import { ForumService } from "./forum.service";
 import { UpsertForumLiveDto } from "./dto/upsert-forum-live.dto";
 
+@ApiTags("Forum")
 @Controller("forum")
 export class ForumController {
   constructor(private readonly service: ForumService) {}

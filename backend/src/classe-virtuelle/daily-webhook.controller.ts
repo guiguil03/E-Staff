@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import type { RawBodyRequest } from "@nestjs/common";
+import { ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { FormateurGuard } from "../common/formateur.guard";
 import { DailyService } from "./daily.service";
@@ -38,6 +39,7 @@ function verifySignature(rawBody: Buffer, timestamp: string, signature: string, 
   return timingSafeEqual(expectedBuf, receivedBuf);
 }
 
+@ApiTags("Webhooks")
 @Controller()
 export class DailyWebhookController {
   constructor(

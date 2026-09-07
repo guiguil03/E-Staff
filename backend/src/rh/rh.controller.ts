@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { AdminGuard } from '../common/admin.guard';
 import { RhService } from './rh.service';
 import { UpsertReunionDto } from './dto/upsert-reunion.dto';
@@ -23,6 +24,7 @@ import { UpdateEncaissementDto } from './dto/update-encaissement.dto';
 import { UpdatePaiementFormateurDto } from './dto/update-paiement-formateur.dto';
 import { EnvoyerResultatsDto } from './dto/envoyer-resultats.dto';
 
+@ApiTags('RH')
 @Controller('rh')
 @UseGuards(AdminGuard)
 export class RhController {

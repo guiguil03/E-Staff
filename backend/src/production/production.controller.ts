@@ -12,6 +12,7 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { AdminGuard } from "../common/admin.guard";
 import { ProductionService } from "./production.service";
@@ -29,6 +30,7 @@ import { UpdatePerformanceSuperviseurClientDto } from "./dto/update-performance-
 import { UpdatePaiementSuperviseurDto } from "./dto/update-paiement-superviseur.dto";
 import { UpsertChargeInfrastructureDto } from "./dto/upsert-charge-infrastructure.dto";
 
+@ApiTags("Production")
 @Controller("production")
 @UseGuards(AdminGuard)
 export class ProductionController {

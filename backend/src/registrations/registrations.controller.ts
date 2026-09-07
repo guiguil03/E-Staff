@@ -8,11 +8,13 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags } from '@nestjs/swagger';
 import { RegistrationsService } from './registrations.service';
 import { CreateRegistrationDto } from './create-registration.dto';
 
 const MAX_CV_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
 
+@ApiTags('Inscriptions')
 @Controller('registrations')
 export class RegistrationsController {
   constructor(private readonly service: RegistrationsService) {}

@@ -9,10 +9,12 @@ import {
   Put,
   UseGuards,
 } from "@nestjs/common";
+import { ApiTags } from "@nestjs/swagger";
 import { FormateurGuard } from "../common/formateur.guard";
 import { ClasseVirtuelleService } from "./classe-virtuelle.service";
 import { UpsertSeanceDto } from "./dto/upsert-seance.dto";
 
+@ApiTags("Classes virtuelles")
 @Controller()
 export class ClasseVirtuelleController {
   constructor(private readonly service: ClasseVirtuelleService) {}

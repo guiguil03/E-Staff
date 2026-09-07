@@ -1,4 +1,5 @@
 import { Body, Controller, Post, Req, UnauthorizedException } from "@nestjs/common";
+import { ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { LoginDto } from "./dto/login.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
@@ -25,6 +26,7 @@ const TEST_ACCOUNTS: { matricule?: string; password?: string; role: string }[] =
   },
 ];
 
+@ApiTags("Auth")
 @Controller("auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}

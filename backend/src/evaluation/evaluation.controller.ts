@@ -11,6 +11,7 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { EvaluationService } from "./evaluation.service";
 import { CreateCandidatDto } from "./dto/create-candidat.dto";
@@ -36,6 +37,7 @@ import { FormateurGuard } from "../common/formateur.guard";
 const MAX_VIDEO_UPLOAD_BYTES = 300 * 1024 * 1024; // 300 Mo
 const MAX_CV_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
 
+@ApiTags("Évaluation")
 @Controller("evaluation")
 export class EvaluationController {
   constructor(private readonly service: EvaluationService) {}

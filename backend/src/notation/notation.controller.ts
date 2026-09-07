@@ -12,11 +12,13 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { FormateurGuard } from "../common/formateur.guard";
 import { NotationService } from "./notation.service";
 import { GradeNotationDto } from "./dto/grade-notation.dto";
 
+@ApiTags("Notation")
 @Controller()
 export class NotationController {
   constructor(private readonly service: NotationService) {}

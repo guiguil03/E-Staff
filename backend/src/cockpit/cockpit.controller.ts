@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Put, UseGuards } from "@nestjs/common";
+import { ApiTags } from "@nestjs/swagger";
 import { FormateurGuard } from "../common/formateur.guard";
 import { CockpitService } from "./cockpit.service";
 import { SetAbonnementDto } from "./dto/set-abonnement.dto";
@@ -7,6 +8,7 @@ import { SetAbonnementDto } from "./dto/set-abonnement.dto";
 // courbe d'évolution, rapport hebdo) — voir cockpit.service.ts pour les
 // conventions de calcul et ce qui reste volontairement hors périmètre
 // (Alertes Paiements, en attente d'un modèle d'abonnement).
+@ApiTags("Cockpit")
 @Controller("cockpit")
 @UseGuards(FormateurGuard)
 export class CockpitController {
