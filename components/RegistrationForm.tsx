@@ -78,9 +78,9 @@ export default function RegistrationForm({
       >
         <p className="font-display text-lg mb-2">Merci, {firstName || "votre inscription"} est enregistrée.</p>
         <p className={`text-sm ${isDark ? "text-white/70" : "text-muted"}`}>
-          Le test va commencer. Le résultat ne vous sera pas communiqué
-          immédiatement — vous serez recontacté(e) une fois l&apos;évaluation
-          traitée.
+          Veuillez passer le test en bas de la page. Le résultat ne vous
+          sera pas communiqué immédiatement — vous serez recontacté(e) une
+          fois l&apos;évaluation traitée.
         </p>
       </div>
     );
