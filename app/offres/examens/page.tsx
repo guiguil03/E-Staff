@@ -1,40 +1,47 @@
 import type { Metadata } from "next";
 import Reveal from "@/components/Reveal";
 import Hero from "@/components/examens/Hero";
-import DiplomaCard, { type ProgramDetails } from "@/components/examens/DiplomaCard";
+import DiplomaCard from "@/components/examens/DiplomaCard";
 import DfpOverviewCard from "@/components/examens/DfpOverviewCard";
 import CtaBlock from "@/components/examens/CtaBlock";
+import type { ProgrammeDetails } from "@/components/examens/FormationDetailsModal";
+
+const CRENEAUX_STANDARD = ["6h", "7h", "8h", "9h", "10h", "19h", "20h", "21h"];
+
+const DELF_DALF_DETAILS: ProgrammeDetails = {
+  format: "Groupe de 5 apprenants",
+  prochaineVague: "26 septembre 2026",
+  frequence: "1h par jour",
+  duree: "5 semaines",
+  creneaux: CRENEAUX_STANDARD,
+  tarif: "50 €",
+};
+
+const TEF_CANADA_DETAILS: ProgrammeDetails = {
+  format: "Groupe de 5 apprenants",
+  // Pas de date de prochaine vague fixe pour l'instant — inscriptions en
+  // continu (voir statusDetail "Boost spécial immigration" ci-dessous).
+  frequence: "1h par jour",
+  duree: "6 semaines",
+  creneaux: CRENEAUX_STANDARD,
+  tarif: "120 €",
+};
+
+function dfpDetails(prochaineVague: string): ProgrammeDetails {
+  return {
+    format: "Groupe de 5 apprenants",
+    prochaineVague,
+    frequence: "1h par jour",
+    duree: "5 semaines",
+    creneaux: CRENEAUX_STANDARD,
+    tarif: "100 €",
+  };
+}
 
 export const metadata: Metadata = {
   title: "Se préparer aux examens — e-Staf",
   description:
     "Préparations officielles DELF/DALF, TEF Canada/TCF et DFP (Diplômes de Français Professionnel) : décrochez votre certification internationale avec e-Staf.",
-};
-
-// Créneaux et rythme communs aux 3 offres (seuls la durée, le tarif et la
-// prochaine vague changent d'une offre à l'autre) — voir discussion RH du
-// 2026-09-04.
-const COMMON_TIME_SLOTS = ["6h", "7h", "8h", "9h", "10h", "19h", "20h", "21h"];
-const COMMON_FREQUENCY = "1h par jour";
-const COMMON_GROUP_SIZE = 5;
-
-const DELF_DALF_DETAILS: ProgramDetails = {
-  groupSize: COMMON_GROUP_SIZE,
-  nextCohort: "26 septembre 2026",
-  frequency: COMMON_FREQUENCY,
-  duration: "5 semaines",
-  timeSlots: COMMON_TIME_SLOTS,
-  price: "50 €",
-};
-
-const TEF_CANADA_DETAILS: ProgramDetails = {
-  groupSize: COMMON_GROUP_SIZE,
-  // Pas de date de prochaine vague fixe pour l'instant — inscriptions en
-  // continu (voir statusDetail "Boost spécial immigration" ci-dessous).
-  frequency: COMMON_FREQUENCY,
-  duration: "6 semaines",
-  timeSlots: COMMON_TIME_SLOTS,
-  price: "120 €",
 };
 
 const DFP_PROGRAMS = [
@@ -49,7 +56,9 @@ const DFP_PROGRAMS = [
     statusLabel: "PROCHAINE COHORTE FIXÉE AU 10 SEPTEMBRE 2026",
     statusDetail: "(Inscriptions ouvertes pour bloquer la date)",
     segment: "dfp-affaires",
-    nextCohort: "10 septembre 2026",
+    ctaLabel: "Voir le programme et les tarifs",
+    inscriptionCtaLabel: "S'inscrire pour le 10 Septembre",
+    details: dfpDetails("10 septembre 2026"),
   },
   {
     id: "dfp-ri",
@@ -62,7 +71,9 @@ const DFP_PROGRAMS = [
       "Maîtrisez le langage diplomatique, la rédaction de notes de synthèse, les comptes-rendus officiels et la négociation bilatérale ou multilatérale.",
     statusLabel: "PROCHAINE COHORTE FIXÉE AU 1ER OCTOBRE 2026",
     segment: "dfp-ri",
-    nextCohort: "1er octobre 2026",
+    ctaLabel: "Voir le programme et les tarifs",
+    inscriptionCtaLabel: "S'inscrire pour le 1er Octobre",
+    details: dfpDetails("1er octobre 2026"),
   },
   {
     id: "dfp-tourisme",
@@ -75,7 +86,9 @@ const DFP_PROGRAMS = [
       "Gérez la clientèle exigeante, résolvez les litiges, commercialisez des prestations touristiques et pilotez l'accueil avec un raffinement irréprochable.",
     statusLabel: "PROCHAINE COHORTE FIXÉE AU 15 SEPTEMBRE 2026",
     segment: "dfp-tourisme",
-    nextCohort: "15 septembre 2026",
+    ctaLabel: "Voir le programme et les tarifs",
+    inscriptionCtaLabel: "S'inscrire pour le 15 Septembre",
+    details: dfpDetails("15 septembre 2026"),
   },
   {
     id: "dfp-sante",
@@ -88,19 +101,11 @@ const DFP_PROGRAMS = [
       "Maîtrisez le lexique médical, rédigez des dossiers patients, communiquez avec les confrères et interagissez avec rigueur auprès des patients.",
     statusLabel: "PROCHAINE COHORTE FIXÉE AU 1ER OCTOBRE 2026",
     segment: "dfp-sante",
-    nextCohort: "1er octobre 2026",
+    ctaLabel: "Voir le programme et les tarifs",
+    inscriptionCtaLabel: "S'inscrire pour le 1er Octobre",
+    details: dfpDetails("1er octobre 2026"),
   },
-].map((program) => ({
-  ...program,
-  details: {
-    groupSize: COMMON_GROUP_SIZE,
-    nextCohort: program.nextCohort,
-    frequency: COMMON_FREQUENCY,
-    duration: "6 semaines",
-    timeSlots: COMMON_TIME_SLOTS,
-    price: "100 €",
-  } satisfies ProgramDetails,
-}));
+];
 
 export default function ExamensPage() {
   return (
@@ -128,8 +133,9 @@ export default function ExamensPage() {
                 statusDetail="(Sessions en continu / Passage des examens planifié)"
                 statusTone="success"
                 segment="delf-dalf"
+                ctaLabel="Voir le programme et les tarifs"
+                inscriptionCtaLabel="S'inscrire à la Préparation DELF/DALF"
                 details={DELF_DALF_DETAILS}
-                typeFormationValue="delf-dalf"
                 className="h-full"
               />
             </Reveal>
@@ -144,8 +150,9 @@ export default function ExamensPage() {
                 statusDetail="(Boost spécial immigration)"
                 statusTone="success"
                 segment="tef-canada"
+                ctaLabel="Voir le programme et les tarifs"
+                inscriptionCtaLabel="Maximiser mon Score TEF/TCF"
                 details={TEF_CANADA_DETAILS}
-                typeFormationValue="tef-canada"
                 className="h-full"
               />
             </Reveal>
@@ -182,8 +189,9 @@ export default function ExamensPage() {
                     statusDetail={program.statusDetail}
                     statusTone="accent"
                     segment={program.segment}
+                    ctaLabel={program.ctaLabel}
+                    inscriptionCtaLabel={program.inscriptionCtaLabel}
                     details={program.details}
-                    typeFormationValue={program.segment}
                     className="h-full"
                   />
                 </Reveal>
