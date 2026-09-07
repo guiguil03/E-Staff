@@ -1,5 +1,7 @@
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import basicAuth from "express-basic-auth";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
@@ -27,6 +29,30 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     })
   );
+
+  // Doc Swagger désactivée tant que SWAGGER_USER/SWAGGER_PASSWORD ne sont
+  // pas renseignées (voir .env.example) — évite d'exposer publiquement la
+  // liste des routes en production par défaut.
+  const swaggerUser = process.env.SWAGGER_USER;
+  const swaggerPassword = process.env.SWAGGER_PASSWORD;
+  if (swaggerUser && swaggerPassword) {
+    app.use(
+      "/api/docs",
+      basicAuth({
+        challenge: true,
+        users: { [swaggerUser]: swaggerPassword },
+      })
+    );
+
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle("E-Staff API")
+      .setDescription("Documentation de l'API E-Staff")
+      .setVersion("1.0")
+      .addBearerAuth()
+      .build();
+    const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup("api/docs", app, swaggerDocument);
+  }
 
   const port = process.env.PORT ? Number(process.env.PORT) : 3001;
   await app.listen(port);
