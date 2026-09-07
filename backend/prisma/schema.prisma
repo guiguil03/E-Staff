@@ -102,9 +102,24 @@ model Registration {
   cvKey        String?
   cvUploadedAt DateTime?
 
-  // "nouveau" | "contacte" | "converti"
+  // "nouveau" | "contacte" | "contrat_envoye" | "en_attente_paiement" | "converti"
   status    String   @default("nouveau")
   createdAt DateTime @default(now())
+
+  // ---------------------------------------------------------------------
+  // Contrat & paiement — même principe que EvaluationAttempt (PDF généré à
+  // l'envoi, e-mail réel avec lien vers une page publique où l'inscrit
+  // consulte son contrat et transmet lui-même sa référence Mobile Money /
+  // virement — pas de webhook, confirmation manuelle par l'admin qui
+  // vérifie sur son compte, voir RegistrationsService).
+  // ---------------------------------------------------------------------
+  contractDuree      String?
+  contractFrais      String?
+  contractConditions String?
+  contractPdfKey     String?
+  contractSentAt     DateTime?
+  paymentReference   String?
+  paymentConfirmedAt DateTime?
 }
 
 // ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: "/compte/admin/cycle", label: "Cycle complet", icon: "⟲" },
   { href: "/compte/admin/coordonnees", label: "Coordonnées", icon: "☎" },
   { href: "/compte/admin/recrutement", label: "Recrutement", icon: "✦" },
+  { href: "/compte/admin/inscriptions", label: "Inscriptions", icon: "✎" },
   { href: "/compte/admin/academie", label: "Académie & Vagues", icon: "❖" },
   { href: "/compte/admin/production", label: "Production", icon: "▲" },
   { href: "/compte/admin/partenaires", label: "Partenaires", icon: "◎" },
