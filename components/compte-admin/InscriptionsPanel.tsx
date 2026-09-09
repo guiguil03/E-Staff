@@ -6,6 +6,8 @@ import Button from "@/components/ui/Button";
 import { apiGet, apiPostAuthed, ApiError } from "@/lib/api";
 import { adminHeaders } from "./adminHeaders";
 
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+
 interface RegistrationApi {
   id: string;
   segment: string;
@@ -16,6 +18,8 @@ interface RegistrationApi {
   status: string;
   contractSentAt: string | null;
   paymentReference: string | null;
+  paymentReceiptKey: string | null;
+  paymentMethod: string | null;
   paymentConfirmedAt: string | null;
   createdAt: string;
 }
@@ -162,8 +166,23 @@ export default function InscriptionsPanel() {
                       </td>
                       <td className={`py-2 pr-2 font-mono text-xs ${STATUS_TONE[r.status] ?? "text-white/60"}`}>
                         {STATUS_LABELS[r.status] ?? r.status}
+                        {r.status === "converti" && r.paymentMethod && (
+                          <span className="block text-white/40">
+                            {r.paymentMethod === "papi" ? "Payé en ligne (Papi)" : "Confirmé — virement"}
+                          </span>
+                        )}
                         {r.paymentReference && (
                           <span className="block text-white/40">Réf. : {r.paymentReference}</span>
+                        )}
+                        {r.paymentReceiptKey && (
+                          <a
+                            href={`${API_URL}/registrations/contrats/${r.id}/recu`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block text-accent hover:underline"
+                          >
+                            Voir le reçu
+                          </a>
                         )}
                         {errorId === r.id && (
                           <span className="block text-accent">Échec — réessayer.</span>

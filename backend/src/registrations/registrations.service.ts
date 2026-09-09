@@ -4,8 +4,18 @@ import { StorageService } from '../common/storage.service';
 import { EmailService } from '../common/email.service';
 import { CreateRegistrationDto } from './create-registration.dto';
 import { SubmitPaymentReferenceDto } from './submit-payment-reference.dto';
+import { SubmitPaymentPublicDto } from './submit-payment-public.dto';
 import { SendContractDto } from './send-contract.dto';
+import { PapiWebhookDto } from './papi-webhook.dto';
 import { generateRegistrationContractPdf } from './registration-contract-pdf';
+import { PapiService } from './papi.service';
+
+const RECEIPT_MIME_EXTENSIONS: Record<string, string> = {
+  'application/pdf': 'pdf',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
 
 @Injectable()
 export class RegistrationsService {
@@ -13,6 +23,7 @@ export class RegistrationsService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly email: EmailService,
+    private readonly papi: PapiService,
   ) {}
 
   create(dto: CreateRegistrationDto) {
@@ -72,6 +83,7 @@ export class RegistrationsService {
         contractFrais: dto.frais,
         contractConditions: dto.conditions,
         contractPdfKey,
+        paymentAmount: dto.montant ?? null,
         status: 'contrat_envoye',
         contractSentAt: new Date(),
       },
@@ -94,6 +106,16 @@ export class RegistrationsService {
       frais: registration.contractFrais,
       conditions: registration.contractConditions,
       paymentReference: registration.paymentReference,
+      paymentMethod: registration.paymentMethod,
+      hasReceipt: Boolean(registration.paymentReceiptKey),
+      // Coordonnées de paiement affichées telles quelles — texte libre en
+      // variables d'environnement, vide = bloc masqué côté front. Valeurs
+      // à renseigner par l'équipe e-Staf (voir .env.example).
+      paymentInfo: {
+        mobileMoneyMg: process.env.PAYMENT_INFO_MOBILE_MONEY_MG || null,
+        ribLocal: process.env.PAYMENT_INFO_RIB_LOCAL || null,
+        international: process.env.PAYMENT_INFO_INTERNATIONAL || null,
+      },
     };
   }
 
@@ -109,9 +131,24 @@ export class RegistrationsService {
     }
   }
 
+  // Consultation du reçu par l'admin, pour la vérification manuelle (voir
+  // InscriptionsPanel).
+  async getPaymentReceiptStream(id: string) {
+    const registration = await this.getOrThrow(id);
+    if (!registration.paymentReceiptKey) {
+      throw new NotFoundException('Aucun reçu déposé pour cette inscription.');
+    }
+    try {
+      return await this.storage.getObjectStream(registration.paymentReceiptKey);
+    } catch {
+      throw new NotFoundException('Fichier de reçu introuvable.');
+    }
+  }
+
   // Soumission publique — l'inscrit transmet lui-même sa référence Mobile
-  // Money / virement depuis la page contrat.
-  async submitPaymentReferencePublic(id: string, dto: SubmitPaymentReferenceDto) {
+  // Money / virement depuis la page contrat, en acceptant les CGU
+  // (obligatoire, voir /conditions-generales et SubmitPaymentPublicDto).
+  async submitPaymentReferencePublic(id: string, dto: SubmitPaymentPublicDto) {
     const registration = await this.getOrThrow(id);
     if (registration.status !== 'contrat_envoye') {
       throw new BadRequestException(
@@ -120,14 +157,37 @@ export class RegistrationsService {
     }
     return this.prisma.registration.update({
       where: { id },
-      data: { paymentReference: dto.reference, status: 'en_attente_paiement' },
+      data: {
+        paymentReference: dto.reference,
+        cguAcceptedAt: new Date(),
+        status: 'en_attente_paiement',
+      },
+    });
+  }
+
+  // Reçu/capture d'écran de la transaction, optionnel — déposé avec la
+  // référence de paiement (voir controller) pour accélérer la vérification
+  // manuelle par l'admin. Même principe de clé stable que uploadCv.
+  async uploadPaymentReceipt(id: string, file: Express.Multer.File) {
+    await this.getOrThrow(id);
+    const extension = RECEIPT_MIME_EXTENSIONS[file.mimetype] ?? 'bin';
+    const key = `registrations/${id}/recu-paiement.${extension}`;
+    await this.storage.uploadBuffer(key, file.buffer, file.mimetype);
+    return this.prisma.registration.update({
+      where: { id },
+      data: { paymentReceiptKey: key },
     });
   }
 
   // Repli admin — au cas où l'inscrit transmet sa référence par téléphone
-  // plutôt que via la page publique.
+  // plutôt que via la page publique. Pas de CGU ici : consentement obtenu
+  // verbalement par l'admin, hors flux de soumission en ligne.
   async submitPaymentReference(id: string, dto: SubmitPaymentReferenceDto) {
-    return this.submitPaymentReferencePublic(id, dto);
+    const registration = await this.getOrThrow(id);
+    return this.prisma.registration.update({
+      where: { id: registration.id },
+      data: { paymentReference: dto.reference, status: 'en_attente_paiement' },
+    });
   }
 
   // Après vérification manuelle par l'admin sur son compte Mobile Money /
@@ -136,7 +196,77 @@ export class RegistrationsService {
     await this.getOrThrow(id);
     return this.prisma.registration.update({
       where: { id },
-      data: { status: 'converti', paymentConfirmedAt: new Date() },
+      data: { status: 'converti', paymentMethod: 'manuel', paymentConfirmedAt: new Date() },
+    });
+  }
+
+  // Accès public — génère un lien de paiement Papi à la volée (pas de
+  // pré-génération à l'envoi du contrat : validDuration est courte côté
+  // Papi, autant créer le lien au moment où l'inscrit clique réellement).
+  // Une nouvelle référence est générée à chaque appel, Papi exigeant une
+  // référence unique par tentative de paiement.
+  async createPaymentLinkPublic(id: string) {
+    const registration = await this.getOrThrow(id);
+    if (registration.status !== 'contrat_envoye') {
+      throw new BadRequestException('Le paiement en ligne n\'est disponible qu\'après réception du contrat.');
+    }
+    if (!registration.paymentAmount) {
+      throw new BadRequestException('Montant à payer non défini — contactez l\'équipe e-Staf.');
+    }
+
+    const backendUrl = (process.env.BACKEND_PUBLIC_URL ?? '').replace(/\/+$/, '');
+    const frontendUrl = (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
+    const reference = `reg-${id}-${Date.now()}`;
+
+    const link = await this.papi.createPaymentLink({
+      clientName: registration.firstName,
+      amount: registration.paymentAmount,
+      reference,
+      description: `Frais de formation e-Staf — ${registration.typeFormation ?? registration.segment}`,
+      notificationUrl: `${backendUrl}/registrations/contrats/${id}/paiement-webhook`,
+      successUrl: `${frontendUrl}/inscription/contrat/${id}?paiement=succes`,
+      failureUrl: `${frontendUrl}/inscription/contrat/${id}?paiement=echec`,
+      payerEmail: registration.email,
+      payerPhone: registration.phone,
+    });
+
+    if (!link.configured || !link.paymentLink) {
+      throw new BadRequestException(
+        'Paiement en ligne indisponible pour le moment — utilisez le virement bancaire ci-dessous.',
+      );
+    }
+
+    await this.prisma.registration.update({
+      where: { id },
+      data: { papiReference: reference, papiNotificationToken: link.notificationToken },
+    });
+
+    return { paymentLink: link.paymentLink };
+  }
+
+  // Webhook Papi — pas de signature cryptographique fournie par Papi, on
+  // authentifie donc la notification en comparant référence + token à ceux
+  // stockés lors de la création du lien (voir createPaymentLinkPublic).
+  // Idempotent : rejouer la même notification (SUCCESS) après confirmation
+  // ne fait rien de plus.
+  async handlePapiWebhook(id: string, dto: PapiWebhookDto) {
+    const registration = await this.getOrThrow(id);
+
+    const authentic =
+      registration.papiReference &&
+      dto.paymentReference === registration.papiReference &&
+      dto.notificationToken === registration.papiNotificationToken;
+    if (!authentic) {
+      throw new BadRequestException('Notification de paiement non reconnue.');
+    }
+
+    if (dto.paymentStatus !== 'SUCCESS' || registration.status === 'converti') {
+      return registration;
+    }
+
+    return this.prisma.registration.update({
+      where: { id },
+      data: { status: 'converti', paymentMethod: 'papi', paymentConfirmedAt: new Date() },
     });
   }
 

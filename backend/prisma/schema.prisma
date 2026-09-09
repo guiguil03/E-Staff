@@ -109,17 +109,40 @@ model Registration {
   // ---------------------------------------------------------------------
   // Contrat & paiement — même principe que EvaluationAttempt (PDF généré à
   // l'envoi, e-mail réel avec lien vers une page publique où l'inscrit
-  // consulte son contrat et transmet lui-même sa référence Mobile Money /
-  // virement — pas de webhook, confirmation manuelle par l'admin qui
-  // vérifie sur son compte, voir RegistrationsService).
+  // consulte son contrat). Flux déclaratif (2026-09-09) : les coordonnées
+  // de paiement (Mobile Money, RIB) sont affichées sur la page, l'inscrit
+  // transmet lui-même sa référence + accepte les CGU, l'admin confirme
+  // après vérification manuelle sur son compte — voir RegistrationsService.
   // ---------------------------------------------------------------------
   contractDuree      String?
   contractFrais      String?
   contractConditions String?
   contractPdfKey     String?
   contractSentAt     DateTime?
+
+  // Champs pour un paiement en ligne automatisé (Papi) — code backend
+  // conservé mais inutilisé côté produit depuis le retour au flux
+  // déclaratif ci-dessus (2026-09-09) ; réactivable plus tard sans
+  // migration si un vrai compte marchand est ouvert.
+  paymentAmount          Int?
+  papiReference          String?
+  papiNotificationToken  String?
+
+  // "papi" | "manuel" — renseigné à la confirmation, pour distinguer un
+  // paiement auto-confirmé par webhook Papi d'une confirmation manuelle
+  // après virement.
+  paymentMethod String?
+
   paymentReference   String?
+  // Reçu/capture d'écran de la transaction, optionnel — accélère la
+  // vérification manuelle par l'admin (voir InscriptionsPanel).
+  paymentReceiptKey  String?
   paymentConfirmedAt DateTime?
+
+  // Preuve d'acceptation des CGU (article "0% remboursement", assiduité...)
+  // au moment de la soumission de la référence de paiement — voir
+  // /conditions-generales et submitPaymentReferencePublic.
+  cguAcceptedAt DateTime?
 }
 
 // ---------------------------------------------------------------------------

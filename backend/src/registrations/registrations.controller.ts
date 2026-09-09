@@ -16,10 +16,14 @@ import type { Response } from 'express';
 import { RegistrationsService } from './registrations.service';
 import { CreateRegistrationDto } from './create-registration.dto';
 import { SubmitPaymentReferenceDto } from './submit-payment-reference.dto';
+import { SubmitPaymentPublicDto } from './submit-payment-public.dto';
 import { SendContractDto } from './send-contract.dto';
+import { PapiWebhookDto } from './papi-webhook.dto';
 import { AdminGuard } from '../common/admin.guard';
 
 const MAX_CV_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
+const MAX_RECEIPT_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
+const RECEIPT_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 
 @ApiTags('Inscriptions')
 @Controller('registrations')
@@ -75,9 +79,51 @@ export class RegistrationsController {
     stream.pipe(res);
   }
 
+  // Consultation du reçu par l'admin (lien affiché dans InscriptionsPanel).
+  @Get('contrats/:id/recu')
+  async streamPaymentReceipt(@Param('id') id: string, @Res() res: Response) {
+    const { stream, contentType } = await this.service.getPaymentReceiptStream(id);
+    res.set('Content-Type', contentType ?? 'application/octet-stream');
+    stream.pipe(res);
+  }
+
+  // Multipart : reçu optionnel (champ "recu") aux côtés de la référence et
+  // de l'acceptation des CGU — un seul aller-retour pour l'inscrit.
   @Post('contrats/:id/paiement')
-  submitPaymentReferencePublic(@Param('id') id: string, @Body() dto: SubmitPaymentReferenceDto) {
-    return this.service.submitPaymentReferencePublic(id, dto);
+  @UseInterceptors(
+    FileInterceptor('recu', {
+      limits: { fileSize: MAX_RECEIPT_UPLOAD_BYTES },
+      fileFilter: (_req, file, cb) => {
+        cb(null, RECEIPT_MIME_TYPES.includes(file.mimetype));
+      },
+    }),
+  )
+  async submitPaymentReferencePublic(
+    @Param('id') id: string,
+    @Body() dto: SubmitPaymentPublicDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    const registration = await this.service.submitPaymentReferencePublic(id, dto);
+    if (file) {
+      return this.service.uploadPaymentReceipt(id, file);
+    }
+    return registration;
+  }
+
+  // Génère un lien de paiement Papi (Mobile Money/carte) à la volée.
+  // Backend conservé mais inutilisé côté produit depuis le retour au flux
+  // déclaratif (2026-09-09) — voir schema.prisma.
+  @Post('contrats/:id/paiement-en-ligne')
+  createPaymentLinkPublic(@Param('id') id: string) {
+    return this.service.createPaymentLinkPublic(id);
+  }
+
+  // Appelé par Papi (pas par le front) après chaque évolution de statut
+  // de paiement — voir RegistrationsService.handlePapiWebhook pour
+  // l'authentification (pas de header/signature, Papi n'en fournit pas).
+  @Post('contrats/:id/paiement-webhook')
+  handlePapiWebhook(@Param('id') id: string, @Body() dto: PapiWebhookDto) {
+    return this.service.handlePapiWebhook(id, dto);
   }
 
   @Post(':id/cv')
