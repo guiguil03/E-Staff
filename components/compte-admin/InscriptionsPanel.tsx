@@ -114,8 +114,10 @@ export default function InscriptionsPanel() {
     );
   };
 
-  const confirmPayment = (id: string) =>
-    runAction(id, () => apiPostAuthed(`/registrations/${id}/confirm-payment`, {}, adminHeaders()));
+  const confirmPayment = (id: string, firstName: string) => {
+    if (!window.confirm(`Confirmer le paiement de ${firstName} ? Cette action ne peut pas être annulée depuis cet écran.`)) return;
+    return runAction(id, () => apiPostAuthed(`/registrations/${id}/confirm-payment`, {}, adminHeaders()));
+  };
 
   return (
     <Reveal>
@@ -262,7 +264,7 @@ export default function InscriptionsPanel() {
                           <Button
                             variant="dark"
                             disabled={isPending}
-                            onClick={() => confirmPayment(r.id)}
+                            onClick={() => confirmPayment(r.id, r.firstName)}
                           >
                             {isPending ? "..." : "Paiement reçu"}
                           </Button>

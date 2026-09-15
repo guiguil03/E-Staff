@@ -116,7 +116,8 @@ export default function BudgetDecaissementPanel() {
 
   useEffect(refresh, []);
 
-  async function payer(poste: string, periode: string) {
+  async function payer(poste: string, label: string, montant: number, periode: string) {
+    if (!window.confirm(`Marquer le poste "${label}" (${fmtMontant(montant)}) comme payé ? Cette action est irréversible.`)) return;
     setPayingPoste(poste);
     try {
       await apiPostAuthed(`/production/decaissements/${poste}/${periode}/payer`, {}, adminHeaders());
@@ -126,7 +127,8 @@ export default function BudgetDecaissementPanel() {
     }
   }
 
-  async function payerTout(periode: string) {
+  async function payerTout(periode: string, nbEnAttente: number) {
+    if (!window.confirm(`Marquer les ${nbEnAttente} poste${nbEnAttente > 1 ? "s" : ""} en attente comme payés pour ${fmtPeriode(periode)} ? Cette action est irréversible.`)) return;
     setPayingTout(true);
     try {
       await apiPostAuthed(`/production/decaissements/payer-tout?periode=${periode}`, {}, adminHeaders());
@@ -181,7 +183,7 @@ export default function BudgetDecaissementPanel() {
                   </p>
                 </div>
                 <button
-                  onClick={() => payerTout(tableau.periode)}
+                  onClick={() => payerTout(tableau.periode, tableau.statutOperations.enAttente)}
                   disabled={payingTout || tableau.statutOperations.enAttente === 0}
                   className="rounded border border-success/40 px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest text-success hover:bg-success/10 disabled:opacity-50"
                 >
@@ -210,7 +212,7 @@ export default function BudgetDecaissementPanel() {
                         poste={p}
                         periode={tableau.periode}
                         paying={payingPoste === p.poste}
-                        onPayer={() => payer(p.poste, tableau.periode)}
+                        onPayer={() => payer(p.poste, p.label, p.montantReel, tableau.periode)}
                         onSaved={refresh}
                         onOpenDetails={POSTES_AVEC_DETAILS[p.poste] ?? null}
                         setDetailModal={setDetailModal}

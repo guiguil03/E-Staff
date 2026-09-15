@@ -130,7 +130,13 @@ export default function DetailCommissionsApporteursModal({ onClose }: { onClose:
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  async function payerDemarrage(id: string) {
+  async function payerDemarrage(id: string, clientNom: string, montant: number) {
+    if (
+      !window.confirm(
+        `Confirmer le paiement de la commission de démarrage (${fmtMontant(montant)}) pour ${clientNom} ? Cette action est irréversible.`
+      )
+    )
+      return;
     setPayingId(id);
     try {
       await apiPostAuthed(`/production/commissions-demarrage/${id}/payer`, {}, adminHeaders());
@@ -222,7 +228,7 @@ export default function DetailCommissionsApporteursModal({ onClose }: { onClose:
                             </span>
                           ) : (
                             <button
-                              onClick={() => payerDemarrage(d.id)}
+                              onClick={() => payerDemarrage(d.id, d.clientNom, d.montant)}
                               disabled={payingId === d.id}
                               className="rounded border border-accent/40 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-accent hover:bg-accent/10 disabled:opacity-50"
                             >
