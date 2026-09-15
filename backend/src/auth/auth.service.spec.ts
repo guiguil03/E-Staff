@@ -1,8 +1,9 @@
 import * as bcrypt from "bcryptjs";
-import { BadRequestException, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../common/email.service";
+import { consumeViewAsToken } from "../common/view-as-token";
 
 // Petit helper : un Apprenant "réel" avec mot de passe déjà haché, pour
 // exercer bcrypt.compare/hash comme en prod plutôt que de mocker bcrypt.
@@ -181,6 +182,25 @@ describe("AuthService", () => {
       expect(data.resetToken).toBeNull();
       expect(data.resetTokenExpiresAt).toBeNull();
       expect(await bcrypt.compare("nouveaunouveau", data.password)).toBe(true);
+    });
+  });
+
+  describe("createApprenantViewAsToken", () => {
+    it("rejette un matricule introuvable", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+      await expect(service.createApprenantViewAsToken("inconnu")).rejects.toThrow(
+        NotFoundException
+      );
+    });
+
+    it("émet un jeton consommable une seule fois, résolvant vers le bon matricule", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(await makeApprenant());
+
+      const { token } = await service.createApprenantViewAsToken("ETF-2026-0001");
+
+      expect(consumeViewAsToken(token)).toEqual({ matricule: "ETF-2026-0001", role: "apprenant" });
+      // Usage unique : la deuxième consommation échoue.
+      expect(consumeViewAsToken(token)).toBeNull();
     });
   });
 });

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
-import { apiGet, apiPostAuthed, apiPut } from "@/lib/api";
+import { apiDelete, apiGet, apiPostAuthed, apiPut } from "@/lib/api";
 import { adminHeaders } from "./adminHeaders";
 
 interface LigneTypeCours {
@@ -20,6 +20,7 @@ interface LigneTendance {
 
 interface Encaissement {
   id: string;
+  apprenantId: string;
   apprenantNom: string;
   typeCours: string | null;
   montant: number;
@@ -84,8 +85,9 @@ export default function EncaissementsFormationPanel() {
   const [form, setForm] = useState(emptyForm);
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editMontant, setEditMontant] = useState("");
+  const [editForm, setEditForm] = useState(emptyForm);
   const [editStatus, setEditStatus] = useState<"idle" | "saving" | "error">("idle");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function refresh() {
     apiGet<LigneTypeCours[]>("/rh/encaissements-formation", adminHeaders())
@@ -130,30 +132,60 @@ export default function EncaissementsFormationPanel() {
     }
   }
 
-  function startEditMontant(e: Encaissement) {
+  function startEdit(e: Encaissement) {
     setEditingId(e.id);
-    setEditMontant(String(e.montant));
+    setEditForm({
+      apprenantId: e.apprenantId,
+      montant: String(e.montant),
+      jour: e.jour.slice(0, 10),
+      moyenPaiement: e.moyenPaiement ?? "",
+    });
     setEditStatus("idle");
   }
 
-  function cancelEditMontant() {
+  function cancelEdit() {
     setEditingId(null);
-    setEditMontant("");
+    setEditForm(emptyForm);
     setEditStatus("idle");
   }
 
-  async function saveMontant(id: string) {
-    const montant = Number(editMontant);
-    if (!editMontant || Number.isNaN(montant)) return;
+  async function saveEdit(id: string) {
+    const montant = Number(editForm.montant);
+    if (!editForm.apprenantId || !editForm.jour || !editForm.montant || Number.isNaN(montant)) return;
     setEditStatus("saving");
     try {
-      await apiPut(`/rh/encaissements/${id}`, { montant }, adminHeaders());
+      await apiPut(
+        `/rh/encaissements/${id}`,
+        {
+          apprenantId: editForm.apprenantId,
+          montant,
+          jour: editForm.jour,
+          moyenPaiement: editForm.moyenPaiement || undefined,
+        },
+        adminHeaders()
+      );
       setEditingId(null);
-      setEditMontant("");
+      setEditForm(emptyForm);
       setEditStatus("idle");
       refresh();
     } catch {
       setEditStatus("error");
+    }
+  }
+
+  async function removeEncaissement(e: Encaissement) {
+    if (
+      !window.confirm(
+        `Supprimer l'encaissement de ${fmtMontant(e.montant)} pour ${e.apprenantNom} du ${fmtJour(e.jour)} ? Cette action est irréversible.`
+      )
+    )
+      return;
+    setDeletingId(e.id);
+    try {
+      await apiDelete(`/rh/encaissements/${e.id}`, adminHeaders());
+      refresh();
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -357,55 +389,117 @@ export default function EncaissementsFormationPanel() {
               {historique.map((e) => (
                 <div
                   key={e.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded border border-white/10 bg-obsidian px-4 py-3"
+                  className="rounded border border-white/10 bg-obsidian px-4 py-3"
                 >
-                  <div>
-                    <p className="font-sans text-sm text-white">
-                      {e.apprenantNom} — {e.typeCours ?? "—"}
-                    </p>
-                    <p className="font-mono text-[11px] text-white/40">
-                      {fmtJour(e.jour)}
-                      {e.moyenPaiement && ` · ${e.moyenPaiement}`}
-                    </p>
-                  </div>
                   {editingId === e.id ? (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        autoFocus
-                        value={editMontant}
-                        onChange={(ev) => setEditMontant(ev.target.value)}
-                        onKeyDown={(ev) => {
-                          if (ev.key === "Enter") saveMontant(e.id);
-                          if (ev.key === "Escape") cancelEditMontant();
-                        }}
-                        className="w-32 rounded border border-white/20 bg-obsidianCard px-2 py-1 font-mono text-sm text-white outline-none focus:border-accent"
-                      />
-                      <button
-                        onClick={() => saveMontant(e.id)}
-                        disabled={editStatus === "saving"}
-                        className="font-mono text-[11px] uppercase tracking-widest text-accent hover:underline"
-                      >
-                        {editStatus === "saving" ? "..." : "OK"}
-                      </button>
-                      <button
-                        onClick={cancelEditMontant}
-                        className="font-mono text-[11px] uppercase tracking-widest text-white/40 hover:underline"
-                      >
-                        Annuler
-                      </button>
-                      {editStatus === "error" && (
-                        <span className="font-mono text-[11px] text-accent">Erreur</span>
-                      )}
+                    <div>
+                      <div className="grid gap-3 sm:grid-cols-4">
+                        <div>
+                          <label className="block font-mono text-[10px] uppercase tracking-widest text-white/50">
+                            Apprenant
+                          </label>
+                          <select
+                            value={editForm.apprenantId}
+                            onChange={(ev) =>
+                              setEditForm((f) => ({ ...f, apprenantId: ev.target.value }))
+                            }
+                            className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-2 py-1.5 font-sans text-sm text-white outline-none focus:border-accent"
+                          >
+                            {apprenants.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.nomComplet} ({a.typeCours})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block font-mono text-[10px] uppercase tracking-widest text-white/50">
+                            Montant
+                          </label>
+                          <input
+                            type="number"
+                            value={editForm.montant}
+                            onChange={(ev) => setEditForm((f) => ({ ...f, montant: ev.target.value }))}
+                            className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-2 py-1.5 font-mono text-sm text-white outline-none focus:border-accent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-mono text-[10px] uppercase tracking-widest text-white/50">
+                            Jour
+                          </label>
+                          <input
+                            type="date"
+                            value={editForm.jour}
+                            onChange={(ev) => setEditForm((f) => ({ ...f, jour: ev.target.value }))}
+                            className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-2 py-1.5 font-sans text-sm text-white outline-none focus:border-accent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-mono text-[10px] uppercase tracking-widest text-white/50">
+                            Moyen de paiement
+                          </label>
+                          <select
+                            value={editForm.moyenPaiement}
+                            onChange={(ev) =>
+                              setEditForm((f) => ({ ...f, moyenPaiement: ev.target.value }))
+                            }
+                            className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-2 py-1.5 font-sans text-sm text-white outline-none focus:border-accent"
+                          >
+                            <option value="">—</option>
+                            <option value="Mobile Money">Mobile Money</option>
+                            <option value="Virement bancaire">Virement bancaire</option>
+                            <option value="Espèces">Espèces</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center gap-3">
+                        <button
+                          onClick={() => saveEdit(e.id)}
+                          disabled={editStatus === "saving"}
+                          className="font-mono text-[11px] uppercase tracking-widest text-accent hover:underline disabled:opacity-50"
+                        >
+                          {editStatus === "saving" ? "Enregistrement..." : "Enregistrer"}
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="font-mono text-[11px] uppercase tracking-widest text-white/40 hover:underline"
+                        >
+                          Annuler
+                        </button>
+                        {editStatus === "error" && (
+                          <span className="font-mono text-[11px] text-accent">Erreur — vérifiez les champs.</span>
+                        )}
+                      </div>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => startEditMontant(e)}
-                      className="font-mono text-sm text-accent hover:underline"
-                      title="Modifier le montant"
-                    >
-                      {fmtMontant(e.montant)}
-                    </button>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-sans text-sm text-white">
+                          {e.apprenantNom} — {e.typeCours ?? "—"}
+                        </p>
+                        <p className="font-mono text-[11px] text-white/40">
+                          {fmtJour(e.jour)}
+                          {e.moyenPaiement && ` · ${e.moyenPaiement}`}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => startEdit(e)}
+                          className="font-mono text-sm text-accent hover:underline"
+                          title="Modifier l'encaissement"
+                        >
+                          {fmtMontant(e.montant)}
+                        </button>
+                        <button
+                          onClick={() => removeEncaissement(e)}
+                          disabled={deletingId === e.id}
+                          className="font-mono text-[11px] uppercase tracking-widest text-white/40 hover:text-accent disabled:opacity-50"
+                          title="Supprimer l'encaissement"
+                        >
+                          {deletingId === e.id ? "..." : "Supprimer"}
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
               ))}

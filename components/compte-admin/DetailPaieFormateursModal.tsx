@@ -73,6 +73,14 @@ export default function DetailPaieFormateursModal({
 
   async function payerTous() {
     if (typeof data !== "object") return;
+    const enAttente = data.lignes.filter((l) => l.statut !== "paye");
+    const totalAPayer = round2(enAttente.reduce((sum, l) => sum + l.netAPayer, 0));
+    if (
+      !window.confirm(
+        `Confirmer le paiement de ${enAttente.length} formateur(s) pour un total de ${fmtMontant(totalAPayer)} ? Cette action est irréversible.`
+      )
+    )
+      return;
     setPayingTout(true);
     try {
       await apiPostAuthed(
@@ -240,6 +248,12 @@ function LigneRow({
   }
 
   async function payer() {
+    if (
+      !window.confirm(
+        `Confirmer le paiement de ${fmtMontant(ligne.netAPayer)} à ${ligne.formateurNom} ? Cette action est irréversible.`
+      )
+    )
+      return;
     setPaying(true);
     try {
       await apiPostAuthed(`/rh/paie-formateurs/${ligne.formateurId}/${periode}/payer`, {}, adminHeaders());

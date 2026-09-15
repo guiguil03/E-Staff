@@ -357,6 +357,24 @@ describe("EvaluationService", () => {
       expect(createArgs.data.matricule).toBe("ETF-2026-0008");
     });
 
+    it("recopie l'agent d'acquisition du candidat sur le nouvel apprenant (suivi commissions RH)", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({
+          status: "en_attente_paiement",
+          candidat: { ...CANDIDAT, agentAcquisitionId: "agent-1" },
+        })
+      );
+      prisma.groupe.findUnique.mockResolvedValue({ id: "g-1", label: "Groupe A" });
+      prisma.apprenant.findMany.mockResolvedValue([]);
+      prisma.apprenant.create.mockResolvedValue({ id: "app-new" });
+      prisma.evaluationAttempt.update.mockResolvedValue({});
+
+      await service.confirmPayment("attempt-1", { groupeId: "g-1" });
+
+      const createArgs = prisma.apprenant.create.mock.calls[0][0];
+      expect(createArgs.data.agentAcquisitionId).toBe("agent-1");
+    });
+
     it("hache le mot de passe temporaire, met la tentative à jour et envoie les identifiants en clair par e-mail (une seule fois)", async () => {
       prisma.evaluationAttempt.findUnique.mockResolvedValue(
         baseAttempt({ status: "en_attente_paiement" })

@@ -5,9 +5,7 @@ interface MonDossierProps {
   dateInscription: string; // ISO
   seancesRestantes: number;
   seancesTotal: number;
-  echeanceRenouvellement: string; // ISO
-  quotaAnnulations: number;
-  annulationsUtilisees: number;
+  echeanceRenouvellement: string | null; // ISO — non défini tant que la RH ne l'a pas saisie
 }
 
 function formatDateFr(iso: string) {
@@ -24,6 +22,8 @@ const STATUT_STYLES = {
   // Pas de rouge dans la palette e-Staf — le teal fait office de second
   // signal d'alerte, comme ailleurs dans l'app (cf. Cockpit Formateur).
   rouge: { dot: "bg-teal", text: "text-teal", border: "border-teal/40" },
+  // Échéance pas encore fixée par la RH — état neutre, ni "à jour" ni "en retard".
+  indefini: { dot: "bg-white/40", text: "text-white/50", border: "border-white/20" },
 } as const;
 
 // "Mon Casier" — dossier administratif de l'apprenant (contrat, dates,
@@ -37,24 +37,30 @@ export default function MonDossier({
   seancesRestantes,
   seancesTotal,
   echeanceRenouvellement,
-  quotaAnnulations,
-  annulationsUtilisees,
 }: MonDossierProps) {
-  const daysUntilEcheance = Math.ceil(
-    (new Date(echeanceRenouvellement).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-  );
+  const daysUntilEcheance = echeanceRenouvellement
+    ? Math.ceil((new Date(echeanceRenouvellement).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null;
   const statutKey =
-    daysUntilEcheance < 0 ? "rouge" : daysUntilEcheance <= 5 ? "orange" : "vert";
+    daysUntilEcheance === null
+      ? null
+      : daysUntilEcheance < 0
+        ? "rouge"
+        : daysUntilEcheance <= 5
+          ? "orange"
+          : "vert";
   const statutLabel =
     statutKey === "rouge"
       ? "Paiement en retard"
       : statutKey === "orange"
         ? `Échéance proche (dans ${daysUntilEcheance} j)`
-        : "À jour";
-  const statutStyle = STATUT_STYLES[statutKey];
+        : statutKey === "vert"
+          ? "À jour"
+          : "Non défini";
+  const statutStyle = statutKey ? STATUT_STYLES[statutKey] : STATUT_STYLES.indefini;
 
   const seancesFaibles = seancesRestantes <= 2;
-  const echeanceProche = daysUntilEcheance >= 0 && daysUntilEcheance <= 5;
+  const echeanceProche = daysUntilEcheance !== null && daysUntilEcheance >= 0 && daysUntilEcheance <= 5;
 
   return (
     <Reveal>
@@ -65,8 +71,9 @@ export default function MonDossier({
           <div className="mt-3 rounded border border-accent bg-accent/10 px-3 py-2 font-sans text-xs text-accent">
             {seancesFaibles &&
               `Il ne vous reste que ${seancesRestantes} séance${seancesRestantes > 1 ? "s" : ""}. `}
+            {/* echeanceProche implique echeanceRenouvellement non nul (même garde). */}
             {echeanceProche &&
-              `Pensez à renouveler vos frais avant le ${formatDateFr(echeanceRenouvellement)}.`}
+              `Pensez à renouveler vos frais avant le ${formatDateFr(echeanceRenouvellement!)}.`}
           </div>
         )}
 
@@ -95,7 +102,9 @@ export default function MonDossier({
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
             <div
               className="h-full rounded-full bg-accent"
-              style={{ width: `${(seancesRestantes / seancesTotal) * 100}%` }}
+              style={{
+                width: `${seancesTotal > 0 ? (seancesRestantes / seancesTotal) * 100 : 0}%`,
+              }}
             />
           </div>
         </div>
@@ -111,7 +120,9 @@ export default function MonDossier({
             </span>
           </div>
           <p className="mt-1.5 font-sans text-xs text-white/50">
-            À renouveler avant le {formatDateFr(echeanceRenouvellement)}
+            {echeanceRenouvellement
+              ? `À renouveler avant le ${formatDateFr(echeanceRenouvellement)}`
+              : "Échéance pas encore fixée par la RH."}
           </p>
           <Button variant="dark" className="mt-3 w-full justify-center" disabled>
             Procéder au paiement / Renouveler
@@ -128,9 +139,8 @@ export default function MonDossier({
               Voir le détail
             </Button>
           </div>
-          <p className="mt-2 font-sans text-xs text-white/50">
-            Annulations : {annulationsUtilisees}/{quotaAnnulations} utilisées sans perte de
-            séance.
+          <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-white/30">
+            Bientôt disponible
           </p>
         </div>
       </div>

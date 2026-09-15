@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 interface CountdownTimerProps {
-  hoursFromNow: number;
+  targetIso: string;
 }
 
 function splitDuration(ms: number) {
@@ -14,12 +14,11 @@ function splitDuration(ms: number) {
   return { hours, minutes, seconds };
 }
 
-// Compte à rebours vivant vers la prochaine séance — la cible est calculée
-// une fois au montage (now + hoursFromNow) plutôt que figée dans les
-// données d'exemple, pour que la démo reste crédible quel que soit le
-// moment où on la consulte.
-export default function CountdownTimer({ hoursFromNow }: CountdownTimerProps) {
-  const [target] = useState(() => Date.now() + hoursFromNow * 60 * 60 * 1000);
+// Compte à rebours vivant vers la prochaine séance réellement programmée
+// (Seance.startAt) — recalculé à chaque montage à partir de la vraie date
+// cible, pas d'un décalage figé.
+export default function CountdownTimer({ targetIso }: CountdownTimerProps) {
+  const [target] = useState(() => new Date(targetIso).getTime());
   const [remaining, setRemaining] = useState(() => target - Date.now());
 
   useEffect(() => {

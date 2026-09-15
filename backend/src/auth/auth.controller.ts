@@ -1,12 +1,23 @@
-import { Body, Controller, Post, Req, UnauthorizedException } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Param,
+  Post,
+  Req,
+  UnauthorizedException,
+  UseGuards,
+} from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { LoginDto } from "./dto/login.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { ConsumeViewAsTokenDto } from "./dto/consume-view-as-token.dto";
 import { AuthService } from "./auth.service";
+import { AdminGuard } from "../common/admin.guard";
 import { recordFailure, recordSuccess, remainingLockoutSeconds } from "../common/login-rate-limit";
+import { consumeViewAsToken } from "../common/view-as-token";
 
 // Login générique — stopgap pour Formateur/Admin (un identifiant de test
 // partagé par rôle, petit nombre de personnes internes connues — voir
@@ -73,5 +84,24 @@ export class AuthController {
   @Post("reset-password")
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  // "Se connecter en tant que" (RH -> compte apprenant) — voir
+  // AuthService.createApprenantViewAsToken. Génération réservée à l'admin ;
+  // la consommation ci-dessous reste publique (c'est le nouvel onglet, sans
+  // session admin, qui l'appelle).
+  @UseGuards(AdminGuard)
+  @Post("view-as/:matricule")
+  createViewAs(@Param("matricule") matricule: string) {
+    return this.authService.createApprenantViewAsToken(matricule);
+  }
+
+  @Post("view-as/consume")
+  consumeViewAs(@Body() dto: ConsumeViewAsTokenDto) {
+    const result = consumeViewAsToken(dto.token);
+    if (!result) {
+      throw new UnauthorizedException("Lien de connexion invalide ou expiré.");
+    }
+    return result;
   }
 }

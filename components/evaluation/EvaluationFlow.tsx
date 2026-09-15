@@ -93,7 +93,12 @@ type Step =
   | "essay"
   | "confirmation";
 
-const initialCoordonnees = { firstName: "", lastName: "", email: "", phone: "" };
+const initialCoordonnees = { firstName: "", lastName: "", email: "", phone: "", agentAcquisitionId: "" };
+
+interface AgentAcquisition {
+  id: string;
+  nom: string;
+}
 
 // Architecture officielle du test (100 pts, 5 blocs de 20 pts) — les 5 blocs
 // sont désormais tous construits (Bloc 2 ajouté le 2026-08-25).
@@ -211,6 +216,7 @@ export default function EvaluationFlow() {
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [agents, setAgents] = useState<AgentAcquisition[]>([]);
 
   const [questions, setQuestions] = useState<{
     lexique: QcmQuestion[];
@@ -264,6 +270,11 @@ export default function EvaluationFlow() {
     apiGet<PartieOuverteContent>("/evaluation/partie-ouverte")
       .then(setPartieOuverteContent)
       .catch(() => setError("Impossible de charger la partie 2 du Bloc 1."));
+    // Facultatif — un échec ici ne doit pas bloquer le test, juste priver le
+    // candidat du menu "recommandé par" (voir AgentAcquisition côté RH).
+    apiGet<AgentAcquisition[]>("/evaluation/agents-acquisition")
+      .then(setAgents)
+      .catch(() => {});
   }, []);
 
   async function handleCoordonneesSubmit(e: FormEvent) {
@@ -272,7 +283,7 @@ export default function EvaluationFlow() {
     try {
       const res = await apiPost<{ candidatId: string; attemptId: string }>(
         "/evaluation/candidats",
-        coordonnees
+        { ...coordonnees, agentAcquisitionId: coordonnees.agentAcquisitionId || undefined }
       );
       if (cvFile) {
         // Dépôt optionnel — un échec ici ne doit pas bloquer le candidat qui
@@ -473,6 +484,27 @@ export default function EvaluationFlow() {
               setCoordonnees((v) => ({ ...v, phone: e.target.value }))
             }
           />
+          {agents.length > 0 && (
+            <div className="sm:col-span-2">
+              <label className="block font-sans text-xs text-white/60">
+                Recommandé par (facultatif)
+              </label>
+              <select
+                className="mt-1 w-full rounded border border-white/20 bg-obsidian px-4 py-2 text-sm text-white outline-none focus:border-accent"
+                value={coordonnees.agentAcquisitionId}
+                onChange={(e) =>
+                  setCoordonnees((v) => ({ ...v, agentAcquisitionId: e.target.value }))
+                }
+              >
+                <option value="">— Personne / je ne sais pas —</option>
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.nom}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="sm:col-span-2">
             <label className="block font-sans text-xs text-white/60">
               CV (PDF, facultatif)

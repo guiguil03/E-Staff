@@ -86,6 +86,11 @@ export class EvaluationController {
     return this.service.getPartieOuverteContent();
   }
 
+  @Get("agents-acquisition")
+  listAgentsAcquisition() {
+    return this.service.listAgentsAcquisition();
+  }
+
   @Post("candidats")
   createCandidat(@Body() dto: CreateCandidatDto) {
     return this.service.createCandidat(dto);

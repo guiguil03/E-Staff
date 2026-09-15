@@ -4,16 +4,14 @@ import type { CompetencyScore } from "./exampleData";
 interface ProfileHeaderProps {
   firstName: string;
   role: string;
-  diagnosticGlobal: number;
-  competencies: CompetencyScore[];
-  tauxReussiteGlobal: number;
+  diagnostic: { global: number; competencies: CompetencyScore[] } | null;
+  tauxReussiteGlobal: number | null;
 }
 
 export default function ProfileHeader({
   firstName,
   role,
-  diagnosticGlobal,
-  competencies,
+  diagnostic,
   tauxReussiteGlobal,
 }: ProfileHeaderProps) {
   return (
@@ -43,38 +41,40 @@ export default function ProfileHeader({
               Taux de réussite global
             </p>
             <p className="font-display text-2xl font-bold text-accent">
-              {tauxReussiteGlobal}%
+              {tauxReussiteGlobal !== null ? `${tauxReussiteGlobal}%` : "—"}
             </p>
           </div>
         </div>
 
-        <div className="mt-6 border-t border-white/10 pt-5">
-          <div className="flex items-baseline justify-between">
-            <p className="font-sans text-sm font-semibold text-white">
-              Diagnostic de départ
-            </p>
-            <p className="font-mono text-sm text-white/60">
-              Global {diagnosticGlobal}/100
-            </p>
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-            {competencies.map((c) => (
-              <div key={c.key} className="rounded border border-white/10 bg-obsidian p-3">
-                <p className="font-mono text-xs text-white/50">{c.label}</p>
-                <p className="mt-1 font-display text-lg font-bold text-white">
-                  {c.score}
-                  <span className="text-xs font-normal text-white/40">/20</span>
-                </p>
-                <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="h-full rounded-full bg-accent"
-                    style={{ width: `${(c.score / 20) * 100}%` }}
-                  />
+        {diagnostic && (
+          <div className="mt-6 border-t border-white/10 pt-5">
+            <div className="flex items-baseline justify-between">
+              <p className="font-sans text-sm font-semibold text-white">
+                Diagnostic de départ
+              </p>
+              <p className="font-mono text-sm text-white/60">
+                Global {diagnostic.global}/100
+              </p>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
+              {diagnostic.competencies.map((c) => (
+                <div key={c.key} className="rounded border border-white/10 bg-obsidian p-3">
+                  <p className="font-mono text-xs text-white/50">{c.label}</p>
+                  <p className="mt-1 font-display text-lg font-bold text-white">
+                    {c.score}
+                    <span className="text-xs font-normal text-white/40">/20</span>
+                  </p>
+                  <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className="h-full rounded-full bg-accent"
+                      style={{ width: `${(c.score / 20) * 100}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </Reveal>
   );

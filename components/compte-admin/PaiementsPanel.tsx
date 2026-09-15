@@ -63,6 +63,14 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
 
   async function confirm() {
     if (!openId || !groupeId) return;
+    const payment = Array.isArray(payments) ? payments.find((p) => p.id === openId) : undefined;
+    const nom = payment ? `${payment.candidat.firstName} ${payment.candidat.lastName}` : "ce candidat";
+    if (
+      !window.confirm(
+        `Confirmer le paiement de ${nom} ? Cette action crée immédiatement son compte apprenant et lui envoie ses identifiants par e-mail — elle ne peut pas être annulée depuis cet écran. Vérifiez bien le groupe sélectionné avant de continuer.`
+      )
+    )
+      return;
     setStatus("saving");
     try {
       await apiPostAuthed(
