@@ -20,6 +20,39 @@ function parseGridData(raw: string | null): Record<string, unknown> | null {
   }
 }
 
+// Compétences suivies séance après séance pendant la formation (voir
+// components/compte-formateur/gradingGrids.ts, COMPETENCY_DEFS) — dupliqué
+// ici (les clés seulement, pas les libellés, laissés au frontend) plutôt que
+// partagé entre back et front, même convention que le reste du projet.
+const COMPETENCY_KEYS = [
+  "comprehension_orale",
+  "expression_orale",
+  "comprehension_ecrite",
+  "expression_ecrite",
+  "posture_eloquence",
+];
+
+// Retard toléré avant de compter une présence en retard sur le tableau de
+// bord apprenant — au-delà, ça compte comme un retard, pas juste une entrée
+// tardive dans la visio.
+const RETARD_TOLERANCE_MINUTES = 10;
+
+// Étiquette de semaine ISO ("AAAA-Wss") — même formule que
+// RhService.isoWeekLabel / ProductionService.isoWeekLabel, dupliquée ici par
+// convention du projet plutôt que partagée entre modules.
+function isoWeekLabel(d: Date): string {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 @Injectable()
 export class NotationService {
   constructor(
@@ -150,6 +183,168 @@ export class NotationService {
       startAt: s.startAt,
       notations: s.notations.map((n) => this.serialize(n)),
     }));
+  }
+
+  // Page d'accueil du Compte Apprenant — consolide Apprenant, EvaluationAttempt
+  // (diagnostic initial du test d'admission), Seance/Presence (assiduité,
+  // prochaine séance) et Notation (évaluation cumulée, alerte pédagogique,
+  // commentaire du formateur) en un seul appel. Même principe de façade que
+  // RhService.getApprenantCasier côté RH, mais self-service (pas de garde,
+  // matricule comme identifiant, comme le reste de ce contrôleur) : chaque
+  // valeur reflète une vraie donnée ou reste null/vide, jamais un chiffre
+  // inventé pour combler un module pas encore construit (quotas
+  // d'annulation, contrat en ligne... — voir MonDossier.tsx).
+  async getApprenantDashboard(matricule: string) {
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { matricule },
+      include: {
+        groupe: { include: { formateur: true } },
+        evaluationAttempt: true,
+      },
+    });
+    if (!apprenant) throw new NotFoundException(`Apprenant ${matricule} introuvable.`);
+
+    const [seances, presences, notationsNotees] = await Promise.all([
+      this.prisma.seance.findMany({
+        where: { groupeId: apprenant.groupeId },
+        orderBy: { numero: "asc" },
+      }),
+      this.prisma.presence.findMany({ where: { apprenantId: apprenant.id } }),
+      this.prisma.notation.findMany({
+        where: { apprenantId: apprenant.id, scoreOn20: { not: null } },
+      }),
+    ]);
+
+    const now = new Date();
+
+    // ---- Séances & prochaine séance ----------------------------------
+    const seancesPassees = seances.filter((s) => s.startAt !== null && s.startAt <= now);
+    const prochaine = seances.find((s) => s.startAt !== null && s.startAt > now) ?? null;
+
+    // ---- Assiduité (4 dernières semaines ISO ayant une séance passée) -
+    const presenceParSeance = new Map(presences.map((p) => [p.seanceId, p]));
+    const parSemaine = new Map<string, { total: number; absences: number; retards: number }>();
+    for (const s of seancesPassees) {
+      const semaine = isoWeekLabel(s.startAt!);
+      const entry = parSemaine.get(semaine) ?? { total: 0, absences: 0, retards: 0 };
+      entry.total += 1;
+      const presence = presenceParSeance.get(s.id);
+      if (!presence) {
+        entry.absences += 1;
+      } else if (
+        (presence.joinedAt.getTime() - s.startAt!.getTime()) / 60000 >
+        RETARD_TOLERANCE_MINUTES
+      ) {
+        entry.retards += 1;
+      }
+      parSemaine.set(semaine, entry);
+    }
+    const assiduite = Array.from(parSemaine.entries())
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .slice(-4)
+      .map(([semaine, e]) => {
+        const tauxAbsence = e.total > 0 ? Math.round((e.absences / e.total) * 100) : 0;
+        return {
+          semaine,
+          tauxAbsence,
+          retards: e.retards,
+          statut: (tauxAbsence > 0 || e.retards > 0 ? "attention" : "ok") as "ok" | "attention",
+        };
+      });
+
+    // ---- Évaluation cumulée : moyenne par compétence -------------------
+    const scoresParCompetence = new Map<string, number[]>();
+    for (const n of notationsNotees) {
+      const list = scoresParCompetence.get(n.competence) ?? [];
+      list.push(n.scoreOn20!);
+      scoresParCompetence.set(n.competence, list);
+    }
+    const moyennesParCompetence = COMPETENCY_KEYS.map((key) => {
+      const scores = scoresParCompetence.get(key) ?? [];
+      return scores.length > 0
+        ? { key, score: round2(scores.reduce((a, b) => a + b, 0) / scores.length) }
+        : null;
+    }).filter((v): v is { key: string; score: number } => v !== null);
+
+    const tauxReussiteGlobal =
+      moyennesParCompetence.length > 0
+        ? Math.round(
+            (moyennesParCompetence.reduce((s, c) => s + c.score, 0) /
+              moyennesParCompetence.length /
+              20) *
+              100
+          )
+        : null;
+
+    const alerteCompetence =
+      moyennesParCompetence.length > 0
+        ? moyennesParCompetence.reduce((min, c) => (c.score < min.score ? c : min))
+        : null;
+
+    // ---- Cumul du mois (notations gradées ce mois-ci) ------------------
+    const debutMois = new Date(now.getFullYear(), now.getMonth(), 1);
+    const notationsCeMois = notationsNotees.filter(
+      (n) => n.gradedAt !== null && n.gradedAt >= debutMois
+    );
+    const tauxEvolutionMensuel =
+      notationsCeMois.length > 0
+        ? Math.round(
+            (notationsCeMois.reduce((s, n) => s + n.scoreOn20!, 0) / notationsCeMois.length / 20) *
+              100
+          )
+        : 0;
+
+    // ---- Dernier commentaire du formateur -------------------------------
+    const dernierCommente = notationsNotees
+      .filter((n) => n.commentaires && n.commentaires.trim().length > 0 && n.gradedAt !== null)
+      .sort((a, b) => b.gradedAt!.getTime() - a.gradedAt!.getTime())[0];
+    const commentaireFormateur = dernierCommente
+      ? {
+          text: dernierCommente.commentaires!,
+          author: apprenant.groupe.formateur
+            ? `${apprenant.groupe.formateur.prenom} ${apprenant.groupe.formateur.nom}, Formateur`
+            : "L'équipe pédagogique",
+        }
+      : null;
+
+    // ---- Diagnostic initial (test d'admission) --------------------------
+    const attempt = apprenant.evaluationAttempt;
+    const diagnosticInitial = attempt
+      ? {
+          tier: attempt.tier,
+          totalScore: attempt.totalScore,
+          blocs: [
+            { key: "lexique", label: "Lexique", score: attempt.lexiqueScore ?? 0 },
+            { key: "oral", label: "Oral", score: attempt.oralScore ?? 0 },
+            { key: "situations", label: "Situations", score: attempt.situationsScore ?? 0 },
+            { key: "video", label: "Vidéo", score: attempt.videoScore ?? 0 },
+            { key: "essai", label: "Essai", score: attempt.essayScore ?? 0 },
+          ],
+        }
+      : null;
+
+    return {
+      prenom: apprenant.prenom,
+      groupeLabel: apprenant.groupe.label,
+      typeCours: apprenant.groupe.typeCours,
+      dateInscription: apprenant.createdAt,
+      abonnementExpireAt: apprenant.abonnementExpireAt,
+      seancesTotal: seances.length,
+      seancesEffectuees: seancesPassees.length,
+      prochaineSeance: prochaine
+        ? {
+            numero: prochaine.numero,
+            titre: prochaine.objectifs ?? `Séance ${prochaine.numero}`,
+            startAt: prochaine.startAt,
+          }
+        : null,
+      diagnosticInitial,
+      tauxReussiteGlobal,
+      tauxEvolutionMensuel,
+      alerteCompetence,
+      commentaireFormateur,
+      assiduite,
+    };
   }
 
   async getApprenantNotationDetail(matricule: string, numero: number, competence: string) {

@@ -13,13 +13,14 @@ import { EmailService } from "../common/email.service";
 
 function makePrismaMock() {
   return {
-    groupe: { findMany: jest.fn() },
+    groupe: { findMany: jest.fn(), findUnique: jest.fn() },
     tarifFormation: { upsert: jest.fn() },
     encaissementFormation: {
       findMany: jest.fn(),
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn(),
     },
     apprenant: { findUnique: jest.fn(), findMany: jest.fn(), update: jest.fn() },
     formateur: { findMany: jest.fn(), findUnique: jest.fn() },
@@ -38,6 +39,8 @@ function makePrismaMock() {
       count: jest.fn(),
     },
     mission: { count: jest.fn() },
+    agentAcquisition: { create: jest.fn(), findMany: jest.fn() },
+    reinscription: { create: jest.fn() },
   };
 }
 
@@ -89,21 +92,62 @@ describe("RhService", () => {
   describe("updateEncaissement", () => {
     it("lève NotFoundException si l'encaissement n'existe pas", async () => {
       prisma.encaissementFormation.findUnique.mockResolvedValue(null);
-      await expect(service.updateEncaissement("e-1", { montant: 100 })).rejects.toThrow(
-        NotFoundException
-      );
+      await expect(
+        service.updateEncaissement("e-1", {
+          apprenantId: "app-1",
+          montant: 100,
+          jour: "2026-03-05",
+        })
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it("met à jour uniquement le montant", async () => {
+    it("lève NotFoundException si l'apprenant n'existe pas", async () => {
       prisma.encaissementFormation.findUnique.mockResolvedValue({ id: "e-1" });
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+      await expect(
+        service.updateEncaissement("e-1", {
+          apprenantId: "app-inconnu",
+          montant: 100,
+          jour: "2026-03-05",
+        })
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.encaissementFormation.update).not.toHaveBeenCalled();
+    });
+
+    it("met à jour montant, jour, moyen de paiement et apprenant", async () => {
+      prisma.encaissementFormation.findUnique.mockResolvedValue({ id: "e-1" });
+      prisma.apprenant.findUnique.mockResolvedValue({ id: "app-1" });
       prisma.encaissementFormation.update.mockResolvedValue({ id: "e-1", montant: 200000 });
 
-      await service.updateEncaissement("e-1", { montant: 200000 });
-
-      expect(prisma.encaissementFormation.update).toHaveBeenCalledWith({
-        where: { id: "e-1" },
-        data: { montant: 200000 },
+      await service.updateEncaissement("e-1", {
+        apprenantId: "app-1",
+        montant: 200000,
+        jour: "2026-03-05",
+        moyenPaiement: "MVola",
       });
+
+      const { data } = prisma.encaissementFormation.update.mock.calls[0][0];
+      expect(data.apprenantId).toBe("app-1");
+      expect(data.montant).toBe(200000);
+      expect(data.jour.toISOString()).toBe("2026-03-05T00:00:00.000Z");
+      expect(data.moyenPaiement).toBe("MVola");
+    });
+  });
+
+  describe("deleteEncaissement", () => {
+    it("lève NotFoundException si l'encaissement n'existe pas", async () => {
+      prisma.encaissementFormation.findUnique.mockResolvedValue(null);
+      await expect(service.deleteEncaissement("e-1")).rejects.toThrow(NotFoundException);
+      expect(prisma.encaissementFormation.delete).not.toHaveBeenCalled();
+    });
+
+    it("supprime l'encaissement existant", async () => {
+      prisma.encaissementFormation.findUnique.mockResolvedValue({ id: "e-1" });
+      prisma.encaissementFormation.delete.mockResolvedValue({ id: "e-1" });
+
+      await service.deleteEncaissement("e-1");
+
+      expect(prisma.encaissementFormation.delete).toHaveBeenCalledWith({ where: { id: "e-1" } });
     });
   });
 
@@ -397,6 +441,25 @@ describe("RhService", () => {
       ).rejects.toThrow(NotFoundException);
     });
 
+    it("lève NotFoundException si le groupeId fourni n'existe pas", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({ matricule: "ETF-2026-0001" });
+      prisma.groupe.findUnique.mockResolvedValue(null);
+      await expect(
+        service.updateApprenantRh("ETF-2026-0001", { groupeId: "g-inconnu" })
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.apprenant.update).not.toHaveBeenCalled();
+    });
+
+    it("réaffecte l'apprenant au groupe fourni — corrige une confirmation de paiement sur le mauvais groupe", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({ matricule: "ETF-2026-0001" });
+      prisma.groupe.findUnique.mockResolvedValue({ id: "g-2" });
+      prisma.apprenant.update.mockResolvedValue({});
+
+      await service.updateApprenantRh("ETF-2026-0001", { groupeId: "g-2" });
+
+      expect(prisma.apprenant.update.mock.calls[0][0].data.groupeId).toBe("g-2");
+    });
+
     it("horodate coordonneesVerifieesLe seulement si le RIB ou le moyen de paiement change", async () => {
       prisma.apprenant.findUnique.mockResolvedValue({ matricule: "ETF-2026-0001" });
       prisma.apprenant.update.mockResolvedValue({});
@@ -611,6 +674,92 @@ describe("RhService", () => {
       expect(result[0].derniereMissionClient).toBe("Client X");
       expect(result[1].derniereMissionClient).toBe("Client Y");
       expect(result[2].derniereMissionClient).toBeNull();
+    });
+  });
+
+  // ---- Suivi des Agents d'Acquisition ------------------------------------
+
+  describe("getSuiviAgentsAcquisition", () => {
+    it("calcule testés/convertis/réinscriptions et la commission (5€ par conversion et par réinscription)", async () => {
+      prisma.agentAcquisition.findMany.mockResolvedValue([
+        {
+          id: "agent-1",
+          nom: "Hery R.",
+          candidats: [
+            { firstName: "Awa", lastName: "Diallo" },
+            { firstName: "Njaka", lastName: "R." },
+            { firstName: "Tiana", lastName: "M." },
+          ],
+          apprenants: [
+            { reinscriptions: [{}, {}] },
+            { reinscriptions: [] },
+          ],
+        },
+        {
+          id: "agent-2",
+          nom: "Voahangy L.",
+          candidats: [],
+          apprenants: [],
+        },
+      ]);
+
+      const result = await service.getSuiviAgentsAcquisition();
+
+      expect(result).toEqual([
+        {
+          id: "agent-1",
+          nom: "Hery R.",
+          nbTestes: 3,
+          nbConvertis: 2,
+          commissionConversion: 10,
+          nbReinscriptions: 2,
+          commissionReinscription: 10,
+          filleuls: ["Awa Diallo", "Njaka R.", "Tiana M."],
+        },
+        {
+          id: "agent-2",
+          nom: "Voahangy L.",
+          nbTestes: 0,
+          nbConvertis: 0,
+          commissionConversion: 0,
+          nbReinscriptions: 0,
+          commissionReinscription: 0,
+          filleuls: [],
+        },
+      ]);
+    });
+  });
+
+  describe("createAgentAcquisition", () => {
+    it("crée l'agent avec le nom fourni", async () => {
+      prisma.agentAcquisition.create.mockResolvedValue({ id: "agent-1", nom: "Hery R." });
+      await service.createAgentAcquisition({ nom: "Hery R." });
+      expect(prisma.agentAcquisition.create).toHaveBeenCalledWith({ data: { nom: "Hery R." } });
+    });
+  });
+
+  describe("renouvelerAbonnement", () => {
+    it("lève NotFoundException si l'apprenant n'existe pas", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+      await expect(
+        service.renouvelerAbonnement("inconnu", { nouvelleEcheance: "2026-12-01" })
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.reinscription.create).not.toHaveBeenCalled();
+    });
+
+    it("journalise la réinscription et met à jour l'échéance de l'apprenant", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({ id: "app-1", matricule: "ETF-2026-0001" });
+      prisma.apprenant.update.mockResolvedValue({});
+
+      await service.renouvelerAbonnement("ETF-2026-0001", { nouvelleEcheance: "2026-12-01" });
+
+      expect(prisma.reinscription.create).toHaveBeenCalledWith({
+        data: { apprenantId: "app-1", nouvelleEcheance: new Date("2026-12-01") },
+      });
+      expect(prisma.apprenant.update).toHaveBeenCalledWith({
+        where: { matricule: "ETF-2026-0001" },
+        data: { abonnementExpireAt: new Date("2026-12-01") },
+      });
     });
   });
 });

@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { href: "/compte/admin/academie", label: "Académie & Vagues", icon: "❖" },
   { href: "/compte/admin/production", label: "Production", icon: "▲" },
   { href: "/compte/admin/partenaires", label: "Partenaires", icon: "◎" },
+  { href: "/compte/admin/agents-acquisition", label: "Agents d'Acquisition", icon: "✚" },
   { href: "/compte/admin/reunions", label: "Réunions", icon: "☰" },
   { href: "/compte/admin/facturation", label: "Facturation & Encaissement", icon: "⊕" },
   { href: "/compte/admin/paie-commissions", label: "Paie & Commissions", icon: "◆" },

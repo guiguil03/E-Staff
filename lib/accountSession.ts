@@ -7,6 +7,11 @@ export const ACCOUNT_ROLE_KEY = "estaf-account-role";
 // qui identifient "mon" apprenant/formateur (classe virtuelle, planning) —
 // jusqu'ici seul le rôle était gardé, le matricule n'était pas nécessaire.
 export const ACCOUNT_MATRICULE_KEY = "estaf-account-matricule";
+// Posé uniquement quand la session vient d'un jeton "Se connecter en tant
+// que" (RH -> apprenant, voir useRequireRole) — permet d'afficher un
+// bandeau "vue admin" pour ne pas confondre cette session avec une vraie
+// connexion apprenant.
+export const ACCOUNT_VIEW_AS_ADMIN_KEY = "estaf-view-as-admin";
 
 export const ROLE_ROUTES: Record<string, string> = {
   apprenant: "/compte/apprenant",

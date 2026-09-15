@@ -1,8 +1,14 @@
-import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../common/email.service";
+import { createViewAsToken } from "../common/view-as-token";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
@@ -93,5 +99,17 @@ export class AuthService {
     });
 
     return { ok: true };
+  }
+
+  // "Se connecter en tant que" — la RH consulte déjà le Casier Apprenant en
+  // lecture seule (RhService.getApprenantCasier) ; ce jeton permet en plus
+  // d'ouvrir le vrai tableau de bord de l'apprenant tel qu'il le voit, sans
+  // connaître ni transmettre son mot de passe. Pas d'équivalent formateur :
+  // il n'existe qu'un unique compte formateur partagé (FORMATEUR_TEST_MATRICULE),
+  // pas de comptes individuels dans lesquels "entrer".
+  async createApprenantViewAsToken(matricule: string) {
+    const apprenant = await this.prisma.apprenant.findUnique({ where: { matricule } });
+    if (!apprenant) throw new NotFoundException("Apprenant introuvable.");
+    return { token: createViewAsToken(matricule, "apprenant") };
   }
 }

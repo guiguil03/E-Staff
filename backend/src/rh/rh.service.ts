@@ -3,6 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CockpitService } from '../cockpit/cockpit.service';
 import { NotationService } from '../notation/notation.service';
@@ -15,6 +17,9 @@ import { UpdateApprenantRhDto } from './dto/update-apprenant-rh.dto';
 import { CreateEncaissementDto } from './dto/create-encaissement.dto';
 import { UpdateEncaissementDto } from './dto/update-encaissement.dto';
 import { UpdatePaiementFormateurDto } from './dto/update-paiement-formateur.dto';
+import { CreateApprenantDto } from './dto/create-apprenant.dto';
+import { CreateAgentAcquisitionDto } from './dto/create-agent-acquisition.dto';
+import { RenouvelerAbonnementDto } from './dto/renouveler-abonnement.dto';
 
 // Certification "vivier" — mêmes seuils/tiers que le pipeline d'admission
 // (voir evaluation/scoring.ts) : un candidat admis en niveau_c1 ou en
@@ -56,6 +61,25 @@ function isoWeekLabel(d: Date): string {
 function moisLabel(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
+
+// Alphabet sans caractères ambigus (pas de 0/O, 1/l/I) — même génération que
+// EvaluationService.generateTemporaryPassword, dupliquée ici plutôt que
+// partagée entre modules (convention du projet, voir currentPeriode/round2).
+const TEMP_PASSWORD_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+
+function generateTemporaryPassword(length = 10): string {
+  const bytes = crypto.randomBytes(length);
+  return Array.from(bytes, (b) => TEMP_PASSWORD_CHARS[b % TEMP_PASSWORD_CHARS.length]).join('');
+}
+
+// Commission fixe des Agents d'Acquisition (distincts des Connecteurs/
+// apporteurs B2B, commission récurrente de 5% — voir ProductionService) : 5€
+// par apprenant converti (paiement confirmé) et 5€ par réinscription
+// (renouvellement d'abonnement FOL), montant demandé par la cliente le
+// 2026-09-15. En euros, pas en Ariary comme le reste de la Formation —
+// commission versée telle quelle, jamais convertie.
+const COMMISSION_CONVERSION_EUR = 5;
+const COMMISSION_REINSCRIPTION_EUR = 5;
 
 // Regroupement fixe demandé pour le tableau "Paie & Commissions" côté
 // Académie — un formateur est rattaché au bucket de son premier groupe
@@ -774,6 +798,7 @@ export class RhService {
       prenom: apprenant.prenom,
       nom: apprenant.nom,
       email: apprenant.email,
+      groupeId: apprenant.groupeId,
       groupeLabel: apprenant.groupe.label,
       typeCours: apprenant.groupe.typeCours,
       formateurNom: apprenant.groupe.formateur
@@ -832,12 +857,21 @@ export class RhService {
       });
       if (!connecteur) throw new NotFoundException('Apporteur introuvable.');
     }
+    // Réaffectation de groupe — corrige une confirmation de paiement faite
+    // sur le mauvais groupe (voir EvaluationService.confirmPayment, qui fixe
+    // le groupe définitivement à la création du compte sans retour en
+    // arrière possible depuis cet écran-là).
+    if (dto.groupeId) {
+      const groupe = await this.prisma.groupe.findUnique({ where: { id: dto.groupeId } });
+      if (!groupe) throw new NotFoundException('Groupe introuvable.');
+    }
     return this.prisma.apprenant.update({
       where: { matricule },
       data: {
         connecteurId: dto.connecteurId === undefined ? undefined : dto.connecteurId,
         sourceRecrutement:
           dto.sourceRecrutement === undefined ? undefined : dto.sourceRecrutement,
+        groupeId: dto.groupeId ?? undefined,
         statutAgent: dto.statutAgent ?? undefined,
         ribOuMobileMoney:
           dto.ribOuMobileMoney === undefined ? undefined : dto.ribOuMobileMoney,
@@ -851,6 +885,54 @@ export class RhService {
             : undefined,
       },
     });
+  }
+
+  // Numérotation des matricules — même format/algorithme que
+  // EvaluationService.generateNextMatricule (dupliqué ici, convention du
+  // projet), et lit la même table Apprenant : pas de risque de collision
+  // entre un compte créé via le pipeline de recrutement et un compte créé
+  // ici directement par la RH.
+  private async generateNextMatricule(): Promise<string> {
+    const existing = await this.prisma.apprenant.findMany({
+      where: { matricule: { startsWith: 'ETF-2026-' } },
+      select: { matricule: true },
+    });
+    const maxN = existing.reduce((max, a) => {
+      const m = /^ETF-2026-(\d+)$/.exec(a.matricule);
+      return m ? Math.max(max, parseInt(m[1], 10)) : max;
+    }, 0);
+    return `ETF-2026-${String(maxN + 1).padStart(4, '0')}`;
+  }
+
+  // Création directe d'un compte apprenant par la RH — hors pipeline de
+  // recrutement (pas de test/EvaluationAttempt), pour les cas d'inscription
+  // manuelle. Même mécanique que EvaluationService.confirmPayment : matricule
+  // auto-généré, mot de passe temporaire haché et envoyé une seule fois en
+  // clair par e-mail.
+  async createApprenantAccount(dto: CreateApprenantDto) {
+    const groupe = await this.prisma.groupe.findUnique({ where: { id: dto.groupeId } });
+    if (!groupe) throw new NotFoundException('Groupe introuvable.');
+
+    const matricule = await this.generateNextMatricule();
+    const temporaryPassword = generateTemporaryPassword();
+    const apprenant = await this.prisma.apprenant.create({
+      data: {
+        matricule,
+        prenom: dto.prenom,
+        nom: dto.nom,
+        email: dto.email,
+        groupeId: groupe.id,
+        password: await bcrypt.hash(temporaryPassword, 10),
+      },
+    });
+
+    await this.email.send({
+      to: dto.email,
+      subject: 'Bienvenue chez e-Staf — vos identifiants',
+      text: `Bonjour ${dto.prenom},\n\nUn compte apprenant a été créé pour vous dans le ${groupe.label}.\n\nVos identifiants pour vous connecter à votre tableau de bord personnel :\nMatricule : ${matricule}\nMot de passe temporaire : ${temporaryPassword}\n\nNous vous conseillons de changer ce mot de passe dès votre première connexion (Paramètres > Changer mon mot de passe).\n\nÀ très vite,\nL'équipe e-Staf`,
+    });
+
+    return apprenant;
   }
 
   async getFormateurCasier(id: string) {
@@ -1039,6 +1121,7 @@ export class RhService {
     });
     return encaissements.map((e) => ({
       id: e.id,
+      apprenantId: e.apprenantId,
       apprenantNom: `${e.apprenant.prenom} ${e.apprenant.nom}`,
       typeCours: e.apprenant.groupe.typeCours,
       montant: e.montant,
@@ -1064,13 +1147,36 @@ export class RhService {
     });
   }
 
+  // Édition complète (montant, jour, moyen de paiement, apprenant) — permet
+  // à la RH de corriger une erreur de manipulation (mauvais apprenant
+  // sélectionné, mauvaise date...), pas seulement le montant.
   async updateEncaissement(id: string, dto: UpdateEncaissementDto) {
     const existing = await this.prisma.encaissementFormation.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Encaissement introuvable.');
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { id: dto.apprenantId },
+    });
+    if (!apprenant) throw new NotFoundException('Apprenant introuvable.');
+    const jour = new Date(dto.jour);
+    jour.setUTCHours(0, 0, 0, 0);
     return this.prisma.encaissementFormation.update({
       where: { id },
-      data: { montant: dto.montant },
+      data: {
+        apprenantId: dto.apprenantId,
+        montant: dto.montant,
+        jour,
+        moyenPaiement: dto.moyenPaiement ?? null,
+      },
     });
+  }
+
+  // Suppression — pour une ligne saisie par erreur pure (mauvais apprenant,
+  // doublon) qu'une simple correction ne suffit pas à réparer proprement.
+  async deleteEncaissement(id: string) {
+    const existing = await this.prisma.encaissementFormation.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Encaissement introuvable.');
+    await this.prisma.encaissementFormation.delete({ where: { id } });
+    return { ok: true };
   }
 
   // Tableau "par type de cours" — nb d'inscrits actifs (même définition que
@@ -1292,5 +1398,67 @@ export class RhService {
       data: { statut: 'paye', datePaiement: new Date() },
     });
     return this.getDetailPaieFormateurs(bucket, periode);
+  }
+
+  // ---- Suivi des Agents d'Acquisition (commissions) -------------------------
+  // Synchronisation automatique demandée le 2026-09-15 : le candidat indique
+  // lui-même l'agent en passant le test (voir EvaluationService.
+  // listAgentsAcquisition / createCandidat), et la conversion/réinscription
+  // remonte ici sans ressaisie RH — confirmPayment recopie déjà
+  // agentAcquisitionId sur l'Apprenant, renouvelerAbonnement journalise
+  // chaque réinscription.
+
+  async createAgentAcquisition(dto: CreateAgentAcquisitionDto) {
+    return this.prisma.agentAcquisition.create({ data: { nom: dto.nom } });
+  }
+
+  // Un agent par ligne : testés (Candidat rattachés, quel que soit leur
+  // statut), convertis (Apprenant créés, donc paiement confirmé) et
+  // réinscriptions (Reinscription journalisées), chacun avec sa commission
+  // fixe. "filleuls" liste les personnes recommandées par nom, pour le menu
+  // déroulant du tableau RH — même liste que "testés", juste détaillée.
+  async getSuiviAgentsAcquisition() {
+    const agents = await this.prisma.agentAcquisition.findMany({
+      include: {
+        candidats: { select: { firstName: true, lastName: true } },
+        apprenants: { include: { reinscriptions: true } },
+      },
+      orderBy: { nom: 'asc' },
+    });
+
+    return agents.map((a) => {
+      const nbConvertis = a.apprenants.length;
+      const nbReinscriptions = a.apprenants.reduce(
+        (sum, ap) => sum + ap.reinscriptions.length,
+        0,
+      );
+      return {
+        id: a.id,
+        nom: a.nom,
+        nbTestes: a.candidats.length,
+        nbConvertis,
+        commissionConversion: round2(nbConvertis * COMMISSION_CONVERSION_EUR),
+        nbReinscriptions,
+        commissionReinscription: round2(nbReinscriptions * COMMISSION_REINSCRIPTION_EUR),
+        filleuls: a.candidats.map((c) => `${c.firstName} ${c.lastName}`),
+      };
+    });
+  }
+
+  // Renouvellement d'abonnement FOL — trace l'événement (Reinscription) en
+  // plus de mettre à jour l'échéance, pour que la commission de l'agent
+  // d'acquisition se recalcule automatiquement (voir getSuiviAgentsAcquisition).
+  async renouvelerAbonnement(matricule: string, dto: RenouvelerAbonnementDto) {
+    const apprenant = await this.prisma.apprenant.findUnique({ where: { matricule } });
+    if (!apprenant) throw new NotFoundException('Apprenant introuvable.');
+
+    const nouvelleEcheance = new Date(dto.nouvelleEcheance);
+    await this.prisma.reinscription.create({
+      data: { apprenantId: apprenant.id, nouvelleEcheance },
+    });
+    return this.prisma.apprenant.update({
+      where: { matricule },
+      data: { abonnementExpireAt: nouvelleEcheance },
+    });
   }
 }

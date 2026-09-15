@@ -4,8 +4,7 @@ import CountdownTimer from "./CountdownTimer";
 import ClasseVirtuelleJoinButton from "./ClasseVirtuelleJoinButton";
 
 interface QuickActionsProps {
-  prochaineSeanceTitle: string;
-  hoursFromNow: number;
+  prochaineSeance: { titre: string; startAt: string } | null;
 }
 
 // Actions non encore reliées à un vrai backend (salle de classe virtuelle,
@@ -37,20 +36,25 @@ function LiveAction({ label, href }: { label: string; href: string }) {
   );
 }
 
-export default function QuickActions({
-  prochaineSeanceTitle,
-  hoursFromNow,
-}: QuickActionsProps) {
+export default function QuickActions({ prochaineSeance }: QuickActionsProps) {
   return (
     <Reveal>
       <div className="rounded border border-white/10 bg-obsidianCard p-6">
         <h3 className="font-display text-base font-semibold text-white">
           Prochaine séance
         </h3>
-        <p className="mt-1 font-sans text-sm text-accent">{prochaineSeanceTitle}</p>
-        <div className="mt-4">
-          <CountdownTimer hoursFromNow={hoursFromNow} />
-        </div>
+        {prochaineSeance ? (
+          <>
+            <p className="mt-1 font-sans text-sm text-accent">{prochaineSeance.titre}</p>
+            <div className="mt-4">
+              <CountdownTimer targetIso={prochaineSeance.startAt} />
+            </div>
+          </>
+        ) : (
+          <p className="mt-1 font-sans text-sm text-white/50">
+            Aucune séance programmée pour le moment.
+          </p>
+        )}
 
         <div className="mt-6 space-y-2">
           <ClasseVirtuelleJoinButton />

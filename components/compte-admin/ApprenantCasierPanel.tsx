@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
-import { apiGet, apiPut } from "@/lib/api";
+import { apiGet, apiPostAuthed, apiPut } from "@/lib/api";
 import { COMPETENCY_DEFS } from "@/components/compte-formateur/gradingGrids";
 import { adminHeaders } from "./adminHeaders";
 
@@ -44,6 +44,7 @@ interface ApprenantCasier {
   prenom: string;
   nom: string;
   email: string;
+  groupeId: string;
   groupeLabel: string;
   typeCours: string | null;
   formateurNom: string | null;
@@ -71,6 +72,11 @@ interface Apporteur {
   lastName: string;
 }
 
+interface Vague {
+  id: string;
+  label: string;
+}
+
 const COMPETENCY_LABELS = Object.fromEntries(COMPETENCY_DEFS.map((c) => [c.key, c.label]));
 
 const STATUT_AGENT_LABELS: Record<string, string> = {
@@ -91,6 +97,43 @@ function fmtDate(iso: string | null): string {
 export default function ApprenantCasierPanel({ matricule }: { matricule: string }) {
   const [casier, setCasier] = useState<ApprenantCasier | "loading" | "erreur">("loading");
   const [apporteurs, setApporteurs] = useState<Apporteur[]>([]);
+  const [vagues, setVagues] = useState<Vague[]>([]);
+  const [openingViewAs, setOpeningViewAs] = useState(false);
+  const [renewDate, setRenewDate] = useState("");
+  const [renewing, setRenewing] = useState(false);
+
+  // Réinscription (renouvellement d'abonnement FOL) — journalisée
+  // (RhService.renouvelerAbonnement) pour que la commission de l'agent
+  // d'acquisition se recalcule automatiquement (voir AgentsAcquisitionPanel).
+  async function renouveler() {
+    if (!renewDate) return;
+    setRenewing(true);
+    try {
+      await apiPostAuthed(
+        `/rh/apprenants/${matricule}/renouveler`,
+        { nouvelleEcheance: renewDate },
+        adminHeaders()
+      );
+      setRenewDate("");
+      refresh();
+    } finally {
+      setRenewing(false);
+    }
+  }
+
+  async function seConnecterEnTantQue() {
+    setOpeningViewAs(true);
+    try {
+      const { token } = await apiPostAuthed<{ token: string }>(
+        `/auth/view-as/${matricule}`,
+        {},
+        adminHeaders()
+      );
+      window.open(`/compte/apprenant?viewAsToken=${token}`, "_blank");
+    } finally {
+      setOpeningViewAs(false);
+    }
+  }
 
   function refresh() {
     apiGet<ApprenantCasier>(`/rh/apprenants/${matricule}/casier`, adminHeaders())
@@ -104,6 +147,9 @@ export default function ApprenantCasierPanel({ matricule }: { matricule: string 
     apiGet<Apporteur[]>("/rh/partenaires", adminHeaders())
       .then(setApporteurs)
       .catch(() => {});
+    apiGet<Vague[]>("/rh/vagues", adminHeaders())
+      .then(setVagues)
+      .catch(() => {});
   }, []);
 
   if (casier === "loading") return <p className="font-sans text-sm text-white/50">Chargement...</p>;
@@ -116,12 +162,24 @@ export default function ApprenantCasierPanel({ matricule }: { matricule: string 
     <div className="space-y-6">
       <Reveal>
         <div className="rounded border border-white/10 bg-obsidianCard p-6">
-          <p className="font-display text-lg font-semibold text-white">
-            {casier.prenom} {casier.nom}
-          </p>
-          <p className="font-mono text-xs text-white/40">
-            {casier.matricule} · {casier.email}
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-display text-lg font-semibold text-white">
+                {casier.prenom} {casier.nom}
+              </p>
+              <p className="font-mono text-xs text-white/40">
+                {casier.matricule} · {casier.email}
+              </p>
+            </div>
+            <button
+              onClick={seConnecterEnTantQue}
+              disabled={openingViewAs}
+              className="whitespace-nowrap rounded border border-accent/40 px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest text-accent hover:bg-accent/10 disabled:opacity-50"
+              title="Ouvre son tableau de bord dans un nouvel onglet, sans son mot de passe"
+            >
+              {openingViewAs ? "Ouverture..." : "Se connecter en tant que"}
+            </button>
+          </div>
           <div className="mt-3 grid gap-3 border-t border-white/10 pt-3 text-sm text-white/80 sm:grid-cols-3">
             <p>
               Groupe : <span className="text-white">{casier.groupeLabel}</span>
@@ -137,6 +195,26 @@ export default function ApprenantCasierPanel({ matricule }: { matricule: string 
               </span>
             </p>
           </div>
+          {casier.typeCours === "FOL" && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
+              <label className="font-mono text-xs uppercase tracking-widest text-white/50">
+                Réinscription — nouvelle échéance
+              </label>
+              <input
+                type="date"
+                value={renewDate}
+                onChange={(e) => setRenewDate(e.target.value)}
+                className="rounded border border-white/20 bg-obsidian px-2 py-1 font-mono text-xs text-white outline-none focus:border-accent"
+              />
+              <button
+                onClick={renouveler}
+                disabled={renewing || !renewDate}
+                className="rounded border border-accent/40 px-2.5 py-1 font-mono text-[11px] uppercase tracking-widest text-accent hover:bg-accent/10 disabled:opacity-50"
+              >
+                {renewing ? "..." : "Renouveler"}
+              </button>
+            </div>
+          )}
           {casier.admission && (
             <p className="mt-2 font-mono text-xs text-accent">
               Admission : {casier.admission.totalScore ?? "—"}/100 — {casier.admission.tier} (
@@ -149,9 +227,11 @@ export default function ApprenantCasierPanel({ matricule }: { matricule: string 
       <Reveal delay={10}>
         <TracabilitePaiementSection
           matricule={casier.matricule}
+          groupeId={casier.groupeId}
           tracabilite={casier.tracabilite}
           coordonneesPaiement={casier.coordonneesPaiement}
           apporteurs={apporteurs}
+          vagues={vagues}
           onSaved={refresh}
         />
       </Reveal>
@@ -238,15 +318,19 @@ export default function ApprenantCasierPanel({ matricule }: { matricule: string 
 
 function TracabilitePaiementSection({
   matricule,
+  groupeId,
   tracabilite,
   coordonneesPaiement,
   apporteurs,
+  vagues,
   onSaved,
 }: {
   matricule: string;
+  groupeId: string;
   tracabilite: ApprenantCasier["tracabilite"];
   coordonneesPaiement: ApprenantCasier["coordonneesPaiement"];
   apporteurs: Apporteur[];
+  vagues: Vague[];
   onSaved: () => void;
 }) {
   const [connecteurId, setConnecteurId] = useState(tracabilite.connecteurId ?? "");
@@ -258,6 +342,7 @@ function TracabilitePaiementSection({
   const [ribOuMobileMoney, setRibOuMobileMoney] = useState(
     coordonneesPaiement.ribOuMobileMoney ?? ""
   );
+  const [selectedGroupeId, setSelectedGroupeId] = useState(groupeId);
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -271,6 +356,7 @@ function TracabilitePaiementSection({
           statutAgent,
           moyenPaiementType: moyenPaiementType || null,
           ribOuMobileMoney: ribOuMobileMoney.trim() || null,
+          groupeId: selectedGroupeId,
         },
         adminHeaders()
       );
@@ -279,6 +365,7 @@ function TracabilitePaiementSection({
       setSaving(false);
     }
   }
+
 
   return (
     <div className="rounded border border-white/10 bg-obsidianCard p-6">
@@ -338,7 +425,25 @@ function TracabilitePaiementSection({
             Contrôle si la commission récurrente de l&apos;apporteur court toujours.
           </p>
         </div>
-        <div />
+        <div>
+          <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+            Groupe
+          </label>
+          <select
+            value={selectedGroupeId}
+            onChange={(e) => setSelectedGroupeId(e.target.value)}
+            className="mt-1 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
+          >
+            {vagues.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.label}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 font-mono text-[10px] text-white/40">
+            Corrige un mauvais groupe sélectionné lors de la confirmation du paiement.
+          </p>
+        </div>
         <div>
           <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
             Moyen de paiement

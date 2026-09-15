@@ -9,6 +9,7 @@ function makePrismaMock() {
     seance: { findUnique: jest.fn(), findMany: jest.fn() },
     apprenant: { findUnique: jest.fn() },
     notation: { findUnique: jest.fn(), findMany: jest.fn(), upsert: jest.fn() },
+    presence: { findMany: jest.fn() },
   };
 }
 
@@ -291,6 +292,152 @@ describe("NotationService", () => {
       expect(prisma.notation.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { fileKey: { not: null }, gradedAt: null } })
       );
+    });
+  });
+
+  describe("getApprenantDashboard", () => {
+    it("lève NotFoundException si l'apprenant n'existe pas", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+      await expect(service.getApprenantDashboard("inconnu")).rejects.toThrow(NotFoundException);
+    });
+
+    it("consolide diagnostic initial, évolution cumulée, assiduité et commentaire — sans rien inventer pour l'apprenant sans historique", async () => {
+      const now = Date.now();
+      const heure = 60 * 60 * 1000;
+      const jour = 24 * heure;
+
+      prisma.apprenant.findUnique.mockResolvedValue({
+        id: "app-1",
+        matricule: "ETF-2026-0001",
+        prenom: "Awa",
+        groupeId: "groupe-1",
+        createdAt: new Date(now - 100 * jour),
+        abonnementExpireAt: new Date(now + 30 * jour),
+        groupe: {
+          label: "Groupe A",
+          typeCours: "DELF DALF",
+          formateur: { prenom: "Hasina", nom: "R." },
+        },
+        evaluationAttempt: {
+          tier: "niveau_c1",
+          totalScore: 78,
+          lexiqueScore: 16,
+          oralScore: 14,
+          situationsScore: 15,
+          videoScore: 17,
+          essayScore: 16,
+        },
+      });
+
+      const seanceOnTime = { id: "s-1", startAt: new Date(now - 2 * heure) };
+      const seanceRetard = { id: "s-2", startAt: new Date(now - heure) };
+      const seanceAbsence = { id: "s-3", startAt: new Date(now - 30 * 60 * 1000) };
+      const seanceFuture = { id: "s-4", numero: 4, startAt: new Date(now + 3 * jour), objectifs: null };
+      prisma.seance.findMany.mockResolvedValue([
+        { ...seanceOnTime, numero: 1, objectifs: null },
+        { ...seanceRetard, numero: 2, objectifs: null },
+        { ...seanceAbsence, numero: 3, objectifs: "Atelier expression écrite" },
+        seanceFuture,
+      ]);
+      prisma.presence.findMany.mockResolvedValue([
+        { seanceId: "s-1", joinedAt: new Date(seanceOnTime.startAt.getTime() + 2 * 60 * 1000) },
+        { seanceId: "s-2", joinedAt: new Date(seanceRetard.startAt.getTime() + 15 * 60 * 1000) },
+        // pas de présence pour s-3 : absence.
+      ]);
+
+      prisma.notation.findMany.mockResolvedValue([
+        {
+          competence: "comprehension_orale",
+          scoreOn20: 14,
+          gradedAt: new Date(now),
+          commentaires: null,
+        },
+        {
+          competence: "expression_orale",
+          scoreOn20: 10,
+          gradedAt: new Date(now - 400 * jour), // hors mois en cours
+          commentaires: "Ancien commentaire, hors période.",
+        },
+        {
+          competence: "expression_ecrite",
+          scoreOn20: 8,
+          gradedAt: new Date(now),
+          commentaires: "Attention aux temps verbaux.",
+        },
+        {
+          competence: "posture_eloquence",
+          scoreOn20: 16,
+          gradedAt: new Date(now - heure),
+          commentaires: "Bon travail.",
+        },
+      ]);
+
+      const result = await service.getApprenantDashboard("ETF-2026-0001");
+
+      expect(result.diagnosticInitial).toEqual({
+        tier: "niveau_c1",
+        totalScore: 78,
+        blocs: [
+          { key: "lexique", label: "Lexique", score: 16 },
+          { key: "oral", label: "Oral", score: 14 },
+          { key: "situations", label: "Situations", score: 15 },
+          { key: "video", label: "Vidéo", score: 17 },
+          { key: "essai", label: "Essai", score: 16 },
+        ],
+      });
+
+      // Moyenne des 4 compétences notées (14, 10, 8, 16) = 12/20 -> 60%.
+      // comprehension_ecrite n'a jamais été notée : absente, jamais un 0 inventé.
+      expect(result.tauxReussiteGlobal).toBe(60);
+      expect(result.alerteCompetence).toEqual({ key: "expression_ecrite", score: 8 });
+
+      // Seules comprehension_orale (14), expression_ecrite (8) et
+      // posture_eloquence (16) sont gradées ce mois-ci : moyenne 12.67/20 -> 63%.
+      expect(result.tauxEvolutionMensuel).toBe(63);
+
+      // Commentaire le plus récent parmi ceux du mois en cours.
+      expect(result.commentaireFormateur).toEqual({
+        text: "Attention aux temps verbaux.",
+        author: "Hasina R., Formateur",
+      });
+
+      // 3 séances passées le même jour (même semaine ISO) : 1 absence, 1 retard.
+      expect(result.seancesEffectuees).toBe(3);
+      expect(result.seancesTotal).toBe(4);
+      expect(result.assiduite).toHaveLength(1);
+      expect(result.assiduite[0]).toMatchObject({ tauxAbsence: 33, retards: 1, statut: "attention" });
+
+      expect(result.prochaineSeance).toEqual({
+        numero: 4,
+        titre: "Séance 4",
+        startAt: seanceFuture.startAt,
+      });
+    });
+
+    it("ne fabrique aucune donnée quand l'apprenant n'a ni test d'admission ni notation ni séance passée", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({
+        id: "app-2",
+        matricule: "ETF-2026-0002",
+        prenom: "Njaka",
+        groupeId: "groupe-1",
+        createdAt: new Date(),
+        abonnementExpireAt: null,
+        groupe: { label: "Groupe A", typeCours: null, formateur: null },
+        evaluationAttempt: null,
+      });
+      prisma.seance.findMany.mockResolvedValue([]);
+      prisma.presence.findMany.mockResolvedValue([]);
+      prisma.notation.findMany.mockResolvedValue([]);
+
+      const result = await service.getApprenantDashboard("ETF-2026-0002");
+
+      expect(result.diagnosticInitial).toBeNull();
+      expect(result.tauxReussiteGlobal).toBeNull();
+      expect(result.alerteCompetence).toBeNull();
+      expect(result.commentaireFormateur).toBeNull();
+      expect(result.prochaineSeance).toBeNull();
+      expect(result.tauxEvolutionMensuel).toBe(0);
+      expect(result.assiduite).toEqual([]);
     });
   });
 });

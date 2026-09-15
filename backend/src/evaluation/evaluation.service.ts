@@ -163,6 +163,16 @@ export class EvaluationService {
     };
   }
 
+  // Liste publique (pas de garde, même niveau que le reste du parcours
+  // candidat) pour la liste déroulante "Agent d'acquisition" de l'étape
+  // Coordonnées — annuaire géré côté RH (voir RhService.createAgentAcquisition).
+  listAgentsAcquisition() {
+    return this.prisma.agentAcquisition.findMany({
+      select: { id: true, nom: true },
+      orderBy: { nom: "asc" },
+    });
+  }
+
   async createCandidat(dto: CreateCandidatDto) {
     const candidat = await this.prisma.candidat.create({ data: dto });
     const attempt = await this.prisma.evaluationAttempt.create({
@@ -1003,6 +1013,9 @@ export class EvaluationService {
         email: attempt.candidat.email,
         groupeId: groupe.id,
         password: await bcrypt.hash(temporaryPassword, 10),
+        // Recopié depuis le Candidat — voir RhService.getSuiviAgentsAcquisition,
+        // qui compte les conversions par agent sans remonter jusqu'au Candidat.
+        agentAcquisitionId: attempt.candidat.agentAcquisitionId,
       },
     });
 

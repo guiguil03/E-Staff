@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -23,6 +24,9 @@ import { CreateEncaissementDto } from './dto/create-encaissement.dto';
 import { UpdateEncaissementDto } from './dto/update-encaissement.dto';
 import { UpdatePaiementFormateurDto } from './dto/update-paiement-formateur.dto';
 import { EnvoyerResultatsDto } from './dto/envoyer-resultats.dto';
+import { CreateApprenantDto } from './dto/create-apprenant.dto';
+import { CreateAgentAcquisitionDto } from './dto/create-agent-acquisition.dto';
+import { RenouvelerAbonnementDto } from './dto/renouveler-abonnement.dto';
 
 @ApiTags('RH')
 @Controller('rh')
@@ -127,6 +131,31 @@ export class RhController {
     return this.service.getVagues();
   }
 
+  @Post('apprenants')
+  createApprenant(@Body() dto: CreateApprenantDto) {
+    return this.service.createApprenantAccount(dto);
+  }
+
+  @Post('apprenants/:matricule/renouveler')
+  renouvelerAbonnement(
+    @Param('matricule') matricule: string,
+    @Body() dto: RenouvelerAbonnementDto,
+  ) {
+    return this.service.renouvelerAbonnement(matricule, dto);
+  }
+
+  // ---- Agents d'Acquisition (suivi commissions) -----------------------------
+
+  @Get('agents-acquisition')
+  getSuiviAgentsAcquisition() {
+    return this.service.getSuiviAgentsAcquisition();
+  }
+
+  @Post('agents-acquisition')
+  createAgentAcquisition(@Body() dto: CreateAgentAcquisitionDto) {
+    return this.service.createAgentAcquisition(dto);
+  }
+
   @Get('apprenants/:matricule/casier')
   getApprenantCasier(@Param('matricule') matricule: string) {
     return this.service.getApprenantCasier(matricule);
@@ -201,6 +230,11 @@ export class RhController {
   @Put('encaissements/:id')
   updateEncaissement(@Param('id') id: string, @Body() dto: UpdateEncaissementDto) {
     return this.service.updateEncaissement(id, dto);
+  }
+
+  @Delete('encaissements/:id')
+  deleteEncaissement(@Param('id') id: string) {
+    return this.service.deleteEncaissement(id);
   }
 
   @Get('encaissements-formation')

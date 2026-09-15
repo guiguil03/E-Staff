@@ -216,7 +216,34 @@ model Candidat {
   cvKey        String?
   cvUploadedAt DateTime?
 
+  // Agent d'acquisition indiqué par le candidat lui-même à l'étape
+  // "Coordonnées" du test (liste déroulante, voir EvaluationService.
+  // listAgentsAcquisition) — distinct du Connecteur/apporteur B2B, voir
+  // AgentAcquisition. Recopié sur l'Apprenant à la confirmation de paiement
+  // (EvaluationService.confirmPayment) pour que le suivi RH n'ait pas besoin
+  // de remonter jusqu'au Candidat à chaque calcul.
+  agentAcquisitionId String?
+  agentAcquisition   AgentAcquisition? @relation(fields: [agentAcquisitionId], references: [id])
+
   attempts EvaluationAttempt[]
+}
+
+// ---------------------------------------------------------------------------
+// Suivi des Agents d'Acquisition (commissions RH) — distinct du Connecteur
+// (apporteur B2B, onboarding + commission récurrente 5%) : un agent
+// d'acquisition est indiqué directement par le candidat au moment du test
+// (liste déroulante, pas de texte libre — évite qu'une faute de frappe
+// éclate les statistiques d'un même agent), avec une commission fixe de 5€
+// par conversion et 5€ par réinscription (voir RhService.
+// getSuiviAgentsAcquisition, Reinscription).
+// ---------------------------------------------------------------------------
+model AgentAcquisition {
+  id        String   @id @default(cuid())
+  nom       String
+  createdAt DateTime @default(now())
+
+  candidats  Candidat[]
+  apprenants Apprenant[]
 }
 
 model EvaluationAttempt {
@@ -493,11 +520,16 @@ model PaiementFormateur {
 }
 
 model Apprenant {
-  id        String @id @default(cuid())
-  matricule String @unique
+  id        String   @id @default(cuid())
+  matricule String   @unique
   prenom    String
   nom       String
   email     String
+  // Date d'inscription réelle — sert au "Mon Casier" du Compte Apprenant
+  // (date d'inscription affichée). Absent avant cette migration : les
+  // apprenants déjà en base récupèrent la date de la migration elle-même
+  // (DEFAULT CURRENT_TIMESTAMP), pas une vraie date d'inscription rétroactive.
+  createdAt DateTime @default(now())
 
   // Hash bcrypt — jamais le mot de passe en clair. Généré automatiquement à
   // la confirmation de paiement (voir EvaluationService.confirmPayment) et
@@ -567,6 +599,28 @@ model Apprenant {
   // terminée) ; la mission avec dateFin=null (s'il y en a une) est la
   // mission active actuelle.
   missions Mission[]
+
+  // Recopié depuis Candidat.agentAcquisitionId à la confirmation de paiement
+  // (voir EvaluationService.confirmPayment) — null pour un compte créé
+  // directement par la RH (RhService.createApprenantAccount), sans agent.
+  agentAcquisitionId String?
+  agentAcquisition   AgentAcquisition? @relation(fields: [agentAcquisitionId], references: [id])
+
+  // Renouvellements d'abonnement FOL comptant comme "réinscription" pour la
+  // commission de l'agent d'acquisition (voir RhService.renouvelerAbonnement).
+  reinscriptions Reinscription[]
+}
+
+// Un renouvellement d'abonnement FOL déclenché par la RH — évènement tracé
+// (pas juste un écrasement de abonnementExpireAt) pour pouvoir compter le
+// nombre de réinscriptions dans le suivi des Agents d'Acquisition.
+model Reinscription {
+  id          String   @id @default(cuid())
+  apprenantId String
+  apprenant   Apprenant @relation(fields: [apprenantId], references: [id])
+
+  renouveleLe      DateTime @default(now())
+  nouvelleEcheance DateTime
 }
 
 // Horaire réel d'une des 12 séances d'un groupe. startAt reste nullable :

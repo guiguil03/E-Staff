@@ -74,6 +74,11 @@ export class NotationController {
   // ---- Apprenant (pas de guard — même niveau de protection stopgap que le
   // reste du Compte Apprenant, matricule comme identifiant) ------------------
 
+  @Get("apprenants/:matricule/dashboard")
+  getApprenantDashboard(@Param("matricule") matricule: string) {
+    return this.service.getApprenantDashboard(matricule);
+  }
+
   @Get("apprenants/:matricule/notations")
   listApprenantNotations(@Param("matricule") matricule: string) {
     return this.service.listApprenantNotations(matricule);
