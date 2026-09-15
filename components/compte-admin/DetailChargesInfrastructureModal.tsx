@@ -81,7 +81,15 @@ export default function DetailChargesInfrastructureModal({ onClose }: { onClose:
   }
 
   async function payerTout() {
-    if (!periode) return;
+    if (!periode || !Array.isArray(data)) return;
+    const enAttente = data.filter((c) => c.statut !== "paye");
+    const totalAPayer = enAttente.reduce((sum, c) => sum + c.montantReel, 0);
+    if (
+      !window.confirm(
+        `Marquer les ${enAttente.length} charge(s) en attente comme payées pour un total de ${fmtMontant(totalAPayer)} ? Cette action est irréversible.`
+      )
+    )
+      return;
     setPayingTout(true);
     try {
       await apiPostAuthed(
@@ -268,6 +276,12 @@ function ChargeRow({ charge, onSaved }: { charge: ChargeInfrastructure; onSaved:
   }
 
   async function payer() {
+    if (
+      !window.confirm(
+        `Marquer la charge "${charge.poste}" (${fmtMontant(Number(montantReel) || 0)}) comme payée ? Cette action est irréversible.`
+      )
+    )
+      return;
     setPaying(true);
     try {
       await apiPostAuthed(`/production/charges-infrastructure/${charge.id}/payer`, {}, adminHeaders());

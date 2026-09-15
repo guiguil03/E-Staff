@@ -142,6 +142,12 @@ function SuperviseurCard({ sup, onSaved }: { sup: DetailSuperviseur; onSaved: ()
   }
 
   async function payer() {
+    if (
+      !window.confirm(
+        `Confirmer le paiement de ${fmtMontant(sup.netAPayer)} à ${sup.prenom} ${sup.nom} ? Cette action est irréversible.`
+      )
+    )
+      return;
     setPaying(true);
     try {
       await apiPostAuthed(

@@ -107,7 +107,8 @@ export default function ValidationRhPanel({ onChange }: ValidationRhPanelProps) 
     }
   }
 
-  async function sendNow(id: string) {
+  async function sendNow(id: string, nom: string) {
+    if (!window.confirm(`Envoyer le contrat à ${nom} maintenant, sans attendre l'envoi groupé de 20h ?`)) return;
     setStatus("saving");
     try {
       await apiPostAuthed(`/evaluation/attempts/${id}/send-now`, {}, adminHeaders());
@@ -246,7 +247,7 @@ export default function ValidationRhPanel({ onChange }: ValidationRhPanelProps) 
                               : "Enregistrer les modifications"}
                         </Button>
                         {a.status === "valide_pret_envoi" && (
-                          <Button variant="ghostDark" onClick={() => sendNow(a.id)} disabled={status === "saving"}>
+                          <Button variant="ghostDark" onClick={() => sendNow(a.id, `${a.candidat.firstName} ${a.candidat.lastName}`)} disabled={status === "saving"}>
                             Envoyer maintenant
                           </Button>
                         )}

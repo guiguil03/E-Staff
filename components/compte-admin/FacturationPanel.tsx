@@ -102,7 +102,8 @@ export default function FacturationPanel() {
     }
   }
 
-  async function marquerPayee(id: string) {
+  async function marquerPayee(id: string, clientNom: string, montant: number) {
+    if (!window.confirm(`Marquer la facture de ${clientNom} (${fmtMontant(montant)}) comme payée ? Cette action est irréversible.`)) return;
     setPayingId(id);
     try {
       await apiPostAuthed(`/production/factures/${id}/payee`, {}, adminHeaders());
@@ -267,7 +268,7 @@ export default function FacturationPanel() {
                     </span>
                   ) : (
                     <button
-                      onClick={() => marquerPayee(f.id)}
+                      onClick={() => marquerPayee(f.id, f.contrat.clientNom, f.montant)}
                       disabled={payingId === f.id}
                       className="rounded border border-accent/40 px-2.5 py-1 font-mono text-[11px] uppercase tracking-widest text-accent hover:bg-accent/10 disabled:opacity-50"
                     >
