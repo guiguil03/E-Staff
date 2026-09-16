@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Put, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Put, UseGuards } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { FormateurGuard } from "../common/formateur.guard";
 import { CockpitService } from "./cockpit.service";
@@ -15,13 +15,16 @@ export class CockpitController {
   constructor(private readonly service: CockpitService) {}
 
   @Get("groupes")
-  getGroupes() {
-    return this.service.getGroupes();
+  getGroupes(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.getGroupes(formateurMatricule);
   }
 
   @Get("groupes/:cle/detail")
-  getGroupeDetail(@Param("cle") cle: string) {
-    return this.service.getGroupeDetail(cle);
+  getGroupeDetail(
+    @Param("cle") cle: string,
+    @Headers("x-formateur-matricule") formateurMatricule: string
+  ) {
+    return this.service.getGroupeDetail(cle, formateurMatricule);
   }
 
   @Get("vivier-c1")

@@ -330,6 +330,12 @@ export class RhService {
     });
   }
 
+  // Compte individuel (2026-09-16) — même mécanique que
+  // createApprenantAccount : mot de passe temporaire généré et haché,
+  // envoyé une seule fois en clair par e-mail. C'est ce compte qui permet
+  // ensuite au Cockpit Formateur de se filtrer par formateurId (voir
+  // CockpitService, NotationService, ClasseVirtuelleService) au lieu du
+  // code partagé d'avant.
   async createFormateur(dto: UpsertFormateurDto) {
     const existing = await this.prisma.formateur.findUnique({
       where: { matricule: dto.matricule },
@@ -339,7 +345,57 @@ export class RhService {
         `Un formateur avec le matricule "${dto.matricule}" existe déjà.`,
       );
     }
-    return this.prisma.formateur.create({ data: dto });
+
+    const { groupeIds, ...formateurData } = dto;
+    const temporaryPassword = generateTemporaryPassword();
+    const formateur = await this.prisma.formateur.create({
+      data: { ...formateurData, password: await bcrypt.hash(temporaryPassword, 10) },
+    });
+
+    // Assignation en une seule fois (voir UpsertFormateurDto.groupeIds) —
+    // réutilise le même champ Groupe.formateurId que le menu déroulant
+    // "Assigner un groupe" existant, donc réassigne silencieusement un
+    // groupe déjà pris par un autre formateur, même comportement que ce
+    // menu déroulant.
+    if (groupeIds && groupeIds.length > 0) {
+      await this.prisma.groupe.updateMany({
+        where: { id: { in: groupeIds } },
+        data: { formateurId: formateur.id },
+      });
+    }
+
+    await this.email.send({
+      to: dto.email,
+      subject: 'Bienvenue chez e-Staf — vos identifiants formateur',
+      text: `Bonjour ${dto.prenom},\n\nUn compte formateur a été créé pour vous sur e-Staf.\n\nVos identifiants pour vous connecter à votre Cockpit Formateur :\nMatricule : ${dto.matricule}\nMot de passe temporaire : ${temporaryPassword}\n\nÀ très vite,\nL'équipe e-Staf`,
+    });
+
+    return this.prisma.formateur.findUnique({
+      where: { id: formateur.id },
+      include: { groupes: true },
+    });
+  }
+
+  // Réémet un mot de passe temporaire — utile si le formateur l'a perdu
+  // (pas d'auto-service "mot de passe oublié" côté formateur pour l'instant,
+  // contrairement à l'apprenant).
+  async regenerateFormateurCredentials(id: string) {
+    const formateur = await this.prisma.formateur.findUnique({ where: { id } });
+    if (!formateur) throw new NotFoundException('Formateur introuvable.');
+
+    const temporaryPassword = generateTemporaryPassword();
+    await this.prisma.formateur.update({
+      where: { id },
+      data: { password: await bcrypt.hash(temporaryPassword, 10) },
+    });
+
+    await this.email.send({
+      to: formateur.email,
+      subject: 'Vos nouveaux identifiants e-Staf',
+      text: `Bonjour ${formateur.prenom},\n\nVoici vos nouveaux identifiants pour vous connecter à votre Cockpit Formateur :\nMatricule : ${formateur.matricule}\nMot de passe temporaire : ${temporaryPassword}\n\nL'équipe e-Staf`,
+    });
+
+    return { ok: true };
   }
 
   async updateFormateur(id: string, dto: UpsertFormateurDto) {

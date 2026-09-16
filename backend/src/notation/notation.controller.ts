@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   ParseIntPipe,
   Post,
@@ -27,14 +28,18 @@ export class NotationController {
 
   @Get("notations/a-corriger")
   @UseGuards(FormateurGuard)
-  listACorriger() {
-    return this.service.listACorriger();
+  listACorriger(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.listACorriger(formateurMatricule);
   }
 
   @Get("notations/:id/devoir")
   @UseGuards(FormateurGuard)
-  async streamDevoir(@Param("id") id: string, @Res() res: Response) {
-    const { stream, contentType } = await this.service.getDevoirStream(id);
+  async streamDevoir(
+    @Param("id") id: string,
+    @Headers("x-formateur-matricule") formateurMatricule: string,
+    @Res() res: Response
+  ) {
+    const { stream, contentType } = await this.service.getDevoirStream(id, formateurMatricule);
     if (contentType) res.set("Content-Type", contentType);
     stream.pipe(res);
   }
@@ -43,9 +48,10 @@ export class NotationController {
   @UseGuards(FormateurGuard)
   listNotationsForSeance(
     @Param("groupeCle") groupeCle: string,
-    @Param("numero", ParseIntPipe) numero: number
+    @Param("numero", ParseIntPipe) numero: number,
+    @Headers("x-formateur-matricule") formateurMatricule: string
   ) {
-    return this.service.listNotationsForSeance(groupeCle, numero);
+    return this.service.listNotationsForSeance(groupeCle, numero, formateurMatricule);
   }
 
   @Get("notations/:groupeCle/:numero/:apprenantMatricule/:competence")
@@ -54,9 +60,10 @@ export class NotationController {
     @Param("groupeCle") groupeCle: string,
     @Param("numero", ParseIntPipe) numero: number,
     @Param("apprenantMatricule") apprenantMatricule: string,
-    @Param("competence") competence: string
+    @Param("competence") competence: string,
+    @Headers("x-formateur-matricule") formateurMatricule: string
   ) {
-    return this.service.getNotation(groupeCle, numero, apprenantMatricule, competence);
+    return this.service.getNotation(groupeCle, numero, apprenantMatricule, competence, formateurMatricule);
   }
 
   @Put("notations/:groupeCle/:numero/:apprenantMatricule/:competence")
@@ -66,9 +73,10 @@ export class NotationController {
     @Param("numero", ParseIntPipe) numero: number,
     @Param("apprenantMatricule") apprenantMatricule: string,
     @Param("competence") competence: string,
-    @Body() dto: GradeNotationDto
+    @Body() dto: GradeNotationDto,
+    @Headers("x-formateur-matricule") formateurMatricule: string
   ) {
-    return this.service.gradeNotation(groupeCle, numero, apprenantMatricule, competence, dto);
+    return this.service.gradeNotation(groupeCle, numero, apprenantMatricule, competence, dto, formateurMatricule);
   }
 
   // ---- Apprenant (pas de guard — même niveau de protection stopgap que le

@@ -1,13 +1,15 @@
-import { NotFoundException } from "@nestjs/common";
+import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { NotationService } from "./notation.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage.service";
+import { EmailService } from "../common/email.service";
 
 function makePrismaMock() {
   return {
     groupe: { findUnique: jest.fn() },
     seance: { findUnique: jest.fn(), findMany: jest.fn() },
     apprenant: { findUnique: jest.fn() },
+    formateur: { findUnique: jest.fn() },
     notation: { findUnique: jest.fn(), findMany: jest.fn(), upsert: jest.fn() },
     presence: { findMany: jest.fn() },
   };
@@ -17,21 +19,32 @@ function makeStorageMock() {
   return { uploadBuffer: jest.fn(), getObjectStream: jest.fn() };
 }
 
-const GROUPE = { id: "groupe-1", cle: "A", label: "Groupe A" };
+const GROUPE = { id: "groupe-1", cle: "A", label: "Groupe A", formateurId: "f-1" };
+const FORMATEUR = { id: "f-1", matricule: "ETF-FORM-2026-0001" };
+const AUTRE_FORMATEUR = { id: "f-2", matricule: "ETF-FORM-2026-0002" };
 const SEANCE = { id: "seance-1", groupeId: "groupe-1", numero: 3, startAt: new Date("2026-01-01") };
-const APPRENANT = { id: "app-1", matricule: "ETF-2026-0001", prenom: "Awa", nom: "Diallo" };
+const APPRENANT = {
+  id: "app-1",
+  matricule: "ETF-2026-0001",
+  prenom: "Awa",
+  nom: "Diallo",
+  email: "awa@example.com",
+};
 
 describe("NotationService", () => {
   let prisma: ReturnType<typeof makePrismaMock>;
   let storage: ReturnType<typeof makeStorageMock>;
+  let email: { send: jest.Mock };
   let service: NotationService;
 
   beforeEach(() => {
     prisma = makePrismaMock();
     storage = makeStorageMock();
+    email = { send: jest.fn().mockResolvedValue({ delivered: true }) };
     service = new NotationService(
       prisma as unknown as PrismaService,
-      storage as unknown as StorageService
+      storage as unknown as StorageService,
+      email as unknown as EmailService
     );
   });
 
@@ -153,6 +166,61 @@ describe("NotationService", () => {
       expect(call.create.gradedAt).toBeInstanceOf(Date);
     });
 
+    it("envoie un e-mail à l'apprenant quand un nouveau commentaire est ajouté", async () => {
+      prisma.notation.findUnique.mockResolvedValue(null); // pas de notation existante
+      prisma.notation.upsert.mockResolvedValue({
+        id: "n-1",
+        competence: "expression_ecrite",
+        commentaires: "Attention aux temps verbaux.",
+        scoreOn20: 14,
+        gradedAt: new Date(),
+      });
+
+      await service.gradeNotation("A", 3, "ETF-2026-0001", "expression_ecrite", {
+        scoreOn20: 14,
+        commentaires: "Attention aux temps verbaux.",
+      });
+
+      expect(email.send).toHaveBeenCalledTimes(1);
+      const args = email.send.mock.calls[0][0];
+      expect(args.to).toBe("awa@example.com");
+      expect(args.text).toContain("Attention aux temps verbaux.");
+      expect(args.text).toContain("Expression écrite");
+    });
+
+    it("ne renvoie pas d'e-mail si le commentaire est inchangé", async () => {
+      prisma.notation.findUnique.mockResolvedValue({ commentaires: "Bon travail." });
+      prisma.notation.upsert.mockResolvedValue({
+        id: "n-1",
+        competence: "expression_ecrite",
+        commentaires: "Bon travail.",
+        scoreOn20: 16,
+        gradedAt: new Date(),
+      });
+
+      await service.gradeNotation("A", 3, "ETF-2026-0001", "expression_ecrite", {
+        scoreOn20: 16,
+        commentaires: "Bon travail.",
+      });
+
+      expect(email.send).not.toHaveBeenCalled();
+    });
+
+    it("n'envoie pas d'e-mail si aucun commentaire n'est fourni", async () => {
+      prisma.notation.findUnique.mockResolvedValue(null);
+      prisma.notation.upsert.mockResolvedValue({
+        id: "n-1",
+        competence: "oral",
+        commentaires: null,
+        scoreOn20: 12,
+        gradedAt: new Date(),
+      });
+
+      await service.gradeNotation("A", 3, "ETF-2026-0001", "oral", { scoreOn20: 12 });
+
+      expect(email.send).not.toHaveBeenCalled();
+    });
+
     it("laisse gridData undefined dans l'upsert si non fourni (ne l'écrase pas)", async () => {
       prisma.notation.upsert.mockResolvedValue({
         id: "n-1",
@@ -258,6 +326,19 @@ describe("NotationService", () => {
       storage.getObjectStream.mockResolvedValue(stream);
       expect(await service.getDevoirStream("n-1")).toBe(stream);
     });
+
+    it("rejette (Forbidden) si le formateur connecté n'encadre pas le groupe de cette notation", async () => {
+      prisma.notation.findUnique.mockResolvedValue({
+        fileKey: "devoirs/x",
+        seance: { groupe: GROUPE },
+      });
+      prisma.formateur.findUnique.mockResolvedValue(AUTRE_FORMATEUR);
+
+      await expect(service.getDevoirStream("n-1", AUTRE_FORMATEUR.matricule)).rejects.toThrow(
+        ForbiddenException
+      );
+      expect(storage.getObjectStream).not.toHaveBeenCalled();
+    });
   });
 
   describe("listACorriger", () => {
@@ -292,6 +373,69 @@ describe("NotationService", () => {
       expect(prisma.notation.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { fileKey: { not: null }, gradedAt: null } })
       );
+    });
+
+    it("filtre aux groupes du formateur connecté quand un matricule est fourni", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(FORMATEUR);
+      prisma.notation.findMany.mockResolvedValue([]);
+
+      await service.listACorriger(FORMATEUR.matricule);
+
+      expect(prisma.notation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            fileKey: { not: null },
+            gradedAt: null,
+            seance: { groupe: { formateurId: FORMATEUR.id } },
+          },
+        })
+      );
+    });
+  });
+
+  describe("scoping par formateur (comptes individuels)", () => {
+    beforeEach(() => {
+      prisma.groupe.findUnique.mockResolvedValue(GROUPE);
+      prisma.seance.findUnique.mockResolvedValue(SEANCE);
+      prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
+    });
+
+    it("getNotation rejette (Forbidden) un formateur qui n'encadre pas ce groupe", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(AUTRE_FORMATEUR);
+      await expect(
+        service.getNotation("A", 3, "ETF-2026-0001", "oral", AUTRE_FORMATEUR.matricule)
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.notation.findUnique).not.toHaveBeenCalled();
+    });
+
+    it("getNotation laisse passer le formateur qui encadre effectivement ce groupe", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(FORMATEUR);
+      prisma.notation.findUnique.mockResolvedValue(null);
+      await expect(
+        service.getNotation("A", 3, "ETF-2026-0001", "oral", FORMATEUR.matricule)
+      ).resolves.toBeNull();
+    });
+
+    it("gradeNotation rejette (Forbidden) un formateur qui n'encadre pas ce groupe, sans écrire la notation", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(AUTRE_FORMATEUR);
+      await expect(
+        service.gradeNotation(
+          "A",
+          3,
+          "ETF-2026-0001",
+          "oral",
+          { scoreOn20: 14 },
+          AUTRE_FORMATEUR.matricule
+        )
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.notation.upsert).not.toHaveBeenCalled();
+    });
+
+    it("listNotationsForSeance rejette (Forbidden) un formateur qui n'encadre pas ce groupe", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(AUTRE_FORMATEUR);
+      await expect(
+        service.listNotationsForSeance("A", 3, AUTRE_FORMATEUR.matricule)
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 

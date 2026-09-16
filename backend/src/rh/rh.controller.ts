@@ -92,6 +92,11 @@ export class RhController {
     return this.service.updateFormateur(id, dto);
   }
 
+  @Post('formateurs/:id/regenerer-identifiants')
+  regenerateFormateurCredentials(@Param('id') id: string) {
+    return this.service.regenerateFormateurCredentials(id);
+  }
+
   @Put('groupes/:id/formateur')
   assignFormateur(@Param('id') id: string, @Body() dto: AssignFormateurDto) {
     return this.service.assignFormateur(id, dto.formateurId ?? null);

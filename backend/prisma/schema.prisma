@@ -477,6 +477,16 @@ model Formateur {
   nom       String
   email     String
 
+  // Compte individuel (2026-09-16) — même principe que Apprenant.password :
+  // hash bcrypt, généré par la RH à la création (RhService.createFormateur)
+  // ou à la régénération (RhService.regenerateFormateurCredentials) et
+  // envoyé une seule fois en clair par e-mail. Nullable pour les formateurs
+  // déjà en base avant cette migration (ne peuvent pas encore se connecter
+  // individuellement tant que la RH n'a pas régénéré leurs identifiants).
+  password            String?
+  resetToken          String?   @unique
+  resetTokenExpiresAt DateTime?
+
   // Fixe mensuel négocié — base du Net à Payer (voir PaiementFormateur),
   // même principe que Superviseur.tarifFixe côté Production. Nullable tant
   // que la RH ne l'a pas renseigné.

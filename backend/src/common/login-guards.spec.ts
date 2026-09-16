@@ -1,13 +1,14 @@
 import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
 import { AdminGuard } from "./admin.guard";
-import { FormateurGuard } from "./formateur.guard";
 import { TrainerGuard } from "./trainer.guard";
 
-// AdminGuard, FormateurGuard et TrainerGuard partagent exactement le même
-// squelette (secret partagé par header + anti-brute-force via
-// login-rate-limit.ts) — un seul fichier paramétré plutôt que 3 fichiers
-// quasi identiques, un cas par guard suffit à couvrir la logique propre à
-// chacun (nom du header/de la var d'env, message d'erreur).
+// AdminGuard et TrainerGuard partagent exactement le même squelette (secret
+// partagé par header + anti-brute-force via login-rate-limit.ts) — un seul
+// fichier paramétré plutôt que 2 fichiers quasi identiques, un cas par
+// guard suffit à couvrir la logique propre à chacun (nom du header/de la
+// var d'env, message d'erreur). FormateurGuard a son propre fichier
+// (formateur.guard.spec.ts) depuis qu'il vérifie un vrai compte en base
+// plutôt qu'un secret partagé — squelette différent (async, Prisma).
 function makeContext(headers: Record<string, string | undefined>, ip: string): ExecutionContext {
   return {
     switchToHttp: () => ({
@@ -24,14 +25,6 @@ const cases = [
     envVar: "ADMIN_TEST_MATRICULE",
     invalidMessage: "Matricule admin invalide.",
     keyPrefix: "admin",
-  },
-  {
-    name: "FormateurGuard",
-    Guard: FormateurGuard,
-    header: "x-formateur-matricule",
-    envVar: "FORMATEUR_TEST_MATRICULE",
-    invalidMessage: "Matricule formateur invalide.",
-    keyPrefix: "formateur",
   },
   {
     name: "TrainerGuard",

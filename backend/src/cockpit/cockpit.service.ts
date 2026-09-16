@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 
 // Agrégats réels du Cockpit Formateur — remplace les widgets qui tournaient
@@ -35,12 +35,18 @@ interface RawApprenant {
   prenom: string;
   nom: string;
   groupeId: string;
-  groupe: { id: string; cle: string; label: string };
+  groupe: { id: string; cle: string; label: string; formateurId: string | null };
 }
 
 @Injectable()
 export class CockpitService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private async findFormateurOrThrow(matricule: string) {
+    const formateur = await this.prisma.formateur.findUnique({ where: { matricule } });
+    if (!formateur) throw new NotFoundException(`Formateur ${matricule} introuvable.`);
+    return formateur;
+  }
 
   // Charge tout ce dont les agrégats ci-dessous ont besoin en 4 requêtes,
   // puis tout le calcul se fait en mémoire (volumes petits : 30 apprenants,
@@ -131,8 +137,17 @@ export class CockpitService {
     return result;
   }
 
-  async getGroupes() {
-    const { apprenants, notations } = await this.loadRaw();
+  // Filtré aux groupes du formateur connecté (voir Groupe.formateurId) —
+  // avant les comptes individuels (2026-09-16), un seul compte formateur
+  // partagé voyait systématiquement tous les groupes.
+  async getGroupes(formateurMatricule?: string) {
+    const { apprenants: tousApprenants, notations } = await this.loadRaw();
+    const formateur = formateurMatricule
+      ? await this.findFormateurOrThrow(formateurMatricule)
+      : null;
+    const apprenants = formateur
+      ? tousApprenants.filter((a) => a.groupe.formateurId === formateur.id)
+      : tousApprenants;
     const scoresParApprenant = this.buildScoresParApprenant(notations);
 
     const parGroupe = new Map<string, { cle: string; label: string; moyennes: number[]; count: number }>();
@@ -214,13 +229,18 @@ export class CockpitService {
     return result;
   }
 
-  async getGroupeDetail(cle: string) {
+  async getGroupeDetail(cle: string, formateurMatricule?: string) {
+    const groupe = await this.prisma.groupe.findUnique({ where: { cle } });
+    if (!groupe) throw new NotFoundException(`Groupe ${cle} introuvable.`);
+    if (formateurMatricule) {
+      const formateur = await this.findFormateurOrThrow(formateurMatricule);
+      if (groupe.formateurId !== formateur.id) {
+        throw new ForbiddenException(`Vous n'encadrez pas le groupe ${cle}.`);
+      }
+    }
+
     const { apprenants: tousApprenants, notations, seancesPassees, presences } = await this.loadRaw();
     const apprenants = tousApprenants.filter((a) => a.groupe.cle === cle);
-    if (apprenants.length === 0) {
-      const exists = await this.prisma.groupe.findUnique({ where: { cle } });
-      if (!exists) throw new NotFoundException(`Groupe ${cle} introuvable.`);
-    }
 
     const scoresParApprenant = this.buildScoresParApprenant(notations);
     const tauxAbsenceParApprenant = this.buildTauxAbsence(tousApprenants, seancesPassees, presences);

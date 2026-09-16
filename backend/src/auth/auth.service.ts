@@ -16,12 +16,12 @@ import { ResetPasswordDto } from "./dto/reset-password.dto";
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1h
 const APP_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
-// Comptes Apprenant réels — chaque ligne Apprenant a désormais son propre
-// mot de passe (hash bcrypt), généré à la confirmation de paiement (voir
-// EvaluationService.confirmPayment) ou lors du seed (démo). Formateur/Admin
-// restent sur le stopgap "un identifiant de test partagé" (AuthController)
-// pour l'instant — pas urgent, petit nombre de personnes connues (voir
-// brainstorm 2026-08-10).
+// Comptes Apprenant ET Formateur réels — chaque ligne a son propre mot de
+// passe (hash bcrypt), généré par la RH à la création du compte (voir
+// EvaluationService.confirmPayment pour l'apprenant, RhService.createFormateur
+// pour le formateur) et envoyé une seule fois en clair par e-mail. Admin
+// reste sur le stopgap "identifiant de test partagé" (AuthController) —
+// une seule personne concernée, pas encore de besoin de comptes individuels.
 @Injectable()
 export class AuthService {
   constructor(
@@ -35,6 +35,14 @@ export class AuthService {
 
     const valid = await bcrypt.compare(password, apprenant.password);
     return valid ? apprenant : null;
+  }
+
+  async loginFormateur(matricule: string, password: string) {
+    const formateur = await this.prisma.formateur.findUnique({ where: { matricule } });
+    if (!formateur || !formateur.password) return null;
+
+    const valid = await bcrypt.compare(password, formateur.password);
+    return valid ? formateur : null;
   }
 
   async changePassword(dto: ChangePasswordDto) {
@@ -101,15 +109,25 @@ export class AuthService {
     return { ok: true };
   }
 
-  // "Se connecter en tant que" — la RH consulte déjà le Casier Apprenant en
-  // lecture seule (RhService.getApprenantCasier) ; ce jeton permet en plus
-  // d'ouvrir le vrai tableau de bord de l'apprenant tel qu'il le voit, sans
-  // connaître ni transmettre son mot de passe. Pas d'équivalent formateur :
-  // il n'existe qu'un unique compte formateur partagé (FORMATEUR_TEST_MATRICULE),
-  // pas de comptes individuels dans lesquels "entrer".
+  // "Se connecter en tant que" — la RH consulte déjà les Casiers Apprenant/
+  // Formateur en lecture seule ; ce jeton permet en plus d'ouvrir le vrai
+  // tableau de bord tel que la personne le voit, sans connaître ni
+  // transmettre son mot de passe (voir AuthController.consumeViewAs).
   async createApprenantViewAsToken(matricule: string) {
     const apprenant = await this.prisma.apprenant.findUnique({ where: { matricule } });
     if (!apprenant) throw new NotFoundException("Apprenant introuvable.");
     return { token: createViewAsToken(matricule, "apprenant") };
+  }
+
+  // Équivalent formateur — n'a de sens réel que depuis que chaque formateur
+  // a son propre compte (voir RhService.createFormateur) : le Cockpit
+  // Formateur est désormais filtré par formateurId (voir CockpitService,
+  // NotationService, ClasseVirtuelleService), donc "se connecter en tant
+  // que" ouvre bien SA vue (ses groupes, sa file de correction), pas la vue
+  // partagée d'avant.
+  async createFormateurViewAsToken(matricule: string) {
+    const formateur = await this.prisma.formateur.findUnique({ where: { matricule } });
+    if (!formateur) throw new NotFoundException("Formateur introuvable.");
+    return { token: createViewAsToken(matricule, "formateur") };
   }
 }
