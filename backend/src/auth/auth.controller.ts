@@ -19,17 +19,13 @@ import { AdminGuard } from "../common/admin.guard";
 import { recordFailure, recordSuccess, remainingLockoutSeconds } from "../common/login-rate-limit";
 import { consumeViewAsToken } from "../common/view-as-token";
 
-// Login générique — stopgap pour Formateur/Admin (un identifiant de test
-// partagé par rôle, petit nombre de personnes internes connues — voir
-// brainstorm 2026-08-10). Apprenant a désormais de vrais comptes
-// individuels (voir AuthService) : chaque candidat qui paie reçoit son
-// propre matricule + mot de passe, généré à la confirmation de paiement.
+// Login générique — stopgap pour Admin (un identifiant de test partagé,
+// une seule personne concernée). Apprenant ET Formateur ont désormais de
+// vrais comptes individuels (voir AuthService) : chaque candidat qui paie
+// reçoit son propre matricule + mot de passe (confirmation de paiement),
+// chaque formateur reçoit le sien à la création par la RH
+// (RhService.createFormateur).
 const TEST_ACCOUNTS: { matricule?: string; password?: string; role: string }[] = [
-  {
-    matricule: process.env.FORMATEUR_TEST_MATRICULE,
-    password: process.env.FORMATEUR_TEST_PASSWORD,
-    role: "formateur",
-  },
   {
     matricule: process.env.ADMIN_TEST_MATRICULE,
     password: process.env.ADMIN_TEST_PASSWORD,
@@ -59,6 +55,12 @@ export class AuthController {
     if (account) {
       recordSuccess(key);
       return { ok: true, role: account.role };
+    }
+
+    const formateur = await this.authService.loginFormateur(dto.matricule, dto.password);
+    if (formateur) {
+      recordSuccess(key);
+      return { ok: true, role: "formateur" };
     }
 
     const apprenant = await this.authService.loginApprenant(dto.matricule, dto.password);
@@ -94,6 +96,15 @@ export class AuthController {
   @Post("view-as/:matricule")
   createViewAs(@Param("matricule") matricule: string) {
     return this.authService.createApprenantViewAsToken(matricule);
+  }
+
+  // "Se connecter en tant que" (RH -> compte formateur) — voir
+  // AuthService.createFormateurViewAsToken. Chemin distinct du précédent
+  // (déjà utilisé par le Casier Apprenant) pour ne rien casser côté front.
+  @UseGuards(AdminGuard)
+  @Post("view-as/formateur/:matricule")
+  createFormateurViewAs(@Param("matricule") matricule: string) {
+    return this.authService.createFormateurViewAsToken(matricule);
   }
 
   @Post("view-as/consume")

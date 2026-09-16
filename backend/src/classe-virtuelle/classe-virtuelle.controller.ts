@@ -21,8 +21,12 @@ export class ClasseVirtuelleController {
 
   @Get("seances/:groupeCle/:numero")
   @UseGuards(FormateurGuard)
-  getSeance(@Param("groupeCle") groupeCle: string, @Param("numero", ParseIntPipe) numero: number) {
-    return this.service.getSeance(groupeCle, numero);
+  getSeance(
+    @Param("groupeCle") groupeCle: string,
+    @Param("numero", ParseIntPipe) numero: number,
+    @Headers("x-formateur-matricule") formateurMatricule: string
+  ) {
+    return this.service.getSeance(groupeCle, numero, formateurMatricule);
   }
 
   @Put("seances/:groupeCle/:numero")
@@ -30,15 +34,20 @@ export class ClasseVirtuelleController {
   upsertSeance(
     @Param("groupeCle") groupeCle: string,
     @Param("numero", ParseIntPipe) numero: number,
-    @Body() dto: UpsertSeanceDto
+    @Body() dto: UpsertSeanceDto,
+    @Headers("x-formateur-matricule") formateurMatricule: string
   ) {
-    return this.service.upsertSeance(groupeCle, numero, dto);
+    return this.service.upsertSeance(groupeCle, numero, dto, formateurMatricule);
   }
 
   @Delete("seances/:groupeCle/:numero")
   @UseGuards(FormateurGuard)
-  cancelSeance(@Param("groupeCle") groupeCle: string, @Param("numero", ParseIntPipe) numero: number) {
-    return this.service.cancelSeance(groupeCle, numero);
+  cancelSeance(
+    @Param("groupeCle") groupeCle: string,
+    @Param("numero", ParseIntPipe) numero: number,
+    @Headers("x-formateur-matricule") formateurMatricule: string
+  ) {
+    return this.service.cancelSeance(groupeCle, numero, formateurMatricule);
   }
 
   @Get("seances/:groupeCle/:numero/room")
@@ -53,22 +62,25 @@ export class ClasseVirtuelleController {
 
   @Get("formateurs/prochaine-seance")
   @UseGuards(FormateurGuard)
-  getFormateurProchaineSeance() {
-    return this.service.getFormateurProchaineSeance();
+  getFormateurProchaineSeance(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.getFormateurProchaineSeance(formateurMatricule);
   }
 
-  // Calendrier formateur — toutes les séances planifiées, tous groupes.
+  // Calendrier formateur — séances planifiées de ses groupes uniquement.
   @Get("seances")
   @UseGuards(FormateurGuard)
-  listSeances() {
-    return this.service.listSeances();
+  listSeances(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.listSeances(formateurMatricule);
   }
 
   // Historique des séances passées d'un groupe (horaire, rappels, présence).
   @Get("groupes/:groupeCle/historique")
   @UseGuards(FormateurGuard)
-  getHistorique(@Param("groupeCle") groupeCle: string) {
-    return this.service.getHistorique(groupeCle);
+  getHistorique(
+    @Param("groupeCle") groupeCle: string,
+    @Headers("x-formateur-matricule") formateurMatricule: string
+  ) {
+    return this.service.getHistorique(groupeCle, formateurMatricule);
   }
 
   // Pas de guard : le matricule apprenant joue ici le même rôle qu'ailleurs

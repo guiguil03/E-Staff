@@ -21,8 +21,23 @@ async function makeApprenant(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+async function makeFormateur(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: "f-1",
+    matricule: "ETF-FORM-2026-0001",
+    prenom: "Hasina",
+    nom: "R.",
+    email: "hasina@example.com",
+    password: await bcrypt.hash("Sup3rSecret!", 10),
+    ...overrides,
+  };
+}
+
 describe("AuthService", () => {
-  let prisma: { apprenant: { findUnique: jest.Mock; update: jest.Mock } };
+  let prisma: {
+    apprenant: { findUnique: jest.Mock; update: jest.Mock };
+    formateur: { findUnique: jest.Mock };
+  };
   let email: { send: jest.Mock };
   let service: AuthService;
 
@@ -31,6 +46,9 @@ describe("AuthService", () => {
       apprenant: {
         findUnique: jest.fn(),
         update: jest.fn(),
+      },
+      formateur: {
+        findUnique: jest.fn(),
       },
     };
     email = { send: jest.fn().mockResolvedValue({ delivered: true }) };
@@ -60,6 +78,29 @@ describe("AuthService", () => {
       const apprenant = await makeApprenant();
       prisma.apprenant.findUnique.mockResolvedValue(apprenant);
       expect(await service.loginApprenant("ETF-2026-0001", "Sup3rSecret!")).toBe(apprenant);
+    });
+  });
+
+  describe("loginFormateur", () => {
+    it("retourne null si le matricule est introuvable", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(null);
+      expect(await service.loginFormateur("ETF-FORM-2026-0001", "whatever")).toBeNull();
+    });
+
+    it("retourne null si le compte n'a pas encore de mot de passe (identifiants pas encore émis par la RH)", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(await makeFormateur({ password: null }));
+      expect(await service.loginFormateur("ETF-FORM-2026-0001", "whatever")).toBeNull();
+    });
+
+    it("retourne null si le mot de passe est incorrect", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(await makeFormateur());
+      expect(await service.loginFormateur("ETF-FORM-2026-0001", "mauvais-mdp")).toBeNull();
+    });
+
+    it("retourne le formateur si le mot de passe est correct", async () => {
+      const formateur = await makeFormateur();
+      prisma.formateur.findUnique.mockResolvedValue(formateur);
+      expect(await service.loginFormateur("ETF-FORM-2026-0001", "Sup3rSecret!")).toBe(formateur);
     });
   });
 
@@ -200,6 +241,27 @@ describe("AuthService", () => {
 
       expect(consumeViewAsToken(token)).toEqual({ matricule: "ETF-2026-0001", role: "apprenant" });
       // Usage unique : la deuxième consommation échoue.
+      expect(consumeViewAsToken(token)).toBeNull();
+    });
+  });
+
+  describe("createFormateurViewAsToken", () => {
+    it("rejette un matricule introuvable", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(null);
+      await expect(service.createFormateurViewAsToken("inconnu")).rejects.toThrow(
+        NotFoundException
+      );
+    });
+
+    it("émet un jeton consommable une seule fois, résolvant vers le bon matricule et le rôle formateur", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(await makeFormateur());
+
+      const { token } = await service.createFormateurViewAsToken("ETF-FORM-2026-0001");
+
+      expect(consumeViewAsToken(token)).toEqual({
+        matricule: "ETF-FORM-2026-0001",
+        role: "formateur",
+      });
       expect(consumeViewAsToken(token)).toBeNull();
     });
   });

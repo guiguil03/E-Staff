@@ -20,6 +20,7 @@ import PaymentAlertsTable from "./PaymentAlertsTable";
 import { apiGet } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 import { useRequireRole } from "@/lib/useRequireRole";
+import ViewAsBanner from "@/components/ViewAsBanner";
 
 function formateurHeaders(): HeadersInit {
   const matricule =
@@ -66,6 +67,7 @@ export default function FormateurDashboard() {
 
   return (
     <div className="min-h-screen bg-obsidian px-4 py-10 sm:px-6 sm:py-14">
+      <ViewAsBanner />
       <div className="mx-auto max-w-6xl space-y-6">
         <Reveal>
           <p className="font-mono text-xs uppercase tracking-widest text-accent">

@@ -1,8 +1,23 @@
 import * as path from "path";
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage.service";
+import { EmailService } from "../common/email.service";
 import { GradeNotationDto } from "./dto/grade-notation.dto";
+
+const APP_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
+
+// Libellés des compétences — dupliqué depuis
+// components/compte-formateur/gradingGrids.ts (COMPETENCY_DEFS), même
+// convention que COMPETENCY_KEYS ci-dessous. Sert uniquement au texte de
+// l'e-mail "nouveau commentaire", pas de logique métier dessus.
+const COMPETENCY_LABELS: Record<string, string> = {
+  comprehension_orale: "Compréhension orale",
+  expression_orale: "Expression orale",
+  comprehension_ecrite: "Compréhension écrite",
+  expression_ecrite: "Expression écrite",
+  posture_eloquence: "Posture & Éloquence",
+};
 
 // Matricules de démo générés en série (ETF-2026-0001..0030) suivant
 // exactement le même index que components/compte-formateur/exampleData.ts
@@ -57,7 +72,8 @@ function round2(n: number): number {
 export class NotationService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly storage: StorageService
+    private readonly storage: StorageService,
+    private readonly email: EmailService
   ) {}
 
   private async findGroupeOrThrow(groupeCle: string) {
@@ -66,8 +82,31 @@ export class NotationService {
     return groupe;
   }
 
-  private async findSeanceOrThrow(groupeCle: string, numero: number) {
+  private async findFormateurOrThrow(matricule: string) {
+    const formateur = await this.prisma.formateur.findUnique({ where: { matricule } });
+    if (!formateur) throw new NotFoundException(`Formateur ${matricule} introuvable.`);
+    return formateur;
+  }
+
+  // Un formateur n'agit que sur les groupes qui lui sont assignés (voir
+  // Groupe.formateurId, assigné par la RH — FormateursPanel) — sécurité
+  // réelle depuis que chaque formateur a son propre compte individuel
+  // (2026-09-16), pas juste une séparation d'affichage. formateurMatricule
+  // reste optionnel pour ne pas casser un futur appel interne sans contexte
+  // formateur (aucun aujourd'hui, mais évite un couplage inutile).
+  private async findGroupeOrThrowOwned(groupeCle: string, formateurMatricule?: string) {
     const groupe = await this.findGroupeOrThrow(groupeCle);
+    if (formateurMatricule) {
+      const formateur = await this.findFormateurOrThrow(formateurMatricule);
+      if (groupe.formateurId !== formateur.id) {
+        throw new ForbiddenException(`Vous n'encadrez pas le groupe ${groupeCle}.`);
+      }
+    }
+    return groupe;
+  }
+
+  private async findSeanceOrThrow(groupeCle: string, numero: number, formateurMatricule?: string) {
+    const groupe = await this.findGroupeOrThrowOwned(groupeCle, formateurMatricule);
     const seance = await this.prisma.seance.findUnique({
       where: { groupeId_numero: { groupeId: groupe.id, numero } },
     });
@@ -108,8 +147,14 @@ export class NotationService {
 
   // ---- Formateur (Noter / Planning) --------------------------------------
 
-  async getNotation(groupeCle: string, numero: number, apprenantMatricule: string, competence: string) {
-    const seance = await this.findSeanceOrThrow(groupeCle, numero);
+  async getNotation(
+    groupeCle: string,
+    numero: number,
+    apprenantMatricule: string,
+    competence: string,
+    formateurMatricule?: string
+  ) {
+    const seance = await this.findSeanceOrThrow(groupeCle, numero, formateurMatricule);
     const apprenant = await this.findApprenantOrThrow(apprenantMatricule);
     const notation = await this.prisma.notation.findUnique({
       where: { seanceId_apprenantId_competence: { seanceId: seance.id, apprenantId: apprenant.id, competence } },
@@ -122,10 +167,15 @@ export class NotationService {
     numero: number,
     apprenantMatricule: string,
     competence: string,
-    dto: GradeNotationDto
+    dto: GradeNotationDto,
+    formateurMatricule?: string
   ) {
-    const seance = await this.findSeanceOrThrow(groupeCle, numero);
+    const seance = await this.findSeanceOrThrow(groupeCle, numero, formateurMatricule);
     const apprenant = await this.findApprenantOrThrow(apprenantMatricule);
+
+    const existing = await this.prisma.notation.findUnique({
+      where: { seanceId_apprenantId_competence: { seanceId: seance.id, apprenantId: apprenant.id, competence } },
+    });
 
     const gridDataStr = dto.gridData !== undefined ? JSON.stringify(dto.gridData) : undefined;
     const notation = await this.prisma.notation.upsert({
@@ -148,13 +198,27 @@ export class NotationService {
         gradedAt: new Date(),
       },
     });
+
+    // E-mail immédiat seulement si le commentaire est nouveau ou a changé —
+    // une simple correction de note/grille sans y toucher ne redéclenche pas
+    // l'envoi (évite de spammer l'apprenant à chaque enregistrement).
+    const nouveauCommentaire = dto.commentaires?.trim();
+    if (nouveauCommentaire && nouveauCommentaire !== existing?.commentaires?.trim()) {
+      const competenceLabel = COMPETENCY_LABELS[competence] ?? competence;
+      await this.email.send({
+        to: apprenant.email,
+        subject: `Nouveau commentaire de votre formateur — Séance ${numero}`,
+        text: `Bonjour ${apprenant.prenom},\n\nVotre formateur a laissé un commentaire sur votre évaluation "${competenceLabel}" (séance n°${numero}) :\n\n« ${nouveauCommentaire} »\n\nConsultez le détail depuis votre tableau de bord :\n${APP_URL}/compte/apprenant\n\nL'équipe e-Staf`,
+      });
+    }
+
     return this.serialize(notation);
   }
 
   // Tableau récap Planning — toutes les notations de tous les apprenants du
   // groupe pour cette séance, clé par matricule.
-  async listNotationsForSeance(groupeCle: string, numero: number) {
-    const seance = await this.findSeanceOrThrow(groupeCle, numero);
+  async listNotationsForSeance(groupeCle: string, numero: number, formateurMatricule?: string) {
+    const seance = await this.findSeanceOrThrow(groupeCle, numero, formateurMatricule);
     const notations = await this.prisma.notation.findMany({
       where: { seanceId: seance.id },
       include: { apprenant: true },
@@ -396,9 +460,19 @@ export class NotationService {
 
   // ---- File d'attente "Évaluer & Corriger" --------------------------------
 
-  async listACorriger() {
+  // Filtrée aux seuls groupes du formateur connecté (voir Groupe.formateurId)
+  // — avant les comptes individuels, cette file montrait tout le monde à
+  // tout le monde puisqu'il n'y avait qu'un seul compte formateur partagé.
+  async listACorriger(formateurMatricule?: string) {
+    const formateur = formateurMatricule
+      ? await this.findFormateurOrThrow(formateurMatricule)
+      : null;
     const notations = await this.prisma.notation.findMany({
-      where: { fileKey: { not: null }, gradedAt: null },
+      where: {
+        fileKey: { not: null },
+        gradedAt: null,
+        ...(formateur ? { seance: { groupe: { formateurId: formateur.id } } } : {}),
+      },
       include: { apprenant: true, seance: { include: { groupe: true } } },
       orderBy: { soumisAt: "asc" },
     });
@@ -416,9 +490,18 @@ export class NotationService {
     }));
   }
 
-  async getDevoirStream(notationId: string) {
-    const notation = await this.prisma.notation.findUnique({ where: { id: notationId } });
+  async getDevoirStream(notationId: string, formateurMatricule?: string) {
+    const notation = await this.prisma.notation.findUnique({
+      where: { id: notationId },
+      include: { seance: { include: { groupe: true } } },
+    });
     if (!notation?.fileKey) throw new NotFoundException("Devoir introuvable.");
+    if (formateurMatricule) {
+      const formateur = await this.findFormateurOrThrow(formateurMatricule);
+      if (notation.seance.groupe.formateurId !== formateur.id) {
+        throw new ForbiddenException(`Vous n'encadrez pas le groupe ${notation.seance.groupe.cle}.`);
+      }
+    }
     try {
       return await this.storage.getObjectStream(notation.fileKey);
     } catch {

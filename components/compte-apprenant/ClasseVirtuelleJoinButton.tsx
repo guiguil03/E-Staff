@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiGet, ApiError } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
@@ -9,16 +9,55 @@ interface RoomStatus {
   startAt: string | null;
   withinJoinWindow: boolean;
   configured: boolean;
+  // Le formateur est réellement connecté à la salle (voir
+  // ClasseVirtuelleService.computeRoomStatus, alimenté par le webhook Daily)
+  // — sert l'alerte sonore ci-dessous, distincte de withinJoinWindow qui ne
+  // reflète que l'heure programmée.
+  formateurEnLigne: boolean;
+}
+
+// Signal sonore (Web Audio, pas de fichier à charger) joué au moment où le
+// formateur vient de rejoindre — demandé par la cliente ("que ça sonne de
+// leur côté") en complément de l'e-mail immédiat déjà envoyé
+// (PresenceService.notifierClasseDemarree). Ne marche que si l'apprenant a
+// déjà interagi avec la page (règle navigateur sur l'audio automatique) ;
+// échoue silencieusement sinon, la bannière visuelle reste le filet de
+// sécurité.
+function playAlertSound() {
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new AudioCtx();
+    [0, 0.18, 0.36].forEach((delay, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = i % 2 === 0 ? 880 : 660;
+      gain.gain.setValueAtTime(0.15, ctx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.15);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + 0.15);
+    });
+  } catch {
+    // Web Audio indisponible (contexte pas encore autorisé, navigateur trop
+    // ancien...) — la bannière visuelle suffit, pas d'erreur bloquante.
+  }
 }
 
 // Ligne "Rejoindre la salle de classe virtuelle" de QuickActions — seul
 // morceau de la carte branché sur le vrai backend (classe-virtuelle
 // module) ; le reste de la carte (titre de séance, countdown) continue de
-// venir de exampleData.ts, sujet distinct. Revérifie l'état toutes les 60s
+// venir de exampleData.ts, sujet distinct. Revérifie l'état régulièrement
 // pour que le bouton s'active tout seul en entrant dans la fenêtre de
-// rejoin, sans que l'apprenant ait à recharger la page.
+// rejoin, et pour détecter le vrai démarrage (formateurEnLigne) sans que
+// l'apprenant ait à recharger la page — poll resserré (15s) une fois dans
+// la fenêtre, relâché (60s) en dehors.
 export default function ClasseVirtuelleJoinButton() {
   const [status, setStatus] = useState<RoomStatus | null | "loading" | "erreur">("loading");
+  const wasLiveRef = useRef(false);
 
   useEffect(() => {
     const matricule = sessionStorage.getItem(ACCOUNT_MATRICULE_KEY);
@@ -28,20 +67,31 @@ export default function ClasseVirtuelleJoinButton() {
     }
 
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
     async function fetchStatus(m: string) {
       try {
         const data = await apiGet<RoomStatus | null>(`/apprenants/${m}/prochaine-seance-room`);
-        if (!cancelled) setStatus(data);
+        if (cancelled) return;
+        if (data?.formateurEnLigne && !wasLiveRef.current) {
+          playAlertSound();
+        }
+        wasLiveRef.current = Boolean(data?.formateurEnLigne);
+        setStatus(data);
+        if (!cancelled) {
+          timeoutId = setTimeout(() => fetchStatus(m), data?.withinJoinWindow ? 15_000 : 60_000);
+        }
       } catch (err) {
-        if (!cancelled) setStatus(err instanceof ApiError ? null : "erreur");
+        if (cancelled) return;
+        setStatus(err instanceof ApiError ? null : "erreur");
+        timeoutId = setTimeout(() => fetchStatus(m), 60_000);
       }
     }
 
     fetchStatus(matricule);
-    const interval = setInterval(() => fetchStatus(matricule), 60_000);
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      clearTimeout(timeoutId);
     };
   }, []);
 
@@ -60,14 +110,26 @@ export default function ClasseVirtuelleJoinButton() {
 
   // Le lien "Rejoindre" n'apparaît que dans la fenêtre de rejoin (10 min
   // avant → fin de séance) — en dehors, on informe juste du délai, sans
-  // afficher un bouton d'action inactif.
+  // afficher un bouton d'action inactif. Mis en avant (pulse + libellé "En
+  // direct") dès que le formateur est réellement connecté.
   if (status.withinJoinWindow && status.configured) {
     return (
       <Link
         href="/compte/apprenant/classe-virtuelle"
-        className="flex items-center justify-between rounded border border-accent/30 bg-obsidian px-4 py-3 font-sans text-sm text-white transition-colors hover:border-accent"
+        className={`flex items-center justify-between rounded border px-4 py-3 font-sans text-sm text-white transition-colors ${
+          status.formateurEnLigne
+            ? "animate-pulse border-accent bg-accent/10 hover:bg-accent/20"
+            : "border-accent/30 bg-obsidian hover:border-accent"
+        }`}
       >
-        Rejoindre la salle de classe virtuelle
+        <span>
+          {status.formateurEnLigne && (
+            <span className="mr-2 inline-block h-2 w-2 rounded-full bg-accent align-middle" />
+          )}
+          {status.formateurEnLigne
+            ? "Votre classe a commencé — rejoindre"
+            : "Rejoindre la salle de classe virtuelle"}
+        </span>
         <span aria-hidden="true" className="text-accent">
           →
         </span>
