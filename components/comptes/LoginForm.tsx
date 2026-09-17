@@ -40,7 +40,16 @@ export default function LoginForm() {
       setStatus("error");
       setError(
         err instanceof ApiError
-          ? "Matricule ou mot de passe invalide."
+          // 401 = identifiants invalides, message générique volontaire (pas
+          // d'indice sur quel champ est faux). Tout autre statut (429
+          // "Trop de tentatives..." de l'anti-brute-force, 500...) doit
+          // remonter son vrai message : sinon un verrouillage temporaire
+          // s'affichait identique à un mauvais mot de passe, illisible pour
+          // l'utilisateur qui retape pourtant le bon (bug relevé le
+          // 2026-09-18).
+          ? err.status === 401
+            ? "Matricule ou mot de passe invalide."
+            : err.message
           : "Une erreur est survenue. Merci de réessayer plus tard."
       );
     }
