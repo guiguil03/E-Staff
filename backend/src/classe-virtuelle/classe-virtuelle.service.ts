@@ -112,6 +112,7 @@ export class ClasseVirtuelleService {
   }
 
   async upsertSeance(groupeCle: string, numero: number, dto: UpsertSeanceDto) {
+    const groupe = await this.findGroupeOrThrow(groupeCle);
     const seance = await this.findSeanceOrThrow(groupeCle, numero);
 
     const nextStartAt = dto.startAt !== undefined ? new Date(dto.startAt) : seance.startAt;
@@ -126,11 +127,21 @@ export class ClasseVirtuelleService {
 
     // Un seul formateur ne peut pas être sur deux classes virtuelles à la
     // fois — bloque le chevauchement avec n'importe quelle autre séance déjà
-    // planifiée, tous groupes confondus.
-    if (startAtChanged || dureeChanged) {
+    // planifiée pour CE MÊME formateur (groupe.formateurId), pas tous les
+    // groupes confondus : deux groupes différents, chacun avec son propre
+    // formateur assigné (voir RhService.assignFormateur), peuvent très bien
+    // avoir une classe virtuelle en même temps. Si le groupe n'a pas encore
+    // de formateur assigné, aucun chevauchement n'est vérifiable, donc on ne
+    // bloque pas (bug relevé le 2026-09-17 : la vérification comparait à
+    // tort contre toutes les séances de tous les groupes).
+    if ((startAtChanged || dureeChanged) && groupe.formateurId) {
       const nextEnd = nextStartAt!.getTime() + dureeMinutes * 60 * 1000;
       const autres = await this.prisma.seance.findMany({
-        where: { startAt: { not: null }, id: { not: seance.id } },
+        where: {
+          startAt: { not: null },
+          id: { not: seance.id },
+          groupe: { formateurId: groupe.formateurId },
+        },
         include: { groupe: true },
       });
       const conflit = autres.find((s) => {
