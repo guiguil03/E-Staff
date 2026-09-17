@@ -22,13 +22,13 @@ interface Formateur {
   groupes: Groupe[];
 }
 
-const emptyForm = { prenom: "", nom: "", email: "" };
+const emptyForm = { matricule: "", prenom: "", nom: "", email: "" };
 
-// Annuaire des formateurs + assignation aux groupes. Depuis le 2026-09-17,
-// créer un formateur ici crée un vrai compte : matricule auto-généré
-// (ETF-FORM-2026-XXXX) et mot de passe temporaire envoyé par e-mail — même
-// mécanique que la création d'un compte apprenant. Le compte de test partagé
-// (FORMATEUR_TEST_MATRICULE) reste actif en parallèle.
+// Annuaire des formateurs + assignation aux groupes. Depuis le 2026-09-16,
+// chaque formateur a son propre compte (matricule + mot de passe temporaire
+// envoyé par e-mail à la création — voir RhService.createFormateur) : le
+// Cockpit Formateur se filtre désormais sur Groupe.formateurId au lieu du
+// login partagé FORMATEUR_TEST_MATRICULE d'avant.
 export default function FormateursPanel() {
   const [formateurs, setFormateurs] = useState<Formateur[] | "loading" | "erreur">("loading");
   const [groupes, setGroupes] = useState<Groupe[]>([]);
@@ -57,7 +57,8 @@ export default function FormateursPanel() {
   useEffect(refresh, []);
 
   async function create() {
-    if (!form.prenom.trim() || !form.nom.trim() || !form.email.trim()) return;
+    if (!form.matricule.trim() || !form.prenom.trim() || !form.nom.trim() || !form.email.trim())
+      return;
     setStatus("saving");
     setError(null);
     try {
@@ -72,7 +73,7 @@ export default function FormateursPanel() {
       refresh();
     } catch (e) {
       setStatus("error");
-      setError(e instanceof Error ? e.message : "Erreur lors de la création.");
+      setError(e instanceof Error ? e.message : "Erreur — vérifiez le matricule.");
     }
   }
 
@@ -150,6 +151,17 @@ export default function FormateursPanel() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+                  Matricule
+                </label>
+                <input
+                  value={form.matricule}
+                  onChange={(e) => setForm((f) => ({ ...f, matricule: e.target.value }))}
+                  placeholder="Ex. ETF-FORM-2026-0002"
+                  className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
+                />
+              </div>
+              <div>
+                <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
                   E-mail
                 </label>
                 <input
@@ -220,6 +232,7 @@ export default function FormateursPanel() {
                 onClick={create}
                 disabled={
                   status === "saving" ||
+                  !form.matricule.trim() ||
                   !form.prenom.trim() ||
                   !form.nom.trim() ||
                   !form.email.trim()

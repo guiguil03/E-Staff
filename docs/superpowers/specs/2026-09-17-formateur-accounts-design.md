@@ -1,5 +1,18 @@
 # Vrais comptes formateur individuels
 
+**Superseded 2026-09-17** : une PR distincte (#6, `feature-formateur-comptes-individuels`,
+mergée sur `main` le 2026-09-16) avait déjà construit cette même fonctionnalité en
+parallèle, en plus complet (scoping du Cockpit par `formateurId`, notifications,
+régénération d'identifiants, assignation de groupes à la création) mais avec un
+matricule saisi manuellement par la RH plutôt qu'auto-généré. Au moment de merger
+`develop` avec `main`, les deux implémentations se sont télescopées (champs
+dupliqués dans `schema.prisma`, méthodes qui s'écrasaient mutuellement) et ont
+cassé le build. Résolution : abandon de l'auto-génération de matricule décrite
+ci-dessous, adoption intégrale de la version de la PR #6 (déjà testée), en gardant
+seulement le fix du conflit d'horaire (scoping par `groupe.formateurId`, commit
+`b3b0a92`) qui n'existait pas dans cette PR. Le reste de ce document décrit le
+design initial (non retenu) à titre d'historique.
+
 Date : 2026-09-17
 Contexte : la RH veut créer des comptes formateur individuels (au lieu de l'unique
 login de test partagé `FORMATEUR_TEST_MATRICULE`). Mirroir exact du pattern déjà
