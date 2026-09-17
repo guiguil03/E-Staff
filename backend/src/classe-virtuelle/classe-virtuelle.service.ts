@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { DailyService } from "./daily.service";
 import { EmailService } from "../common/email.service";
@@ -26,6 +26,11 @@ export interface RoomStatus {
   withinJoinWindow: boolean;
   configured: boolean;
   roomUrl: string | null;
+  // Le formateur est réellement connecté à la salle en ce moment (voir
+  // PresenceService.recordJoin, alimenté par le webhook Daily) — distinct de
+  // withinJoinWindow, qui ne reflète que l'heure programmée. Sert l'alerte
+  // "la classe vient de commencer" côté apprenant (voir LiveClassAlert.tsx).
+  formateurEnLigne: boolean;
 }
 
 @Injectable()
@@ -42,8 +47,29 @@ export class ClasseVirtuelleService {
     return groupe;
   }
 
-  private async findSeanceOrThrow(groupeCle: string, numero: number) {
+  private async findFormateurOrThrow(matricule: string) {
+    const formateur = await this.prisma.formateur.findUnique({ where: { matricule } });
+    if (!formateur) throw new NotFoundException(`Formateur ${matricule} introuvable.`);
+    return formateur;
+  }
+
+  // Un formateur n'agit que sur les groupes qui lui sont assignés (voir
+  // Groupe.formateurId, assigné par la RH — FormateursPanel) — sécurité
+  // réelle depuis que chaque formateur a son propre compte individuel
+  // (2026-09-16), pas juste une séparation d'affichage.
+  private async findGroupeOrThrowOwned(groupeCle: string, formateurMatricule?: string) {
     const groupe = await this.findGroupeOrThrow(groupeCle);
+    if (formateurMatricule) {
+      const formateur = await this.findFormateurOrThrow(formateurMatricule);
+      if (groupe.formateurId !== formateur.id) {
+        throw new ForbiddenException(`Vous n'encadrez pas le groupe ${groupeCle}.`);
+      }
+    }
+    return groupe;
+  }
+
+  private async findSeanceOrThrow(groupeCle: string, numero: number, formateurMatricule?: string) {
+    const groupe = await this.findGroupeOrThrowOwned(groupeCle, formateurMatricule);
     const seance = await this.prisma.seance.findUnique({
       where: { groupeId_numero: { groupeId: groupe.id, numero } },
     });
@@ -51,8 +77,8 @@ export class ClasseVirtuelleService {
     return seance;
   }
 
-  async getSeance(groupeCle: string, numero: number) {
-    const seance = await this.findSeanceOrThrow(groupeCle, numero);
+  async getSeance(groupeCle: string, numero: number, formateurMatricule?: string) {
+    const seance = await this.findSeanceOrThrow(groupeCle, numero, formateurMatricule);
     return { ...seance, groupeCle };
   }
 
@@ -60,8 +86,8 @@ export class ClasseVirtuelleService {
   // supprime la salle Daily associée (le créneau numéro reste, réutilisable
   // pour une nouvelle planification plus tard) — pas une suppression du
   // Seance lui-même, qui représente le créneau structurel du groupe.
-  async cancelSeance(groupeCle: string, numero: number) {
-    const seance = await this.findSeanceOrThrow(groupeCle, numero);
+  async cancelSeance(groupeCle: string, numero: number, formateurMatricule?: string) {
+    const seance = await this.findSeanceOrThrow(groupeCle, numero, formateurMatricule);
 
     // Ne jamais couper une classe virtuelle en cours par erreur.
     if (seance.startAt) {
@@ -219,6 +245,7 @@ export class ClasseVirtuelleService {
   // de salle nue si pas d'utilisateur fourni ou si le fournisseur n'est pas
   // configuré.
   private async computeRoomStatus(
+    seanceId: string,
     groupeCle: string,
     numero: number,
     startAt: Date | null,
@@ -229,6 +256,10 @@ export class ClasseVirtuelleService {
     joiner?: { userId: string; userName: string; isOwner: boolean }
   ): Promise<RoomStatus> {
     const configured = Boolean(process.env.DAILY_API_KEY);
+    const formateurEnLigne =
+      (await this.prisma.presence.count({
+        where: { seanceId, role: "formateur", leftAt: null },
+      })) > 0;
     const now = Date.now();
     let withinJoinWindow = false;
     if (startAt) {
@@ -257,15 +288,17 @@ export class ClasseVirtuelleService {
       withinJoinWindow,
       configured,
       roomUrl,
+      formateurEnLigne,
     };
   }
 
   async getSeanceRoom(groupeCle: string, numero: number, formateurMatricule?: string): Promise<RoomStatus> {
-    const seance = await this.findSeanceOrThrow(groupeCle, numero);
+    const seance = await this.findSeanceOrThrow(groupeCle, numero, formateurMatricule);
     const formateur = formateurMatricule
       ? await this.prisma.formateur.findUnique({ where: { matricule: formateurMatricule } })
       : null;
     return this.computeRoomStatus(
+      seance.id,
       groupeCle,
       numero,
       seance.startAt,
@@ -292,9 +325,15 @@ export class ClasseVirtuelleService {
       .find((s) => s.startAt!.getTime() + s.dureeMinutes * 60 * 1000 >= now);
   }
 
-  async getFormateurProchaineSeance() {
+  async getFormateurProchaineSeance(formateurMatricule?: string) {
+    const formateur = formateurMatricule
+      ? await this.findFormateurOrThrow(formateurMatricule)
+      : null;
     const seances = await this.prisma.seance.findMany({
-      where: { startAt: { not: null } },
+      where: {
+        startAt: { not: null },
+        ...(formateur ? { groupe: { formateurId: formateur.id } } : {}),
+      },
       include: { groupe: true },
     });
     const seance = this.firstOngoingOrUpcoming(seances);
@@ -302,11 +341,19 @@ export class ClasseVirtuelleService {
     return { groupeCle: seance.groupe.cle, numero: seance.numero, startAt: seance.startAt };
   }
 
-  // Toutes les séances planifiées (tous groupes) — alimente le calendrier
-  // formateur. Pas de fenêtre de rejoin ici, juste l'horaire pour affichage.
-  async listSeances() {
+  // Séances planifiées des groupes du formateur connecté — alimente son
+  // calendrier. Filtré par formateurId depuis les comptes individuels
+  // (2026-09-16) ; avant, un seul compte partagé voyait tous les groupes.
+  // Pas de fenêtre de rejoin ici, juste l'horaire pour affichage.
+  async listSeances(formateurMatricule?: string) {
+    const formateur = formateurMatricule
+      ? await this.findFormateurOrThrow(formateurMatricule)
+      : null;
     const seances = await this.prisma.seance.findMany({
-      where: { startAt: { not: null } },
+      where: {
+        startAt: { not: null },
+        ...(formateur ? { groupe: { formateurId: formateur.id } } : {}),
+      },
       include: { groupe: true },
       orderBy: { startAt: "asc" },
     });
@@ -352,8 +399,8 @@ export class ClasseVirtuelleService {
   // présence (table Presence, alimentée par les webhooks Daily), et moyenne
   // réelle du groupe calculée depuis la table Notation (persistée depuis le
   // 2026-08-07 — auparavant seulement côté state frontend, non partagée).
-  async getHistorique(groupeCle: string) {
-    const groupe = await this.findGroupeOrThrow(groupeCle);
+  async getHistorique(groupeCle: string, formateurMatricule?: string) {
+    const groupe = await this.findGroupeOrThrowOwned(groupeCle, formateurMatricule);
     const now = new Date();
     const seances = await this.prisma.seance.findMany({
       where: { groupeId: groupe.id, startAt: { not: null, lt: now } },
@@ -419,6 +466,7 @@ export class ClasseVirtuelleService {
     if (!seance || !seance.startAt) return null;
 
     return this.computeRoomStatus(
+      seance.id,
       apprenant.groupe.cle,
       seance.numero,
       seance.startAt,

@@ -33,10 +33,13 @@ export default function FormateursPanel() {
   const [formateurs, setFormateurs] = useState<Formateur[] | "loading" | "erreur">("loading");
   const [groupes, setGroupes] = useState<Groupe[]>([]);
   const [form, setForm] = useState(emptyForm);
+  const [selectedGroupeIds, setSelectedGroupeIds] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
-  const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "saving" | "error" | "success">("idle");
   const [error, setError] = useState<string | null>(null);
   const [assigning, setAssigning] = useState<string | null>(null);
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const [openingViewAsId, setOpeningViewAsId] = useState<string | null>(null);
 
   function refresh() {
     setFormateurs("loading");
@@ -58,15 +61,25 @@ export default function FormateursPanel() {
     setStatus("saving");
     setError(null);
     try {
-      await apiPostAuthed("/rh/formateurs", form, adminHeaders());
+      await apiPostAuthed(
+        "/rh/formateurs",
+        { ...form, groupeIds: selectedGroupeIds },
+        adminHeaders()
+      );
       setForm(emptyForm);
-      setOpen(false);
-      setStatus("idle");
+      setSelectedGroupeIds([]);
+      setStatus("success");
       refresh();
     } catch (e) {
       setStatus("error");
       setError(e instanceof Error ? e.message : "Erreur lors de la création.");
     }
+  }
+
+  function toggleGroupeSelection(groupeId: string) {
+    setSelectedGroupeIds((ids) =>
+      ids.includes(groupeId) ? ids.filter((id) => id !== groupeId) : [...ids, groupeId]
+    );
   }
 
   async function assignGroupe(groupeId: string, formateurId: string) {
@@ -80,6 +93,29 @@ export default function FormateursPanel() {
       refresh();
     } finally {
       setAssigning(null);
+    }
+  }
+
+  async function regenerateCredentials(id: string) {
+    setRegeneratingId(id);
+    try {
+      await apiPostAuthed(`/rh/formateurs/${id}/regenerer-identifiants`, {}, adminHeaders());
+    } finally {
+      setRegeneratingId(null);
+    }
+  }
+
+  async function seConnecterEnTantQue(matricule: string) {
+    setOpeningViewAsId(matricule);
+    try {
+      const { token } = await apiPostAuthed<{ token: string }>(
+        `/auth/view-as/formateur/${matricule}`,
+        {},
+        adminHeaders()
+      );
+      window.open(`/compte/formateur?viewAsToken=${token}`, "_blank");
+    } finally {
+      setOpeningViewAsId(null);
     }
   }
 
@@ -98,7 +134,11 @@ export default function FormateursPanel() {
             Formateurs &amp; assignation aux groupes
           </h3>
           <button
-            onClick={() => setOpen((o) => !o)}
+            onClick={() => {
+              setOpen((o) => !o);
+              setStatus("idle");
+              setSelectedGroupeIds([]);
+            }}
             className="font-mono text-xs uppercase tracking-widest text-accent hover:underline"
           >
             {open ? "Fermer" : "+ Ajouter un formateur"}
@@ -140,6 +180,40 @@ export default function FormateursPanel() {
                 />
               </div>
             </div>
+
+            <div className="mt-3">
+              <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+                Groupes à assigner (facultatif)
+              </label>
+              {groupes.length === 0 ? (
+                <p className="mt-1 font-sans text-xs text-white/40">Aucun groupe pour l&apos;instant.</p>
+              ) : (
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  {groupes.map((g) => {
+                    const checked = selectedGroupeIds.includes(g.id);
+                    return (
+                      <label
+                        key={g.id}
+                        className={`flex cursor-pointer items-center gap-1.5 rounded border px-2.5 py-1 font-sans text-xs transition-colors ${
+                          checked
+                            ? "border-accent/60 bg-accent/10 text-accent"
+                            : "border-white/15 text-white/60 hover:border-white/30"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleGroupeSelection(g.id)}
+                          className="sr-only"
+                        />
+                        {g.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div className="mt-3">
               <Button
                 variant="dark"
@@ -155,6 +229,11 @@ export default function FormateursPanel() {
               </Button>
             </div>
             {error && <p className="mt-2 font-mono text-xs text-accent">{error}</p>}
+            {status === "success" && (
+              <p className="mt-2 font-mono text-xs text-success">
+                Compte créé — identifiants envoyés par e-mail.
+              </p>
+            )}
           </div>
         )}
 
@@ -171,21 +250,43 @@ export default function FormateursPanel() {
         {Array.isArray(formateurs) && formateurs.length > 0 && (
           <div className="mt-4 space-y-2">
             {formateurs.map((f) => (
-              <div key={f.id} className="rounded border border-white/10 bg-obsidian px-4 py-3">
-                <Link
-                  href={`/compte/admin/formateurs/${f.id}`}
-                  className="block font-sans text-sm text-white hover:text-accent hover:underline"
-                >
-                  {f.prenom} {f.nom}
-                </Link>
-                <p className="font-mono text-[11px] text-white/40">
-                  {f.matricule} · {f.email}
-                </p>
-                <p className="mt-1 font-sans text-xs text-white/50">
-                  {f.groupes.length > 0
-                    ? `Groupes : ${f.groupes.map((g) => g.label).join(", ")}`
-                    : "Aucun groupe assigné"}
-                </p>
+              <div
+                key={f.id}
+                className="flex flex-wrap items-start justify-between gap-3 rounded border border-white/10 bg-obsidian px-4 py-3"
+              >
+                <div>
+                  <Link
+                    href={`/compte/admin/formateurs/${f.id}`}
+                    className="block font-sans text-sm text-white hover:text-accent hover:underline"
+                  >
+                    {f.prenom} {f.nom}
+                  </Link>
+                  <p className="font-mono text-[11px] text-white/40">
+                    {f.matricule} · {f.email}
+                  </p>
+                  <p className="mt-1 font-sans text-xs text-white/50">
+                    {f.groupes.length > 0
+                      ? `Groupes : ${f.groupes.map((g) => g.label).join(", ")}`
+                      : "Aucun groupe assigné"}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <button
+                    onClick={() => seConnecterEnTantQue(f.matricule)}
+                    disabled={openingViewAsId === f.matricule}
+                    className="whitespace-nowrap rounded border border-accent/40 px-2.5 py-1 font-mono text-[11px] uppercase tracking-widest text-accent hover:bg-accent/10 disabled:opacity-50"
+                  >
+                    {openingViewAsId === f.matricule ? "Ouverture..." : "Se connecter en tant que"}
+                  </button>
+                  <button
+                    onClick={() => regenerateCredentials(f.id)}
+                    disabled={regeneratingId === f.id}
+                    title="Envoie un nouveau mot de passe temporaire par e-mail"
+                    className="whitespace-nowrap rounded border border-white/15 px-2.5 py-1 font-mono text-[11px] uppercase tracking-widest text-white/50 hover:border-white/30 hover:text-white disabled:opacity-50"
+                  >
+                    {regeneratingId === f.id ? "..." : "Régénérer les identifiants"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>

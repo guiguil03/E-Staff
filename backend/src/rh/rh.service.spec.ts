@@ -1,4 +1,4 @@
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { RhService } from "./rh.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CockpitService } from "../cockpit/cockpit.service";
@@ -13,7 +13,7 @@ import { EmailService } from "../common/email.service";
 
 function makePrismaMock() {
   return {
-    groupe: { findMany: jest.fn(), findUnique: jest.fn() },
+    groupe: { findMany: jest.fn(), findUnique: jest.fn(), updateMany: jest.fn() },
     tarifFormation: { upsert: jest.fn() },
     encaissementFormation: {
       findMany: jest.fn(),
@@ -724,6 +724,101 @@ describe("RhService", () => {
       expect(result[0].derniereMissionClient).toBe("Client X");
       expect(result[1].derniereMissionClient).toBe("Client Y");
       expect(result[2].derniereMissionClient).toBeNull();
+    });
+  });
+
+  // ---- Comptes Formateur individuels --------------------------------------
+
+  describe("createFormateur", () => {
+    it("rejette un matricule déjà utilisé", async () => {
+      prisma.formateur.findUnique.mockResolvedValue({ id: "f-1" });
+      await expect(
+        service.createFormateur({
+          matricule: "ETF-FORM-2026-0001",
+          prenom: "Hasina",
+          nom: "R.",
+          email: "hasina@example.com",
+        })
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.formateur.create).not.toHaveBeenCalled();
+    });
+
+    it("génère un mot de passe temporaire haché et l'envoie par e-mail", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(null);
+      prisma.formateur.create.mockResolvedValue({ id: "f-1" });
+
+      await service.createFormateur({
+        matricule: "ETF-FORM-2026-0001",
+        prenom: "Hasina",
+        nom: "R.",
+        email: "hasina@example.com",
+      });
+
+      const createArgs = prisma.formateur.create.mock.calls[0][0];
+      expect(typeof createArgs.data.password).toBe("string");
+      expect(createArgs.data.password).not.toBe(""); // haché, pas en clair
+
+      expect(email.send).toHaveBeenCalledTimes(1);
+      const emailArgs = email.send.mock.calls[0][0];
+      expect(emailArgs.to).toBe("hasina@example.com");
+      expect(emailArgs.text).toContain("ETF-FORM-2026-0001");
+    });
+
+    it("assigne les groupes fournis au nouveau formateur en une seule fois", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(null);
+      prisma.formateur.create.mockResolvedValue({ id: "f-1" });
+
+      await service.createFormateur({
+        matricule: "ETF-FORM-2026-0001",
+        prenom: "Hasina",
+        nom: "R.",
+        email: "hasina@example.com",
+        groupeIds: ["groupe-a", "groupe-b"],
+      });
+
+      expect(prisma.groupe.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ["groupe-a", "groupe-b"] } },
+        data: { formateurId: "f-1" },
+      });
+    });
+
+    it("n'appelle pas l'assignation de groupe si aucun groupeIds n'est fourni", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(null);
+      prisma.formateur.create.mockResolvedValue({ id: "f-1" });
+
+      await service.createFormateur({
+        matricule: "ETF-FORM-2026-0001",
+        prenom: "Hasina",
+        nom: "R.",
+        email: "hasina@example.com",
+      });
+
+      expect(prisma.groupe.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("regenerateFormateurCredentials", () => {
+    it("lève NotFoundException si le formateur n'existe pas", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(null);
+      await expect(service.regenerateFormateurCredentials("f-inconnu")).rejects.toThrow(
+        NotFoundException
+      );
+    });
+
+    it("régénère le mot de passe et renvoie un e-mail avec les nouveaux identifiants", async () => {
+      prisma.formateur.findUnique.mockResolvedValue({
+        id: "f-1",
+        matricule: "ETF-FORM-2026-0001",
+        prenom: "Hasina",
+        email: "hasina@example.com",
+      });
+      prisma.formateur.update.mockResolvedValue({});
+
+      await service.regenerateFormateurCredentials("f-1");
+
+      expect(prisma.formateur.update).toHaveBeenCalledTimes(1);
+      expect(email.send).toHaveBeenCalledTimes(1);
+      expect(email.send.mock.calls[0][0].to).toBe("hasina@example.com");
     });
   });
 

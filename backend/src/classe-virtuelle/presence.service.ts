@@ -1,5 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { EmailService } from "../common/email.service";
+
+const APP_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
 interface JoinLeavePayload {
   room: string; // = Seance.id (nom de salle Daily = seance.id, voir createRoom)
@@ -19,7 +22,10 @@ interface JoinLeavePayload {
 export class PresenceService {
   private readonly logger = new Logger(PresenceService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly email: EmailService
+  ) {}
 
   private async resolveRole(userId?: string): Promise<{ role: string; apprenantId: string | null }> {
     if (!userId) return { role: "inconnu", apprenantId: null };
@@ -31,12 +37,22 @@ export class PresenceService {
   }
 
   async recordJoin(payload: JoinLeavePayload) {
-    const seance = await this.prisma.seance.findUnique({ where: { id: payload.room } });
+    const seance = await this.prisma.seance.findUnique({
+      where: { id: payload.room },
+      include: { groupe: { include: { apprenants: true } } },
+    });
     if (!seance) {
       this.logger.warn(`participant.joined pour une salle inconnue (${payload.room})`);
       return;
     }
     const { role, apprenantId } = await this.resolveRole(payload.user_id);
+
+    // Vérifié avant l'upsert : un formateur qui se reconnecte (crash,
+    // rafraîchissement) crée une nouvelle ligne Presence (session_id
+    // différent) mais ne doit pas redéclencher l'e-mail "la classe démarre".
+    const formateurDejaConnecte =
+      role === "formateur" &&
+      (await this.prisma.presence.count({ where: { seanceId: seance.id, role: "formateur" } })) > 0;
 
     await this.prisma.presence.upsert({
       where: { dailyParticipantId: payload.session_id },
@@ -50,6 +66,27 @@ export class PresenceService {
         joinedAt: payload.joined_at ? new Date(payload.joined_at * 1000) : new Date(),
       },
     });
+
+    if (role === "formateur" && !formateurDejaConnecte) {
+      await this.notifierClasseDemarree(seance);
+    }
+  }
+
+  // E-mail immédiat dès que le formateur est le premier à rejoindre la
+  // salle — complète les rappels J-1/15min (voir ClasseVirtuelleReminderService,
+  // basés sur l'heure programmée, pas sur le démarrage réel).
+  private async notifierClasseDemarree(seance: {
+    numero: number;
+    groupe: { label: string; apprenants: { prenom: string; email: string }[] };
+  }) {
+    const link = `${APP_URL}/compte/apprenant/classe-virtuelle`;
+    for (const apprenant of seance.groupe.apprenants) {
+      await this.email.send({
+        to: apprenant.email,
+        subject: `Votre classe virtuelle vient de commencer (${seance.groupe.label})`,
+        text: `Bonjour ${apprenant.prenom},\n\nVotre formateur vient de démarrer la séance n°${seance.numero} (${seance.groupe.label}).\n\nRejoignez la classe virtuelle ici :\n${link}\n\nÀ tout de suite,\nL'équipe e-Staf`,
+      });
+    }
   }
 
   async recordLeave(payload: JoinLeavePayload) {

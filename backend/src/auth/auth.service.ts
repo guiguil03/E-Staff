@@ -150,4 +150,16 @@ export class AuthService {
     if (!apprenant) throw new NotFoundException("Apprenant introuvable.");
     return { token: createViewAsToken(matricule, "apprenant") };
   }
+
+  // Équivalent formateur — n'a de sens réel que depuis que chaque formateur
+  // a son propre compte (voir RhService.createFormateur) : le Cockpit
+  // Formateur est désormais filtré par formateurId (voir CockpitService,
+  // NotationService, ClasseVirtuelleService), donc "se connecter en tant
+  // que" ouvre bien SA vue (ses groupes, sa file de correction), pas la vue
+  // partagée d'avant.
+  async createFormateurViewAsToken(matricule: string) {
+    const formateur = await this.prisma.formateur.findUnique({ where: { matricule } });
+    if (!formateur) throw new NotFoundException("Formateur introuvable.");
+    return { token: createViewAsToken(matricule, "formateur") };
+  }
 }

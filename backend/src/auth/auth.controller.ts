@@ -28,11 +28,6 @@ import { consumeViewAsToken } from "../common/view-as-token";
 // parallèle des vrais comptes (démo/dev), donc toujours dans cette liste.
 const TEST_ACCOUNTS: { matricule?: string; password?: string; role: string }[] = [
   {
-    matricule: process.env.FORMATEUR_TEST_MATRICULE,
-    password: process.env.FORMATEUR_TEST_PASSWORD,
-    role: "formateur",
-  },
-  {
     matricule: process.env.ADMIN_TEST_MATRICULE,
     password: process.env.ADMIN_TEST_PASSWORD,
     role: "admin",
@@ -102,6 +97,15 @@ export class AuthController {
   @Post("view-as/:matricule")
   createViewAs(@Param("matricule") matricule: string) {
     return this.authService.createApprenantViewAsToken(matricule);
+  }
+
+  // "Se connecter en tant que" (RH -> compte formateur) — voir
+  // AuthService.createFormateurViewAsToken. Chemin distinct du précédent
+  // (déjà utilisé par le Casier Apprenant) pour ne rien casser côté front.
+  @UseGuards(AdminGuard)
+  @Post("view-as/formateur/:matricule")
+  createFormateurViewAs(@Param("matricule") matricule: string) {
+    return this.authService.createFormateurViewAsToken(matricule);
   }
 
   @Post("view-as/consume")

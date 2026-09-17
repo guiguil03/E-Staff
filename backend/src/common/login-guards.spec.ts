@@ -1,6 +1,5 @@
 import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
 import { AdminGuard } from "./admin.guard";
-import { FormateurGuard } from "./formateur.guard";
 import { TrainerGuard } from "./trainer.guard";
 
 // AdminGuard, FormateurGuard et TrainerGuard partagent le même squelette

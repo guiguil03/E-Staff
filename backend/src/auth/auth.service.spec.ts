@@ -312,4 +312,25 @@ describe("AuthService", () => {
       expect(consumeViewAsToken(token)).toBeNull();
     });
   });
+
+  describe("createFormateurViewAsToken", () => {
+    it("rejette un matricule introuvable", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(null);
+      await expect(service.createFormateurViewAsToken("inconnu")).rejects.toThrow(
+        NotFoundException
+      );
+    });
+
+    it("émet un jeton consommable une seule fois, résolvant vers le bon matricule et le rôle formateur", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(await makeFormateur());
+
+      const { token } = await service.createFormateurViewAsToken("ETF-FORM-2026-0001");
+
+      expect(consumeViewAsToken(token)).toEqual({
+        matricule: "ETF-FORM-2026-0001",
+        role: "formateur",
+      });
+      expect(consumeViewAsToken(token)).toBeNull();
+    });
+  });
 });

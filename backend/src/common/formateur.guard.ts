@@ -33,7 +33,10 @@ export class FormateurGuard implements CanActivate {
     }
 
     const matricule = request.headers["x-formateur-matricule"];
-    const expected = process.env.FORMATEUR_TEST_MATRICULE;
+    if (typeof matricule !== "string" || !matricule) {
+      recordFailure(key);
+      throw new UnauthorizedException("Matricule formateur invalide.");
+    }
 
     const isTestAccount = typeof matricule === "string" && !!expected && matricule === expected;
     const isRealFormateur =
@@ -45,6 +48,7 @@ export class FormateurGuard implements CanActivate {
       recordFailure(key);
       throw new UnauthorizedException("Matricule formateur invalide.");
     }
+
     recordSuccess(key);
     return true;
   }

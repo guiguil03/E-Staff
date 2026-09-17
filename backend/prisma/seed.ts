@@ -49,6 +49,12 @@ const JOUR_MS = 24 * 60 * 60 * 1000;
 
 async function main() {
   const formateurMatricule = process.env.FORMATEUR_TEST_MATRICULE ?? "ETF-FORM-2026-0001";
+  const formateurTestPassword = process.env.FORMATEUR_TEST_PASSWORD ?? "formateur-demo-2026";
+  // Compte individuel (2026-09-16) — même mot de passe de démo qu'avant la
+  // migration (partagé via FORMATEUR_TEST_PASSWORD), pour ne pas casser le
+  // login de démo existant. update: {} volontairement laissé sans password
+  // pour ne pas écraser un vrai mot de passe déjà régénéré par la RH sur un
+  // environnement où ce seed est rejoué.
   await prisma.formateur.upsert({
     where: { matricule: formateurMatricule },
     update: {},
@@ -57,6 +63,7 @@ async function main() {
       prenom: "Ravaka",
       nom: "Formateur",
       email: "formateur.demo@exemple.e-staf.mg",
+      password: await bcrypt.hash(formateurTestPassword, 10),
     },
   });
 
