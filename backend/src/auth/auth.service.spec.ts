@@ -21,8 +21,28 @@ async function makeApprenant(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+// Même principe côté Formateur (matricule "ETF-FORM-2026-..." — voir
+// AuthService.updateAccountPassword, qui se base sur ce préfixe pour savoir
+// dans quelle table écrire).
+async function makeFormateur(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: "form-1",
+    matricule: "ETF-FORM-2026-0002",
+    prenom: "Hasina",
+    nom: "Rakoto",
+    email: "hasina@example.com",
+    password: await bcrypt.hash("Sup3rSecret!", 10),
+    resetToken: null,
+    resetTokenExpiresAt: null,
+    ...overrides,
+  };
+}
+
 describe("AuthService", () => {
-  let prisma: { apprenant: { findUnique: jest.Mock; update: jest.Mock } };
+  let prisma: {
+    apprenant: { findUnique: jest.Mock; update: jest.Mock };
+    formateur: { findUnique: jest.Mock; update: jest.Mock };
+  };
   let email: { send: jest.Mock };
   let service: AuthService;
 
@@ -30,6 +50,10 @@ describe("AuthService", () => {
     prisma = {
       apprenant: {
         findUnique: jest.fn(),
+        update: jest.fn(),
+      },
+      formateur: {
+        findUnique: jest.fn().mockResolvedValue(null),
         update: jest.fn(),
       },
     };
@@ -60,6 +84,51 @@ describe("AuthService", () => {
       const apprenant = await makeApprenant();
       prisma.apprenant.findUnique.mockResolvedValue(apprenant);
       expect(await service.loginApprenant("ETF-2026-0001", "Sup3rSecret!")).toBe(apprenant);
+    });
+  });
+
+  describe("loginFormateur", () => {
+    it("retourne null si le matricule est introuvable", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(null);
+      expect(await service.loginFormateur("ETF-FORM-2026-0002", "whatever")).toBeNull();
+    });
+
+    it("retourne null si le compte n'a pas encore de mot de passe", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(await makeFormateur({ password: null }));
+      expect(await service.loginFormateur("ETF-FORM-2026-0002", "whatever")).toBeNull();
+    });
+
+    it("retourne null si le mot de passe est incorrect", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(await makeFormateur());
+      expect(await service.loginFormateur("ETF-FORM-2026-0002", "mauvais-mdp")).toBeNull();
+    });
+
+    it("retourne le formateur si le mot de passe est correct", async () => {
+      const formateur = await makeFormateur();
+      prisma.formateur.findUnique.mockResolvedValue(formateur);
+      expect(await service.loginFormateur("ETF-FORM-2026-0002", "Sup3rSecret!")).toBe(formateur);
+    });
+  });
+
+  describe("changePassword — matricule Formateur (pas seulement Apprenant)", () => {
+    it("cherche dans Formateur quand le matricule n'est pas un Apprenant, et écrit dans Formateur", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+      const formateur = await makeFormateur();
+      prisma.formateur.findUnique.mockResolvedValue(formateur);
+      prisma.formateur.update.mockResolvedValue({ ...formateur });
+
+      const result = await service.changePassword({
+        matricule: formateur.matricule,
+        oldPassword: "Sup3rSecret!",
+        newPassword: "nouveaunouveau",
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(prisma.formateur.update).toHaveBeenCalledTimes(1);
+      expect(prisma.apprenant.update).not.toHaveBeenCalled();
+      const { where, data } = prisma.formateur.update.mock.calls[0][0];
+      expect(where).toEqual({ id: formateur.id });
+      expect(await bcrypt.compare("nouveaunouveau", data.password)).toBe(true);
     });
   });
 
@@ -145,6 +214,25 @@ describe("AuthService", () => {
     });
   });
 
+  describe("forgotPassword — matricule Formateur", () => {
+    it("génère un token et l'enregistre dans Formateur quand le matricule n'est pas un Apprenant", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+      const formateur = await makeFormateur();
+      prisma.formateur.findUnique.mockResolvedValue(formateur);
+      prisma.formateur.update.mockResolvedValue(formateur);
+
+      const result = await service.forgotPassword({ matricule: formateur.matricule });
+
+      expect(result).toEqual({ ok: true });
+      expect(prisma.formateur.update).toHaveBeenCalledTimes(1);
+      expect(prisma.apprenant.update).not.toHaveBeenCalled();
+      const { where } = prisma.formateur.update.mock.calls[0][0];
+      expect(where).toEqual({ id: formateur.id });
+      expect(email.send).toHaveBeenCalledTimes(1);
+      expect(email.send.mock.calls[0][0].to).toBe(formateur.email);
+    });
+  });
+
   describe("resetPassword", () => {
     it("rejette un token inconnu", async () => {
       prisma.apprenant.findUnique.mockResolvedValue(null);
@@ -181,6 +269,27 @@ describe("AuthService", () => {
       expect(where).toEqual({ id: apprenant.id });
       expect(data.resetToken).toBeNull();
       expect(data.resetTokenExpiresAt).toBeNull();
+      expect(await bcrypt.compare("nouveaunouveau", data.password)).toBe(true);
+    });
+  });
+
+  describe("resetPassword — matricule Formateur", () => {
+    it("met à jour le mot de passe dans Formateur quand le token appartient à un formateur", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+      const formateur = await makeFormateur({
+        resetToken: "abc",
+        resetTokenExpiresAt: new Date(Date.now() + 1000),
+      });
+      prisma.formateur.findUnique.mockResolvedValue(formateur);
+      prisma.formateur.update.mockResolvedValue(formateur);
+
+      const result = await service.resetPassword({ token: "abc", newPassword: "nouveaunouveau" });
+
+      expect(result).toEqual({ ok: true });
+      expect(prisma.formateur.update).toHaveBeenCalledTimes(1);
+      expect(prisma.apprenant.update).not.toHaveBeenCalled();
+      const { where, data } = prisma.formateur.update.mock.calls[0][0];
+      expect(where).toEqual({ id: formateur.id });
       expect(await bcrypt.compare("nouveaunouveau", data.password)).toBe(true);
     });
   });

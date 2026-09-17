@@ -23,7 +23,7 @@ function makePrismaMock() {
       delete: jest.fn(),
     },
     apprenant: { findUnique: jest.fn(), findMany: jest.fn(), update: jest.fn() },
-    formateur: { findMany: jest.fn(), findUnique: jest.fn() },
+    formateur: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn() },
     paiementFormateur: {
       findUnique: jest.fn(),
       create: jest.fn(),
@@ -58,6 +58,56 @@ describe("RhService", () => {
       {} as unknown as NotationService,
       email as unknown as EmailService
     );
+  });
+
+  // ---- Comptes formateur (auth réelle, voir migration formateur_auth) ---
+
+  describe("createFormateur", () => {
+    it("génère le premier matricule ETF-FORM-2026-0001 quand aucun formateur n'existe encore", async () => {
+      prisma.formateur.findMany.mockResolvedValue([]);
+      prisma.formateur.create.mockImplementation(({ data }: any) => Promise.resolve({ id: "f1", ...data }));
+
+      await service.createFormateur({ prenom: "Arijoana", nom: "Rasoanaivo", email: "arijoana@e-staf.mg" });
+
+      const { data } = prisma.formateur.create.mock.calls[0][0];
+      expect(data.matricule).toBe("ETF-FORM-2026-0001");
+    });
+
+    it("incrémente à partir du plus grand matricule ETF-FORM-2026-XXXX existant", async () => {
+      prisma.formateur.findMany.mockResolvedValue([
+        { matricule: "ETF-FORM-2026-0001" },
+        { matricule: "ETF-FORM-2026-0003" },
+      ]);
+      prisma.formateur.create.mockImplementation(({ data }: any) => Promise.resolve({ id: "f4", ...data }));
+
+      await service.createFormateur({ prenom: "Test", nom: "Test", email: "test@e-staf.mg" });
+
+      const { data } = prisma.formateur.create.mock.calls[0][0];
+      expect(data.matricule).toBe("ETF-FORM-2026-0004");
+    });
+
+    it("hache le mot de passe temporaire avant de le sauvegarder, jamais en clair", async () => {
+      prisma.formateur.findMany.mockResolvedValue([]);
+      prisma.formateur.create.mockImplementation(({ data }: any) => Promise.resolve({ id: "f1", ...data }));
+
+      await service.createFormateur({ prenom: "Arijoana", nom: "Rasoanaivo", email: "arijoana@e-staf.mg" });
+
+      const { data } = prisma.formateur.create.mock.calls[0][0];
+      expect(data.password).not.toMatch(/^[A-Za-z0-9]+$/); // un hash bcrypt, pas le mdp brut
+      expect(data.password.startsWith("$2")).toBe(true);
+    });
+
+    it("envoie un e-mail de bienvenue avec le matricule et le mot de passe en clair, une seule fois", async () => {
+      prisma.formateur.findMany.mockResolvedValue([]);
+      prisma.formateur.create.mockImplementation(({ data }: any) => Promise.resolve({ id: "f1", ...data }));
+
+      await service.createFormateur({ prenom: "Arijoana", nom: "Rasoanaivo", email: "arijoana@e-staf.mg" });
+
+      expect(email.send).toHaveBeenCalledTimes(1);
+      const sent = email.send.mock.calls[0][0];
+      expect(sent.to).toBe("arijoana@e-staf.mg");
+      expect(sent.text).toContain("ETF-FORM-2026-0001");
+    });
   });
 
   // ---- Encaissements --------------------------------------------------

@@ -19,11 +19,13 @@ import { AdminGuard } from "../common/admin.guard";
 import { recordFailure, recordSuccess, remainingLockoutSeconds } from "../common/login-rate-limit";
 import { consumeViewAsToken } from "../common/view-as-token";
 
-// Login générique — stopgap pour Formateur/Admin (un identifiant de test
-// partagé par rôle, petit nombre de personnes internes connues — voir
-// brainstorm 2026-08-10). Apprenant a désormais de vrais comptes
-// individuels (voir AuthService) : chaque candidat qui paie reçoit son
-// propre matricule + mot de passe, généré à la confirmation de paiement.
+// Login générique — stopgap pour Admin (un identifiant de test partagé,
+// une seule personne interne connue — voir brainstorm 2026-08-10). Apprenant
+// et Formateur ont désormais de vrais comptes individuels (voir
+// AuthService) : chaque candidat qui paie, ou chaque formateur créé par la
+// RH, reçoit son propre matricule + mot de passe. Le compte de test
+// formateur partagé (FORMATEUR_TEST_MATRICULE) reste néanmoins actif en
+// parallèle des vrais comptes (démo/dev), donc toujours dans cette liste.
 const TEST_ACCOUNTS: { matricule?: string; password?: string; role: string }[] = [
   {
     matricule: process.env.FORMATEUR_TEST_MATRICULE,
@@ -59,6 +61,12 @@ export class AuthController {
     if (account) {
       recordSuccess(key);
       return { ok: true, role: account.role };
+    }
+
+    const formateur = await this.authService.loginFormateur(dto.matricule, dto.password);
+    if (formateur) {
+      recordSuccess(key);
+      return { ok: true, role: "formateur" };
     }
 
     const apprenant = await this.authService.loginApprenant(dto.matricule, dto.password);

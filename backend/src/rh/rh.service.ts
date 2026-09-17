@@ -13,6 +13,7 @@ import { TIER_LABELS } from '../evaluation/evaluation.service';
 import { EnvoyerResultatsDto } from './dto/envoyer-resultats.dto';
 import { UpsertReunionDto } from './dto/upsert-reunion.dto';
 import { UpsertFormateurDto } from './dto/upsert-formateur.dto';
+import { CreateFormateurDto } from './dto/create-formateur.dto';
 import { UpdateApprenantRhDto } from './dto/update-apprenant-rh.dto';
 import { CreateEncaissementDto } from './dto/create-encaissement.dto';
 import { UpdateEncaissementDto } from './dto/update-encaissement.dto';
@@ -330,16 +331,32 @@ export class RhService {
     });
   }
 
-  async createFormateur(dto: UpsertFormateurDto) {
-    const existing = await this.prisma.formateur.findUnique({
-      where: { matricule: dto.matricule },
+  // Compte réel (matricule + mot de passe temporaire), même mécanique que
+  // createApprenantAccount : matricule auto-généré, mot de passe temporaire
+  // haché et envoyé une seule fois en clair par e-mail. Avant cette méthode,
+  // la RH saisissait elle-même un matricule sans mot de passe associé — le
+  // formateur ne pouvait alors se connecter qu'avec le compte de test
+  // partagé (FORMATEUR_TEST_MATRICULE), toujours actif en parallèle.
+  async createFormateur(dto: CreateFormateurDto) {
+    const matricule = await this.generateNextFormateurMatricule();
+    const temporaryPassword = generateTemporaryPassword();
+    const formateur = await this.prisma.formateur.create({
+      data: {
+        matricule,
+        prenom: dto.prenom,
+        nom: dto.nom,
+        email: dto.email,
+        password: await bcrypt.hash(temporaryPassword, 10),
+      },
     });
-    if (existing) {
-      throw new BadRequestException(
-        `Un formateur avec le matricule "${dto.matricule}" existe déjà.`,
-      );
-    }
-    return this.prisma.formateur.create({ data: dto });
+
+    await this.email.send({
+      to: dto.email,
+      subject: 'Bienvenue chez e-Staf — vos identifiants formateur',
+      text: `Bonjour ${dto.prenom},\n\nUn compte formateur a été créé pour vous.\n\nVos identifiants pour vous connecter à votre Cockpit Formateur :\nMatricule : ${matricule}\nMot de passe temporaire : ${temporaryPassword}\n\nNous vous conseillons de changer ce mot de passe dès votre première connexion.\n\nÀ très vite,\nL'équipe e-Staf`,
+    });
+
+    return formateur;
   }
 
   async updateFormateur(id: string, dto: UpsertFormateurDto) {
@@ -902,6 +919,20 @@ export class RhService {
       return m ? Math.max(max, parseInt(m[1], 10)) : max;
     }, 0);
     return `ETF-2026-${String(maxN + 1).padStart(4, '0')}`;
+  }
+
+  // Même principe que generateNextMatricule ci-dessus, format du compte de
+  // test existant (FORMATEUR_TEST_MATRICULE = "ETF-FORM-2026-0001").
+  private async generateNextFormateurMatricule(): Promise<string> {
+    const existing = await this.prisma.formateur.findMany({
+      where: { matricule: { startsWith: 'ETF-FORM-2026-' } },
+      select: { matricule: true },
+    });
+    const maxN = existing.reduce((max, f) => {
+      const m = /^ETF-FORM-2026-(\d+)$/.exec(f.matricule);
+      return m ? Math.max(max, parseInt(m[1], 10)) : max;
+    }, 0);
+    return `ETF-FORM-2026-${String(maxN + 1).padStart(4, '0')}`;
   }
 
   // Création directe d'un compte apprenant par la RH — hors pipeline de
