@@ -492,16 +492,6 @@ model Formateur {
   // que la RH ne l'a pas renseigné.
   tarifFixe Float?
 
-  // Compte réel (voir migration apprenant_auth, même principe) — hash bcrypt,
-  // généré à la création par la RH (RhService.createFormateur) et envoyé une
-  // seule fois en clair par e-mail. Nullable pour ne pas casser les formateurs
-  // déjà en base avant ce champ.
-  password String?
-
-  // Mot de passe oublié : jeton à usage unique, expire 1h après génération.
-  resetToken          String?   @unique
-  resetTokenExpiresAt DateTime?
-
   groupes   Groupe[]
   paiements PaiementFormateur[]
 }

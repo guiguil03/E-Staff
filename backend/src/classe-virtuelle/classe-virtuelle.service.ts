@@ -137,9 +137,9 @@ export class ClasseVirtuelleService {
     return { ...updated, groupeCle };
   }
 
-  async upsertSeance(groupeCle: string, numero: number, dto: UpsertSeanceDto) {
-    const groupe = await this.findGroupeOrThrow(groupeCle);
-    const seance = await this.findSeanceOrThrow(groupeCle, numero);
+  async upsertSeance(groupeCle: string, numero: number, dto: UpsertSeanceDto, formateurMatricule?: string) {
+    const groupe = await this.findGroupeOrThrowOwned(groupeCle, formateurMatricule);
+    const seance = await this.findSeanceOrThrow(groupeCle, numero, formateurMatricule);
 
     const nextStartAt = dto.startAt !== undefined ? new Date(dto.startAt) : seance.startAt;
     const dureeMinutes = dto.dureeMinutes ?? seance.dureeMinutes;

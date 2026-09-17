@@ -15,7 +15,6 @@ import { RhService } from './rh.service';
 import { UpsertReunionDto } from './dto/upsert-reunion.dto';
 import { UpdateConnecteurStatutDto } from './dto/update-connecteur-statut.dto';
 import { UpsertFormateurDto } from './dto/upsert-formateur.dto';
-import { CreateFormateurDto } from './dto/create-formateur.dto';
 import { AssignFormateurDto } from './dto/assign-formateur.dto';
 import { UpdateTypeCoursDto } from './dto/update-type-cours.dto';
 import { UpdateVagueDatesDto } from './dto/update-vague-dates.dto';
@@ -84,7 +83,7 @@ export class RhController {
   }
 
   @Post('formateurs')
-  createFormateur(@Body() dto: CreateFormateurDto) {
+  createFormateur(@Body() dto: UpsertFormateurDto) {
     return this.service.createFormateur(dto);
   }
 
