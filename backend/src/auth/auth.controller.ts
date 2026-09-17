@@ -20,11 +20,12 @@ import { recordFailure, recordSuccess, remainingLockoutSeconds } from "../common
 import { consumeViewAsToken } from "../common/view-as-token";
 
 // Login générique — stopgap pour Admin (un identifiant de test partagé,
-// une seule personne concernée). Apprenant ET Formateur ont désormais de
-// vrais comptes individuels (voir AuthService) : chaque candidat qui paie
-// reçoit son propre matricule + mot de passe (confirmation de paiement),
-// chaque formateur reçoit le sien à la création par la RH
-// (RhService.createFormateur).
+// une seule personne interne connue — voir brainstorm 2026-08-10). Apprenant
+// et Formateur ont désormais de vrais comptes individuels (voir
+// AuthService) : chaque candidat qui paie, ou chaque formateur créé par la
+// RH, reçoit son propre matricule + mot de passe. Le compte de test
+// formateur partagé (FORMATEUR_TEST_MATRICULE) reste néanmoins actif en
+// parallèle des vrais comptes (démo/dev), donc toujours dans cette liste.
 const TEST_ACCOUNTS: { matricule?: string; password?: string; role: string }[] = [
   {
     matricule: process.env.ADMIN_TEST_MATRICULE,

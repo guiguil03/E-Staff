@@ -8,18 +8,17 @@ import type { Request } from "express";
 import { PrismaService } from "../prisma/prisma.service";
 import { recordFailure, recordSuccess, remainingLockoutSeconds } from "./login-rate-limit";
 
-// Gate des routes du Cockpit Formateur (classe-virtuelle, notation,
-// cockpit) : le matricule envoyé dans le header `x-formateur-matricule`
-// doit correspondre à un compte Formateur réel (2026-09-16 — avant cette
-// date, un unique code partagé FORMATEUR_TEST_MATRICULE faisait office de
-// "compte"). Le mot de passe est vérifié une seule fois, à la connexion
-// (AuthService.loginFormateur) : ce guard ne revérifie que l'identité pour
-// chaque appel ensuite, même niveau de confiance que le reste du stopgap
-// (Apprenant n'a même pas de garde équivalente). C'est cette identité qui
-// permet maintenant de filtrer chaque service par formateurId (voir
-// CockpitService.getGroupes, NotationService.listACorriger, etc.) plutôt que
-// de tout montrer à tout le monde. Anti-brute-force par IP conservé (voir
-// login-rate-limit.ts) : un matricule reste devinable par essais répétés.
+// Gate des routes de planification du Cockpit Formateur (classe-virtuelle
+// module) : le matricule formateur envoyé dans le header
+// `x-formateur-matricule` doit correspondre soit au compte de test
+// FORMATEUR_TEST_MATRICULE (toujours actif, démo/dev), soit à un vrai
+// Formateur en base (voir migration formateur_auth, RhService.createFormateur).
+// Distinct de TrainerGuard (qui protège l'espace formateur autonome
+// /evaluation/formateur avec un code partagé) — le Cockpit Formateur a déjà
+// son propre login par matricule (lib/accountSession.ts), donc on réutilise
+// ce même identifiant plutôt que de redemander un second secret sans
+// rapport. Anti-brute-force par IP (voir login-rate-limit.ts) depuis
+// 2026-08-24 : un matricule reste plus facile à deviner qu'un mot de passe.
 @Injectable()
 export class FormateurGuard implements CanActivate {
   constructor(private readonly prisma: PrismaService) {}
@@ -39,8 +38,13 @@ export class FormateurGuard implements CanActivate {
       throw new UnauthorizedException("Matricule formateur invalide.");
     }
 
-    const formateur = await this.prisma.formateur.findUnique({ where: { matricule } });
-    if (!formateur) {
+    const isTestAccount = typeof matricule === "string" && !!expected && matricule === expected;
+    const isRealFormateur =
+      typeof matricule === "string" &&
+      !isTestAccount &&
+      (await this.prisma.formateur.findUnique({ where: { matricule } })) !== null;
+
+    if (!isTestAccount && !isRealFormateur) {
       recordFailure(key);
       throw new UnauthorizedException("Matricule formateur invalide.");
     }
