@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../common/email.service";
+import { renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
 
 const APP_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
@@ -28,6 +29,18 @@ export class ClasseVirtuelleReminderService {
       subject: (groupeLabel: string) => `Rappel — votre séance de demain (${groupeLabel})`,
       buildText: (prenom: string, groupeLabel: string, startAt: Date, link: string) =>
         `Bonjour ${prenom},\n\nPetit rappel : votre prochaine séance (${groupeLabel}) a lieu demain, le ${formatDateTime(startAt)}.\n\nVous pourrez rejoindre la classe virtuelle ici, 10 minutes avant le début :\n${link}\n\nÀ bientôt,\nL'équipe e-Staf`,
+      buildHtml: (prenom: string, groupeLabel: string, startAt: Date, link: string) =>
+        renderEmailHtml({
+          title: "Rappel — séance de demain",
+          preheader: `${groupeLabel} — ${formatDateTime(startAt)}`,
+          bodyHtml:
+            emailParagraph(`Bonjour ${prenom},`) +
+            emailParagraph(
+              `Petit rappel : votre prochaine séance (${groupeLabel}) a lieu demain, le ${formatDateTime(startAt)}.`
+            ) +
+            emailParagraph("Vous pourrez rejoindre la classe virtuelle 10 minutes avant le début.") +
+            ctaButton("Accéder à la classe virtuelle", link),
+        }),
     });
 
     await this.sendDueReminders({
@@ -36,6 +49,17 @@ export class ClasseVirtuelleReminderService {
       subject: (groupeLabel: string) => `Votre classe virtuelle commence bientôt (${groupeLabel})`,
       buildText: (prenom: string, groupeLabel: string, startAt: Date, link: string) =>
         `Bonjour ${prenom},\n\nVotre séance (${groupeLabel}) commence dans 15 minutes, à ${formatDateTime(startAt)}.\n\nRejoignez la classe virtuelle ici :\n${link}\n\nÀ tout de suite,\nL'équipe e-Staf`,
+      buildHtml: (prenom: string, groupeLabel: string, startAt: Date, link: string) =>
+        renderEmailHtml({
+          title: "Votre classe virtuelle commence bientôt",
+          preheader: `${groupeLabel} — dans 15 minutes`,
+          bodyHtml:
+            emailParagraph(`Bonjour ${prenom},`) +
+            emailParagraph(
+              `Votre séance (${groupeLabel}) commence dans 15 minutes, à ${formatDateTime(startAt)}.`
+            ) +
+            ctaButton("Rejoindre la classe virtuelle", link),
+        }),
     });
   }
 
@@ -44,6 +68,7 @@ export class ClasseVirtuelleReminderService {
     flagField: "rappelJ1EnvoyeAt" | "rappel15minEnvoyeAt";
     subject: (groupeLabel: string) => string;
     buildText: (prenom: string, groupeLabel: string, startAt: Date, link: string) => string;
+    buildHtml: (prenom: string, groupeLabel: string, startAt: Date, link: string) => string;
   }) {
     const now = Date.now();
     const dueSeances = await this.prisma.seance.findMany({
@@ -65,6 +90,7 @@ export class ClasseVirtuelleReminderService {
           to: apprenant.email,
           subject: params.subject(seance.groupe.label),
           text: params.buildText(apprenant.prenom, seance.groupe.label, seance.startAt, link),
+          html: params.buildHtml(apprenant.prenom, seance.groupe.label, seance.startAt, link),
         });
       }
 

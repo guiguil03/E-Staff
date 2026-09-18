@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CockpitService } from '../cockpit/cockpit.service';
 import { NotationService } from '../notation/notation.service';
 import { EmailService } from '../common/email.service';
+import { renderEmailHtml, emailParagraph, emailParagraphsFromText, credentialsBox } from '../common/email-template';
 import { TIER_LABELS } from '../evaluation/evaluation.service';
 import { EnvoyerResultatsDto } from './dto/envoyer-resultats.dto';
 import { UpsertReunionDto } from './dto/upsert-reunion.dto';
@@ -362,6 +363,18 @@ export class RhService {
       to: dto.email,
       subject: 'Bienvenue chez e-Staf — vos identifiants formateur',
       text: `Bonjour ${dto.prenom},\n\nUn compte formateur a été créé pour vous sur e-Staf.\n\nVos identifiants pour vous connecter à votre Cockpit Formateur :\nMatricule : ${dto.matricule}\nMot de passe temporaire : ${temporaryPassword}\n\nÀ très vite,\nL'équipe e-Staf`,
+      html: renderEmailHtml({
+        title: 'Bienvenue chez e-Staf',
+        preheader: 'Vos identifiants pour votre Cockpit Formateur',
+        bodyHtml:
+          emailParagraph(`Bonjour ${dto.prenom},`) +
+          emailParagraph('Un compte formateur a été créé pour vous sur e-Staf.') +
+          credentialsBox([
+            { label: 'Matricule', value: dto.matricule },
+            { label: 'Mot de passe temporaire', value: temporaryPassword },
+          ]) +
+          emailParagraph('Connectez-vous à votre Cockpit Formateur avec ces identifiants.'),
+      }),
     });
 
     return this.prisma.formateur.findUnique({
@@ -387,6 +400,17 @@ export class RhService {
       to: formateur.email,
       subject: 'Vos nouveaux identifiants e-Staf',
       text: `Bonjour ${formateur.prenom},\n\nVoici vos nouveaux identifiants pour vous connecter à votre Cockpit Formateur :\nMatricule : ${formateur.matricule}\nMot de passe temporaire : ${temporaryPassword}\n\nL'équipe e-Staf`,
+      html: renderEmailHtml({
+        title: 'Vos nouveaux identifiants',
+        preheader: 'Mot de passe régénéré pour votre Cockpit Formateur',
+        bodyHtml:
+          emailParagraph(`Bonjour ${formateur.prenom},`) +
+          emailParagraph('Voici vos nouveaux identifiants pour vous connecter à votre Cockpit Formateur :') +
+          credentialsBox([
+            { label: 'Matricule', value: formateur.matricule },
+            { label: 'Mot de passe temporaire', value: temporaryPassword },
+          ]),
+      }),
     });
 
     return { ok: true };
@@ -763,6 +787,11 @@ export class RhService {
         to: attempt.candidat.email,
         subject: 'Vos résultats e-Staf',
         text: message,
+        html: renderEmailHtml({
+          title: 'Vos résultats',
+          preheader: 'Le résultat de votre évaluation e-Staf',
+          bodyHtml: emailParagraphsFromText(message),
+        }),
       });
     } else {
       const number = this.toWhatsAppNumber(attempt.candidat.phone);
@@ -980,6 +1009,18 @@ export class RhService {
       to: dto.email,
       subject: 'Bienvenue chez e-Staf — vos identifiants',
       text: `Bonjour ${dto.prenom},\n\nUn compte apprenant a été créé pour vous dans le ${groupe.label}.\n\nVos identifiants pour vous connecter à votre tableau de bord personnel :\nMatricule : ${matricule}\nMot de passe temporaire : ${temporaryPassword}\n\nNous vous conseillons de changer ce mot de passe dès votre première connexion (Paramètres > Changer mon mot de passe).\n\nÀ très vite,\nL'équipe e-Staf`,
+      html: renderEmailHtml({
+        title: 'Bienvenue chez e-Staf',
+        preheader: `Vos identifiants pour le ${groupe.label}`,
+        bodyHtml:
+          emailParagraph(`Bonjour ${dto.prenom},`) +
+          emailParagraph(`Un compte apprenant a été créé pour vous dans le <strong>${groupe.label}</strong>.`) +
+          credentialsBox([
+            { label: 'Matricule', value: matricule },
+            { label: 'Mot de passe temporaire', value: temporaryPassword },
+          ]) +
+          emailParagraph('Nous vous conseillons de changer ce mot de passe dès votre première connexion (Paramètres&nbsp;&gt; Changer mon mot de passe).'),
+      }),
     });
 
     return apprenant;

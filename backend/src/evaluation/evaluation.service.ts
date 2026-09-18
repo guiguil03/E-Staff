@@ -8,6 +8,7 @@ import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../common/email.service";
+import { renderEmailHtml, emailParagraph, ctaButton, credentialsBox } from "../common/email-template";
 import { StorageService } from "../common/storage.service";
 import { CreateCandidatDto } from "./dto/create-candidat.dto";
 import { SubmitAnswersDto } from "./dto/submit-answers.dto";
@@ -728,6 +729,17 @@ export class EvaluationService {
         to: rhEmail,
         subject: `Résultats prêts — ${attempt.candidat.firstName} ${attempt.candidat.lastName}`,
         text: `Un test vient d'être corrigé et attend une décision RH.\n\nCandidat : ${attempt.candidat.firstName} ${attempt.candidat.lastName}\nScore : ${attempt.totalScore ?? "—"}/100\nRésultat : ${tierLabel}\n\nÀ traiter dans le tableau de validation RH.`,
+        html: renderEmailHtml({
+          title: "Résultats prêts pour décision RH",
+          bodyHtml:
+            emailParagraph("Un test vient d'être corrigé et attend une décision RH.") +
+            credentialsBox([
+              { label: "Candidat", value: `${attempt.candidat.firstName} ${attempt.candidat.lastName}` },
+              { label: "Score", value: `${attempt.totalScore ?? "—"}/100` },
+              { label: "Résultat", value: tierLabel },
+            ]) +
+            emailParagraph("À traiter dans le tableau de validation RH."),
+        }),
       });
     }
 
@@ -766,6 +778,15 @@ export class EvaluationService {
       to: attempt.candidat.email,
       subject: "Résultat de votre évaluation e-Staf",
       text: `Bonjour ${attempt.candidat.firstName},\n\nNous vous remercions pour le temps consacré à notre évaluation.\n\nAprès étude de votre dossier, nous ne sommes pas en mesure de vous proposer une place pour le moment. N'hésitez pas à retenter votre chance lors d'une prochaine session.\n\nL'équipe e-Staf`,
+      html: renderEmailHtml({
+        title: "Résultat de votre évaluation",
+        bodyHtml:
+          emailParagraph(`Bonjour ${attempt.candidat.firstName},`) +
+          emailParagraph("Nous vous remercions pour le temps consacré à notre évaluation.") +
+          emailParagraph(
+            "Après étude de votre dossier, nous ne sommes pas en mesure de vous proposer une place pour le moment. N'hésitez pas à retenter votre chance lors d'une prochaine session."
+          ),
+      }),
     });
 
     return this.prisma.evaluationAttempt.update({
@@ -835,6 +856,15 @@ export class EvaluationService {
       to: attempt.candidat.email,
       subject: "Votre résultat e-Staf et votre contrat de formation",
       text: `Bonjour ${attempt.candidat.firstName},\n\nVotre évaluation a été traitée.\nRésultat : ${tierLabel}.\n\nVotre contrat de formation (durée, frais, conditions) et les prochaines étapes vous attendent ici :\n${link}\n\nÀ bientôt,\nL'équipe e-Staf`,
+      html: renderEmailHtml({
+        title: "Votre résultat et votre contrat",
+        preheader: `Résultat : ${tierLabel}`,
+        bodyHtml:
+          emailParagraph(`Bonjour ${attempt.candidat.firstName},`) +
+          emailParagraph(`Votre évaluation a été traitée. Résultat : <strong>${tierLabel}</strong>.`) +
+          emailParagraph("Votre contrat de formation (durée, frais, conditions) et les prochaines étapes vous attendent ici :") +
+          ctaButton("Consulter mon contrat", link),
+      }),
     });
 
     // Un échec réel d'envoi (fournisseur configuré mais en erreur) ne doit
@@ -1035,6 +1065,22 @@ export class EvaluationService {
       to: attempt.candidat.email,
       subject: "Bienvenue chez e-Staf — vos identifiants",
       text: `Bonjour ${attempt.candidat.firstName},\n\nVotre paiement a bien été confirmé et votre place est validée dans le ${groupe.label}.\n\nVos identifiants pour vous connecter à votre tableau de bord personnel :\nMatricule : ${matricule}\nMot de passe temporaire : ${temporaryPassword}\n\nNous vous conseillons de changer ce mot de passe dès votre première connexion (Paramètres > Changer mon mot de passe).\n\nÀ très vite,\nL'équipe e-Staf`,
+      html: renderEmailHtml({
+        title: "Bienvenue chez e-Staf",
+        preheader: `Votre place est validée dans le ${groupe.label}`,
+        bodyHtml:
+          emailParagraph(`Bonjour ${attempt.candidat.firstName},`) +
+          emailParagraph(
+            `Votre paiement a bien été confirmé et votre place est validée dans le <strong>${groupe.label}</strong>.`
+          ) +
+          credentialsBox([
+            { label: "Matricule", value: matricule },
+            { label: "Mot de passe temporaire", value: temporaryPassword },
+          ]) +
+          emailParagraph(
+            "Nous vous conseillons de changer ce mot de passe dès votre première connexion (Paramètres&nbsp;&gt; Changer mon mot de passe)."
+          ),
+      }),
     });
 
     return updated;

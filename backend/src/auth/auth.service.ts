@@ -8,6 +8,7 @@ import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../common/email.service";
+import { renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
 import { createViewAsToken } from "../common/view-as-token";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
@@ -116,6 +117,19 @@ export class AuthService {
         to: account.email,
         subject: "Réinitialisation de votre mot de passe e-Staf",
         text: `Bonjour ${account.prenom},\n\nUne demande de réinitialisation de mot de passe a été faite pour votre compte (${account.matricule}).\n\nCliquez ici pour choisir un nouveau mot de passe (valable 1h) :\n${link}\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail.\n\nL'équipe e-Staf`,
+        html: renderEmailHtml({
+          title: "Réinitialisation de mot de passe",
+          preheader: "Choisissez un nouveau mot de passe (lien valable 1h)",
+          bodyHtml:
+            emailParagraph(`Bonjour ${account.prenom},`) +
+            emailParagraph(
+              `Une demande de réinitialisation de mot de passe a été faite pour votre compte (${account.matricule}).`
+            ) +
+            ctaButton("Choisir un nouveau mot de passe", link) +
+            emailParagraph(
+              "Ce lien est valable 1h. Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail."
+            ),
+        }),
       });
     }
 

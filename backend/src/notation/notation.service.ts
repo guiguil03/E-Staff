@@ -3,6 +3,7 @@ import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/commo
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage.service";
 import { EmailService } from "../common/email.service";
+import { renderEmailHtml, emailParagraph, ctaButton, escapeEmailHtml } from "../common/email-template";
 import { GradeNotationDto } from "./dto/grade-notation.dto";
 
 const APP_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
@@ -209,6 +210,17 @@ export class NotationService {
         to: apprenant.email,
         subject: `Nouveau commentaire de votre formateur — Séance ${numero}`,
         text: `Bonjour ${apprenant.prenom},\n\nVotre formateur a laissé un commentaire sur votre évaluation "${competenceLabel}" (séance n°${numero}) :\n\n« ${nouveauCommentaire} »\n\nConsultez le détail depuis votre tableau de bord :\n${APP_URL}/compte/apprenant\n\nL'équipe e-Staf`,
+        html: renderEmailHtml({
+          title: "Nouveau commentaire de votre formateur",
+          preheader: `Séance ${numero} — ${competenceLabel}`,
+          bodyHtml:
+            emailParagraph(`Bonjour ${apprenant.prenom},`) +
+            emailParagraph(
+              `Votre formateur a laissé un commentaire sur votre évaluation « ${competenceLabel} » (séance n°${numero}) :`
+            ) +
+            `<blockquote style="margin:0 0 20px;padding:12px 16px;border-left:3px solid #B8973E;font-family:'IBM Plex Sans',sans-serif;font-style:italic;font-size:15px;line-height:1.6;color:rgba(255,255,255,0.85);">${escapeEmailHtml(nouveauCommentaire)}</blockquote>` +
+            ctaButton("Voir le détail", `${APP_URL}/compte/apprenant`),
+        }),
       });
     }
 
