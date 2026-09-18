@@ -3,7 +3,7 @@ import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/commo
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage.service";
 import { EmailService } from "../common/email.service";
-import { renderEmailHtml, emailParagraph, ctaButton, escapeEmailHtml } from "../common/email-template";
+import { renderEmailHtml, emailParagraph, ctaButton, emailQuote } from "../common/email-template";
 import { GradeNotationDto } from "./dto/grade-notation.dto";
 
 const APP_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
@@ -218,7 +218,7 @@ export class NotationService {
             emailParagraph(
               `Votre formateur a laissé un commentaire sur votre évaluation « ${competenceLabel} » (séance n°${numero}) :`
             ) +
-            `<blockquote style="margin:0 0 20px;padding:12px 16px;border-left:3px solid #B8973E;font-family:'IBM Plex Sans',sans-serif;font-style:italic;font-size:15px;line-height:1.6;color:rgba(255,255,255,0.85);">${escapeEmailHtml(nouveauCommentaire)}</blockquote>` +
+            emailQuote(nouveauCommentaire) +
             ctaButton("Voir le détail", `${APP_URL}/compte/apprenant`),
         }),
       });

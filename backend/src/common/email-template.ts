@@ -1,7 +1,8 @@
 // Habillage HTML partagé pour tous les e-mails transactionnels — reprend la
-// palette et les polices de l'app (voir tailwind.config.ts / lib/fonts.ts)
-// pour que les mails soient reconnaissables comme e-Staf plutôt que du texte
-// brut générique. Mise en page en table (compatibilité Outlook/clients mail
+// palette "light universe" du site public (voir tailwind.config.ts) et le
+// vrai logo (public/brand/logo.png, servi par le frontend) pour que les
+// mails soient reconnaissables comme e-Staf plutôt que du texte brut
+// générique. Mise en page en table (compatibilité Outlook/clients mail
 // historiques), styles inline (beaucoup de webmails strippent les <style>),
 // polices web en best-effort avec repli sur des polices système — le mail
 // reste lisible et sur-marque même quand elles ne chargent pas.
@@ -12,22 +13,22 @@
 // l'habillage visuel.
 
 const COLORS = {
-  obsidian: "#0B0E16",
-  obsidianCard: "#131A2A",
+  background: "#F4F3EF",
+  cardBg: "#FFFFFF",
+  ink: "#14161A",
   primary: "#0F1E37",
   accent: "#B8973E",
-  success: "#2F6B4F",
-  teal: "#1B8A9A",
-  border: "rgba(255,255,255,0.1)",
-  textMuted: "rgba(255,255,255,0.6)",
+  border: "#E7E3D9",
+  muted: "#807A6E",
 } as const;
 
-const FONT_DISPLAY =
-  "'Fraunces', Georgia, 'Times New Roman', serif";
+const FONT_DISPLAY = "'Fraunces', Georgia, 'Times New Roman', serif";
 const FONT_SANS =
   "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
 const FONT_MONO =
   "'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace";
+
+const LOGO_URL = `${process.env.FRONTEND_URL ?? "https://e-staff.vercel.app"}/brand/logo.png`;
 
 export interface EmailTemplateOptions {
   /** Titre affiché en tête du mail (H1 stylé display) — distinct du sujet. */
@@ -60,7 +61,7 @@ export function renderEmailHtml({ title, bodyHtml, preheader }: EmailTemplateOpt
     />
   </head>
   <body
-    style="margin:0;padding:0;background-color:${COLORS.obsidian};-webkit-text-size-adjust:100%;"
+    style="margin:0;padding:0;background-color:${COLORS.background};-webkit-text-size-adjust:100%;"
   >
     ${
       preheader
@@ -69,18 +70,24 @@ export function renderEmailHtml({ title, bodyHtml, preheader }: EmailTemplateOpt
           )}</div>`
         : ""
     }
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${COLORS.obsidian};padding:32px 16px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${COLORS.background};padding:32px 16px;">
       <tr>
         <td align="center">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
             <tr>
-              <td style="padding-bottom:24px;">
-                <span style="font-family:${FONT_MONO};font-size:12px;letter-spacing:0.2em;text-transform:uppercase;color:${COLORS.accent};">e-Staf</span>
+              <td align="center" style="padding-bottom:24px;">
+                <img
+                  src="${LOGO_URL}"
+                  alt="e-Staf"
+                  width="48"
+                  height="48"
+                  style="display:block;width:48px;height:48px;"
+                />
               </td>
             </tr>
             <tr>
-              <td style="background-color:${COLORS.obsidianCard};border:1px solid ${COLORS.border};border-radius:8px;padding:32px;">
-                <h1 style="margin:0 0 20px;font-family:${FONT_DISPLAY};font-weight:700;font-size:22px;line-height:1.3;color:#FFFFFF;">
+              <td style="background-color:${COLORS.cardBg};border:1px solid ${COLORS.border};border-radius:8px;padding:32px;">
+                <h1 style="margin:0 0 20px;font-family:${FONT_DISPLAY};font-weight:700;font-size:22px;line-height:1.3;color:${COLORS.primary};">
                   ${escapeHtml(title)}
                 </h1>
                 ${bodyHtml}
@@ -88,7 +95,7 @@ export function renderEmailHtml({ title, bodyHtml, preheader }: EmailTemplateOpt
             </tr>
             <tr>
               <td style="padding-top:24px;text-align:center;">
-                <span style="font-family:${FONT_SANS};font-size:12px;color:${COLORS.textMuted};">
+                <span style="font-family:${FONT_MONO};font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:${COLORS.muted};">
                   L'équipe e-Staf
                 </span>
               </td>
@@ -105,7 +112,7 @@ export function renderEmailHtml({ title, bodyHtml, preheader }: EmailTemplateOpt
  * `html` passé n'est PAS échappé (pour pouvoir y glisser un <a>/<strong>) —
  * ne jamais y passer de texte utilisateur brut sans l'échapper avant. */
 export function emailParagraph(html: string): string {
-  return `<p style="margin:0 0 16px;font-family:${FONT_SANS};font-size:15px;line-height:1.6;color:rgba(255,255,255,0.85);">${html}</p>`;
+  return `<p style="margin:0 0 16px;font-family:${FONT_SANS};font-size:15px;line-height:1.6;color:${COLORS.ink};">${html}</p>`;
 }
 
 /** Convertit un message texte libre (déjà utilisé tel quel par ailleurs,
@@ -127,17 +134,22 @@ export function credentialsBox(rows: { label: string; value: string }[]): string
     .map(
       (r) => `
         <tr>
-          <td style="padding:4px 0;font-family:${FONT_SANS};font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:${COLORS.textMuted};">${escapeHtml(r.label)}</td>
+          <td style="padding:4px 0;font-family:${FONT_SANS};font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:${COLORS.muted};">${escapeHtml(r.label)}</td>
         </tr>
         <tr>
-          <td style="padding:0 0 12px;font-family:${FONT_MONO};font-size:17px;color:#FFFFFF;">${escapeHtml(r.value)}</td>
+          <td style="padding:0 0 12px;font-family:${FONT_MONO};font-size:17px;color:${COLORS.primary};">${escapeHtml(r.value)}</td>
         </tr>`
     )
     .join("");
   return `
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${COLORS.obsidian};border:1px solid ${COLORS.border};border-radius:6px;padding:16px 20px;margin:0 0 20px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${COLORS.background};border:1px solid ${COLORS.border};border-radius:6px;padding:16px 20px;margin:0 0 20px;">
       ${cells}
     </table>`;
+}
+
+/** Citation mise en avant (ex. commentaire du formateur) — texte échappé. */
+export function emailQuote(text: string): string {
+  return `<blockquote style="margin:0 0 20px;padding:12px 16px;border-left:3px solid ${COLORS.accent};background-color:${COLORS.background};font-family:${FONT_SANS};font-style:italic;font-size:15px;line-height:1.6;color:${COLORS.ink};">${escapeHtml(text)}</blockquote>`;
 }
 
 /** Bouton d'action principal (lien de réinitialisation, rejoindre la classe
@@ -149,7 +161,7 @@ export function ctaButton(label: string, url: string): string {
         <td style="border-radius:6px;background-color:${COLORS.accent};">
           <a
             href="${escapeAttr(url)}"
-            style="display:inline-block;padding:12px 24px;font-family:${FONT_SANS};font-weight:600;font-size:14px;color:${COLORS.obsidian};text-decoration:none;border-radius:6px;"
+            style="display:inline-block;padding:12px 24px;font-family:${FONT_SANS};font-weight:600;font-size:14px;color:${COLORS.primary};text-decoration:none;border-radius:6px;"
           >${escapeHtml(label)}</a>
         </td>
       </tr>
