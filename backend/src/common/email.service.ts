@@ -14,7 +14,7 @@ import { Injectable, Logger } from "@nestjs/common";
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
 
-  async send(params: { to: string; subject: string; text: string }) {
+  async send(params: { to: string; subject: string; text: string; html?: string }) {
     const apiKey = process.env.EMAIL_PROVIDER_API_KEY;
     if (!apiKey) {
       this.logger.log(
@@ -37,6 +37,7 @@ export class EmailService {
           to: params.to,
           subject: params.subject,
           text: params.text,
+          ...(params.html ? { html: params.html } : {}),
         }),
       });
 

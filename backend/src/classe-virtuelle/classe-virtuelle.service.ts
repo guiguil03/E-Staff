@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { DailyService } from "./daily.service";
 import { EmailService } from "../common/email.service";
 import { UpsertSeanceDto } from "./dto/upsert-seance.dto";
+import { renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
 
 // Le lien de la salle n'est jamais renvoyé en dehors de cette fenêtre —
 // c'est le backend qui garde le contrôle du "rejoin", pas juste l'UI.
@@ -147,6 +148,16 @@ export class ClasseVirtuelleService {
           to: apprenant.email,
           subject: `Séance annulée — ${groupe!.label}`,
           text: `Bonjour ${apprenant.prenom},\n\nLa séance qui était programmée pour ${groupe!.label} le ${formatDateTime(wasScheduled)} a été annulée par votre formateur.\n\nVous serez prévenu(e) dès qu'une nouvelle date sera fixée.\n\nÀ bientôt,\nL'équipe e-Staf`,
+          html: renderEmailHtml({
+            title: "Séance annulée",
+            preheader: `${groupe!.label} — nouvelle date à venir`,
+            bodyHtml:
+              emailParagraph(`Bonjour ${apprenant.prenom},`) +
+              emailParagraph(
+                `La séance qui était programmée pour <strong>${groupe!.label}</strong> le ${formatDateTime(wasScheduled)} a été annulée par votre formateur.`
+              ) +
+              emailParagraph("Vous serez prévenu(e) dès qu'une nouvelle date sera fixée."),
+          }),
         });
       }
     }
@@ -250,6 +261,17 @@ export class ClasseVirtuelleService {
           to: apprenant.email,
           subject: `Nouvelle séance programmée — ${groupe!.label}`,
           text: `Bonjour ${apprenant.prenom},\n\nUne séance vient d'être programmée pour ${groupe!.label} : ${formatDateTime(nextStartAt)}.\n\nVous recevrez un rappel la veille et 15 minutes avant le début. Vous pourrez rejoindre la classe virtuelle ici :\n${link}\n\nÀ bientôt,\nL'équipe e-Staf`,
+          html: renderEmailHtml({
+            title: "Nouvelle séance programmée",
+            preheader: `${groupe!.label} — ${formatDateTime(nextStartAt)}`,
+            bodyHtml:
+              emailParagraph(`Bonjour ${apprenant.prenom},`) +
+              emailParagraph(
+                `Une séance vient d'être programmée pour <strong>${groupe!.label}</strong> : ${formatDateTime(nextStartAt)}.`
+              ) +
+              emailParagraph("Vous recevrez un rappel la veille et 15 minutes avant le début.") +
+              ctaButton("Rejoindre la classe virtuelle", link),
+          }),
         });
       }
     }

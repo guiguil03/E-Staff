@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../common/storage.service';
 import { EmailService } from '../common/email.service';
+import { renderEmailHtml, emailParagraph, ctaButton } from '../common/email-template';
 import { CreateRegistrationDto } from './create-registration.dto';
 import { SubmitPaymentReferenceDto } from './submit-payment-reference.dto';
 import { SubmitPaymentPublicDto } from './submit-payment-public.dto';
@@ -66,6 +67,15 @@ export class RegistrationsService {
       to: registration.email,
       subject: 'Votre contrat de formation e-Staf',
       text: `Bonjour ${registration.firstName},\n\nVotre inscription a été traitée.\n\nVotre contrat de formation (durée, frais, conditions) et les instructions de paiement vous attendent ici :\n${link}\n\nÀ bientôt,\nL'équipe e-Staf`,
+      html: renderEmailHtml({
+        title: 'Votre contrat de formation',
+        preheader: 'Contrat et instructions de paiement',
+        bodyHtml:
+          emailParagraph(`Bonjour ${registration.firstName},`) +
+          emailParagraph('Votre inscription a été traitée.') +
+          emailParagraph('Votre contrat de formation (durée, frais, conditions) et les instructions de paiement vous attendent ici :') +
+          ctaButton('Consulter mon contrat', link),
+      }),
     });
 
     // Même garde que EvaluationService.sendContractNow : un échec réel

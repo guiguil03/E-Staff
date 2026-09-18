@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../common/email.service";
+import { renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
 
 const APP_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
@@ -85,6 +86,16 @@ export class PresenceService {
         to: apprenant.email,
         subject: `Votre classe virtuelle vient de commencer (${seance.groupe.label})`,
         text: `Bonjour ${apprenant.prenom},\n\nVotre formateur vient de démarrer la séance n°${seance.numero} (${seance.groupe.label}).\n\nRejoignez la classe virtuelle ici :\n${link}\n\nÀ tout de suite,\nL'équipe e-Staf`,
+        html: renderEmailHtml({
+          title: "Votre classe virtuelle commence",
+          preheader: `${seance.groupe.label} — séance n°${seance.numero}`,
+          bodyHtml:
+            emailParagraph(`Bonjour ${apprenant.prenom},`) +
+            emailParagraph(
+              `Votre formateur vient de démarrer la séance n°${seance.numero} (${seance.groupe.label}).`
+            ) +
+            ctaButton("Rejoindre maintenant", link),
+        }),
       });
     }
   }
