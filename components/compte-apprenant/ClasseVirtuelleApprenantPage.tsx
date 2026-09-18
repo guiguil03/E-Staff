@@ -38,7 +38,7 @@ export default function ClasseVirtuelleApprenantPage() {
   if (!checked || status === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-obsidian">
-        <p className="font-sans text-sm text-white/50">Chargement...</p>
+        <p className="font-sans text-sm text-white/90">Chargement...</p>
       </div>
     );
   }
