@@ -12,6 +12,7 @@ export default function Page() {
     <RhShell
       title="Inscriptions"
       subtitle="Suivi des inscrits (tous funnels), contrats et confirmation des paiements."
+      roles={["rh"]}
     >
       <InscriptionsPanel />
     </RhShell>

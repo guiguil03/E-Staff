@@ -14,6 +14,7 @@ export default function Page() {
     <RhShell
       title="Paie & Commissions"
       subtitle="Argent qui sort — budget de production, décaissements et paie des agents/superviseurs/formateurs."
+      roles={["rh"]}
     >
       <div className="space-y-6">
         <BudgetDecaissementPanel />

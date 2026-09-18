@@ -9,7 +9,11 @@ export const metadata: Metadata = {
 
 export default function Page() {
   return (
-    <RhShell title="Paramètres RH" subtitle="Planification du Live mensuel du Forum public.">
+    <RhShell
+      title="Paramètres RH"
+      subtitle="Planification du Live mensuel du Forum public."
+      roles={["admin"]}
+    >
       <ForumLivePanel />
     </RhShell>
   );

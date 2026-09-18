@@ -16,21 +16,28 @@ import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { ConsumeViewAsTokenDto } from "./dto/consume-view-as-token.dto";
 import { AuthService } from "./auth.service";
 import { AdminGuard } from "../common/admin.guard";
+import { RhGuard } from "../common/rh.guard";
 import { recordFailure, recordSuccess, remainingLockoutSeconds } from "../common/login-rate-limit";
 import { consumeViewAsToken } from "../common/view-as-token";
 
-// Login générique — stopgap pour Admin (un identifiant de test partagé,
-// une seule personne interne connue — voir brainstorm 2026-08-10). Apprenant
-// et Formateur ont désormais de vrais comptes individuels (voir
-// AuthService) : chaque candidat qui paie, ou chaque formateur créé par la
-// RH, reçoit son propre matricule + mot de passe. Le compte de test
-// formateur partagé (FORMATEUR_TEST_MATRICULE) reste néanmoins actif en
-// parallèle des vrais comptes (démo/dev), donc toujours dans cette liste.
+// Login générique — stopgap pour Admin/RH (un identifiant de test partagé
+// par compte, une seule personne interne connue par compte — voir brainstorm
+// 2026-08-10 et 2026-09-18 pour la scission Admin/RH). Apprenant et
+// Formateur ont désormais de vrais comptes individuels (voir AuthService) :
+// chaque candidat qui paie, ou chaque formateur créé par la RH, reçoit son
+// propre matricule + mot de passe. Le compte de test formateur partagé
+// (FORMATEUR_TEST_MATRICULE) reste néanmoins actif en parallèle des vrais
+// comptes (démo/dev), donc toujours dans cette liste.
 const TEST_ACCOUNTS: { matricule?: string; password?: string; role: string }[] = [
   {
     matricule: process.env.ADMIN_TEST_MATRICULE,
     password: process.env.ADMIN_TEST_PASSWORD,
     role: "admin",
+  },
+  {
+    matricule: process.env.RH_TEST_MATRICULE,
+    password: process.env.RH_TEST_PASSWORD,
+    role: "rh",
   },
 ];
 
@@ -90,10 +97,11 @@ export class AuthController {
   }
 
   // "Se connecter en tant que" (RH -> compte apprenant) — voir
-  // AuthService.createApprenantViewAsToken. Génération réservée à l'admin ;
-  // la consommation ci-dessous reste publique (c'est le nouvel onglet, sans
-  // session admin, qui l'appelle).
-  @UseGuards(AdminGuard)
+  // AuthService.createApprenantViewAsToken. Appelé depuis le Casier
+  // Apprenant (page RH) — génération réservée à RhGuard ; la consommation
+  // ci-dessous reste publique (c'est le nouvel onglet, sans session RH,
+  // qui l'appelle).
+  @UseGuards(RhGuard)
   @Post("view-as/:matricule")
   createViewAs(@Param("matricule") matricule: string) {
     return this.authService.createApprenantViewAsToken(matricule);

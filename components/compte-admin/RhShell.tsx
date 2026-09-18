@@ -4,39 +4,52 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRequireRole } from "@/lib/useRequireRole";
+import { ACCOUNT_ROLE_KEY } from "@/lib/accountSession";
 
+// `roles` : qui voit ce lien dans la sidebar — doit rester cohérent avec le
+// guard backend réel de la page visée (voir rh.controller.ts et les autres
+// contrôleurs pour le détail de la scission Admin/RH du 2026-09-18).
 const NAV_ITEMS = [
-  { href: "/compte/admin", label: "Vue d'ensemble", icon: "◈" },
-  { href: "/compte/admin/cycle", label: "Cycle complet", icon: "⟲" },
-  { href: "/compte/admin/coordonnees", label: "Coordonnées", icon: "☎" },
-  { href: "/compte/admin/recrutement", label: "Recrutement", icon: "✦" },
-  { href: "/compte/admin/inscriptions", label: "Inscriptions", icon: "✎" },
-  { href: "/compte/admin/academie", label: "Académie & Vagues", icon: "❖" },
-  { href: "/compte/admin/production", label: "Production", icon: "▲" },
-  { href: "/compte/admin/partenaires", label: "Partenaires", icon: "◎" },
-  { href: "/compte/admin/agents-acquisition", label: "Agents d'Acquisition", icon: "✚" },
-  { href: "/compte/admin/reunions", label: "Réunions", icon: "☰" },
-  { href: "/compte/admin/facturation", label: "Facturation & Encaissement", icon: "⊕" },
-  { href: "/compte/admin/paie-commissions", label: "Paie & Commissions", icon: "◆" },
-  { href: "/compte/admin/parametres", label: "Paramètres RH", icon: "⚙" },
+  { href: "/compte/admin", label: "Vue d'ensemble", icon: "◈", roles: ["rh"] },
+  { href: "/compte/admin/cycle", label: "Cycle complet", icon: "⟲", roles: ["rh"] },
+  { href: "/compte/admin/coordonnees", label: "Coordonnées", icon: "☎", roles: ["rh"] },
+  { href: "/compte/admin/recrutement", label: "Recrutement", icon: "✦", roles: ["rh"] },
+  { href: "/compte/admin/inscriptions", label: "Inscriptions", icon: "✎", roles: ["rh"] },
+  { href: "/compte/admin/academie", label: "Académie & Vagues", icon: "❖", roles: ["admin"] },
+  { href: "/compte/admin/production", label: "Production", icon: "▲", roles: ["rh"] },
+  { href: "/compte/admin/partenaires", label: "Partenaires", icon: "◎", roles: ["rh"] },
+  { href: "/compte/admin/agents-acquisition", label: "Agents d'Acquisition", icon: "✚", roles: ["rh"] },
+  { href: "/compte/admin/reunions", label: "Réunions", icon: "☰", roles: ["admin"] },
+  { href: "/compte/admin/facturation", label: "Facturation & Encaissement", icon: "⊕", roles: ["rh"] },
+  { href: "/compte/admin/paie-commissions", label: "Paie & Commissions", icon: "◆", roles: ["rh"] },
+  { href: "/compte/admin/parametres", label: "Paramètres RH", icon: "⚙", roles: ["admin"] },
 ] as const;
 
 interface RhShellProps {
   title: string;
   subtitle?: string;
   children: ReactNode;
+  /** Rôle(s) autorisés sur cette page précise — doit correspondre au(x)
+   * guard(s) backend réels des appels API qu'elle fait. Par défaut les deux
+   * (pages neutres/partagées), à préciser explicitement pour toute page
+   * scindée Admin/RH. */
+  roles?: ("admin" | "rh")[];
 }
 
-// Coquille commune du Portail RH — sidebar de navigation + header, réutilisée
-// par toutes les pages /compte/admin/*. Reprend le "compte Admin" existant
-// (même login/guard, voir AdminGuard côté back) plutôt que d'introduire un
-// vrai rôle "rh" distinct — l'un des 8 rôles du cahier des charges
-// (components/comptes/roles.ts) mais pas encore implémenté en auth réelle ;
-// le portail RH se construit ici sur le compte Admin qui gère déjà la
-// validation RH/paiements (voir ValidationRhPanel), cohérent avec l'existant.
-export default function RhShell({ title, subtitle, children }: RhShellProps) {
-  const checked = useRequireRole("admin");
+// Coquille commune du Portail (Admin + RH) — sidebar de navigation + header,
+// réutilisée par toutes les pages /compte/admin/*. Les deux comptes
+// partagent ce même portail depuis la scission du 2026-09-18 (avant cette
+// date, un unique compte "Admin" surchargé faisait tout) : chaque page passe
+// son propre `roles` à cette coquille, et la sidebar ne montre à chacun que
+// les liens qu'il peut réellement ouvrir.
+export default function RhShell({ title, subtitle, children, roles = ["admin", "rh"] }: RhShellProps) {
+  const checked = useRequireRole(roles);
   const pathname = usePathname();
+  const currentRole =
+    typeof window !== "undefined" ? sessionStorage.getItem(ACCOUNT_ROLE_KEY) : null;
+  const visibleNavItems = NAV_ITEMS.filter(
+    (item) => !currentRole || (item.roles as readonly string[]).includes(currentRole)
+  );
 
   if (!checked) {
     return (
@@ -62,7 +75,7 @@ export default function RhShell({ title, subtitle, children }: RhShellProps) {
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:flex-row lg:gap-8">
         <aside className="shrink-0 lg:w-64">
           <nav className="flex gap-2 overflow-x-auto lg:sticky lg:top-8 lg:flex-col lg:gap-1 lg:overflow-visible">
-            {NAV_ITEMS.map((item) => {
+            {visibleNavItems.map((item) => {
               const active =
                 item.href === "/compte/admin"
                   ? pathname === item.href

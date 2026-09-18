@@ -11,6 +11,8 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AdminGuard } from '../common/admin.guard';
+import { RhGuard } from '../common/rh.guard';
+import { StaffGuard } from '../common/staff.guard';
 import { RhService } from './rh.service';
 import { UpsertReunionDto } from './dto/upsert-reunion.dto';
 import { UpdateConnecteurStatutDto } from './dto/update-connecteur-statut.dto';
@@ -28,27 +30,35 @@ import { CreateApprenantDto } from './dto/create-apprenant.dto';
 import { CreateAgentAcquisitionDto } from './dto/create-agent-acquisition.dto';
 import { RenouvelerAbonnementDto } from './dto/renouveler-abonnement.dto';
 
+// Compte RH surchargé, ventilé en deux le 2026-09-18 : Admin garde la
+// génération de comptes/identifiants (formateur, apprenant), les
+// événements (réunions) et les rentrées (Vagues) — le reste (clients &
+// contrats, finances, pilotage) passe à RhGuard. Pas de garde au niveau du
+// contrôleur : chaque route porte désormais son propre guard.
 @ApiTags('RH')
 @Controller('rh')
-@UseGuards(AdminGuard)
 export class RhController {
   constructor(private readonly service: RhService) {}
 
+  @UseGuards(RhGuard)
   @Get('vue-ensemble')
   getVueEnsemble() {
     return this.service.getVueEnsemble();
   }
 
+  @UseGuards(RhGuard)
   @Get('registre')
   getRegistre() {
     return this.service.getRegistre();
   }
 
+  @UseGuards(RhGuard)
   @Get('partenaires')
   getPartenaires() {
     return this.service.getPartenaires();
   }
 
+  @UseGuards(RhGuard)
   @Put('partenaires/:id/statut')
   updatePartenaireStatut(
     @Param('id') id: string,
@@ -57,71 +67,91 @@ export class RhController {
     return this.service.updatePartenaireStatut(id, dto.status);
   }
 
+  // ---- Événements (réunions) — Admin --------------------------------------
+
+  @UseGuards(AdminGuard)
   @Get('reunions')
   listReunions() {
     return this.service.listReunions();
   }
 
+  @UseGuards(AdminGuard)
   @Post('reunions')
   createReunion(@Body() dto: UpsertReunionDto) {
     return this.service.createReunion(dto);
   }
 
+  @UseGuards(AdminGuard)
   @Put('reunions/:id')
   updateReunion(@Param('id') id: string, @Body() dto: UpsertReunionDto) {
     return this.service.updateReunion(id, dto);
   }
 
+  @UseGuards(AdminGuard)
   @Post('reunions/:id/annuler')
   cancelReunion(@Param('id') id: string) {
     return this.service.cancelReunion(id);
   }
 
+  // ---- Formateurs : génération de comptes/identifiants — Admin -----------
+
+  @UseGuards(AdminGuard)
   @Get('formateurs')
   listFormateurs() {
     return this.service.listFormateurs();
   }
 
+  @UseGuards(AdminGuard)
   @Post('formateurs')
   createFormateur(@Body() dto: UpsertFormateurDto) {
     return this.service.createFormateur(dto);
   }
 
+  @UseGuards(AdminGuard)
   @Put('formateurs/:id')
   updateFormateur(@Param('id') id: string, @Body() dto: UpsertFormateurDto) {
     return this.service.updateFormateur(id, dto);
   }
 
+  @UseGuards(AdminGuard)
   @Post('formateurs/:id/regenerer-identifiants')
   regenerateFormateurCredentials(@Param('id') id: string) {
     return this.service.regenerateFormateurCredentials(id);
   }
 
+  @UseGuards(AdminGuard)
   @Put('groupes/:id/formateur')
   assignFormateur(@Param('id') id: string, @Body() dto: AssignFormateurDto) {
     return this.service.assignFormateur(id, dto.formateurId ?? null);
   }
 
+  @UseGuards(RhGuard)
   @Get('performance-formateurs')
   getPerformanceFormateurs() {
     return this.service.getPerformanceFormateurs();
   }
 
+  @UseGuards(AdminGuard)
   @Put('groupes/:id/type-cours')
   updateGroupeTypeCours(@Param('id') id: string, @Body() dto: UpdateTypeCoursDto) {
     return this.service.updateGroupeTypeCours(id, dto.typeCours ?? null);
   }
 
+  @UseGuards(RhGuard)
   @Get('cycle-complet')
   getCycleComplet() {
     return this.service.getCycleComplet();
   }
 
+  @UseGuards(RhGuard)
   @Get('cycle/:attemptId')
   getPersonneCasier(@Param('attemptId') attemptId: string) {
     return this.service.getPersonneCasier(attemptId);
   }
 
+  // ---- Rentrées (Vagues) — Admin -------------------------------------------
+
+  @UseGuards(AdminGuard)
   @Put('groupes/:id/dates')
   updateVagueDates(@Param('id') id: string, @Body() dto: UpdateVagueDatesDto) {
     return this.service.updateVagueDates(
@@ -131,16 +161,23 @@ export class RhController {
     );
   }
 
+  @UseGuards(AdminGuard)
   @Get('vagues')
   getVagues() {
     return this.service.getVagues();
   }
 
+  // ---- Apprenants : génération de compte (création) — Admin ---------------
+
+  @UseGuards(AdminGuard)
   @Post('apprenants')
   createApprenant(@Body() dto: CreateApprenantDto) {
     return this.service.createApprenantAccount(dto);
   }
 
+  // Pas une génération de compte (l'apprenant existe déjà) — gestion client
+  // courante, RH.
+  @UseGuards(RhGuard)
   @Post('apprenants/:matricule/renouveler')
   renouvelerAbonnement(
     @Param('matricule') matricule: string,
@@ -151,21 +188,25 @@ export class RhController {
 
   // ---- Agents d'Acquisition (suivi commissions) -----------------------------
 
+  @UseGuards(RhGuard)
   @Get('agents-acquisition')
   getSuiviAgentsAcquisition() {
     return this.service.getSuiviAgentsAcquisition();
   }
 
+  @UseGuards(RhGuard)
   @Post('agents-acquisition')
   createAgentAcquisition(@Body() dto: CreateAgentAcquisitionDto) {
     return this.service.createAgentAcquisition(dto);
   }
 
+  @UseGuards(RhGuard)
   @Get('apprenants/:matricule/casier')
   getApprenantCasier(@Param('matricule') matricule: string) {
     return this.service.getApprenantCasier(matricule);
   }
 
+  @UseGuards(RhGuard)
   @Put('apprenants/:matricule')
   updateApprenantRh(
     @Param('matricule') matricule: string,
@@ -174,21 +215,27 @@ export class RhController {
     return this.service.updateApprenantRh(matricule, dto);
   }
 
+  // Fiche formateur — consultée à la fois depuis Académie (Admin) et
+  // potentiellement le pilotage RH : StaffGuard (voir en-tête du fichier).
+  @UseGuards(StaffGuard)
   @Get('formateurs/:id/casier')
   getFormateurCasier(@Param('id') id: string) {
     return this.service.getFormateurCasier(id);
   }
 
+  @UseGuards(RhGuard)
   @Get('partenaires/:id/casier')
   getPartenaireCasier(@Param('id') id: string) {
     return this.service.getPartenaireCasier(id);
   }
 
+  @UseGuards(RhGuard)
   @Get('alertes-administratives')
   getAlertesAdministratives() {
     return this.service.getAlertesAdministratives();
   }
 
+  @UseGuards(RhGuard)
   @Post('cycle/:attemptId/envoyer-resultats')
   envoyerResultats(
     @Param('attemptId') attemptId: string,
@@ -197,16 +244,19 @@ export class RhController {
     return this.service.envoyerResultatsCandidat(attemptId, dto);
   }
 
+  @UseGuards(RhGuard)
   @Get('coordonnees')
   getCoordonnees() {
     return this.service.getCoordonnees();
   }
 
+  @UseGuards(RhGuard)
   @Get('etat-financier-formation')
   getEtatFinancierFormation() {
     return this.service.getEtatFinancierFormation();
   }
 
+  @UseGuards(RhGuard)
   @Put('tarif-formation/:typeCours')
   updateTarifFormation(
     @Param('typeCours') typeCours: string,
@@ -215,55 +265,65 @@ export class RhController {
     return this.service.updateTarifFormation(typeCours, dto.prixFormation);
   }
 
-  // ---- Encaissements formation (Facturation & Encaissement) ----------------
+  // ---- Encaissements formation (Facturation & Encaissement) — RH ----------
 
+  @UseGuards(RhGuard)
   @Get('apprenants-pour-encaissement')
   listApprenantsPourEncaissement() {
     return this.service.listApprenantsPourEncaissement();
   }
 
+  @UseGuards(RhGuard)
   @Get('encaissements')
   listEncaissements() {
     return this.service.listEncaissements();
   }
 
+  @UseGuards(RhGuard)
   @Post('encaissements')
   createEncaissement(@Body() dto: CreateEncaissementDto) {
     return this.service.createEncaissement(dto);
   }
 
+  @UseGuards(RhGuard)
   @Put('encaissements/:id')
   updateEncaissement(@Param('id') id: string, @Body() dto: UpdateEncaissementDto) {
     return this.service.updateEncaissement(id, dto);
   }
 
+  @UseGuards(RhGuard)
   @Delete('encaissements/:id')
   deleteEncaissement(@Param('id') id: string) {
     return this.service.deleteEncaissement(id);
   }
 
+  @UseGuards(RhGuard)
   @Get('encaissements-formation')
   getEncaissementsFormation() {
     return this.service.getEncaissementsFormation();
   }
 
+  @UseGuards(RhGuard)
   @Get('encaissements/tendance-hebdomadaire')
   getTendanceHebdomadaireFormation() {
     return this.service.getTendanceHebdomadaireFormation();
   }
 
+  @UseGuards(RhGuard)
   @Get('encaissements/tendance-mensuelle')
   getTendanceMensuelleFormation() {
     return this.service.getTendanceMensuelleFormation();
   }
 
-  // ---- Paie Formateurs (Paie & Commissions) ---------------------------------
+  // ---- Paie Formateurs (Paie & Commissions) — RH ---------------------------
 
+  @UseGuards(RhGuard)
   @Get('paie-formateurs')
   getTableauPaieFormateurs(@Query('periode') periode?: string) {
     return this.service.getTableauPaieFormateurs(periode);
   }
 
+  @UseGuards(RhGuard)
   @Get('paie-formateurs/:bucket')
   getDetailPaieFormateurs(
     @Param('bucket') bucket: string,
@@ -272,6 +332,7 @@ export class RhController {
     return this.service.getDetailPaieFormateurs(decodeURIComponent(bucket), periode);
   }
 
+  @UseGuards(RhGuard)
   @Put('paie-formateurs/:formateurId/:periode')
   updatePaiementFormateur(
     @Param('formateurId') formateurId: string,
@@ -281,6 +342,7 @@ export class RhController {
     return this.service.updatePaiementFormateur(formateurId, periode, dto);
   }
 
+  @UseGuards(RhGuard)
   @Post('paie-formateurs/:formateurId/:periode/payer')
   payerFormateur(
     @Param('formateurId') formateurId: string,
@@ -289,6 +351,7 @@ export class RhController {
     return this.service.payerFormateur(formateurId, periode);
   }
 
+  @UseGuards(RhGuard)
   @Post('paie-formateurs/:bucket/payer-tout')
   payerTousFormateurs(
     @Param('bucket') bucket: string,

@@ -28,7 +28,8 @@ import { ValidateContractDto } from "./dto/validate-contract.dto";
 import { SubmitPaymentReferenceDto } from "./dto/submit-payment-reference.dto";
 import { ConfirmPaymentDto } from "./dto/confirm-payment.dto";
 import { CreateGroupeDto } from "./dto/create-groupe.dto";
-import { AdminGuard } from "../common/admin.guard";
+import { RhGuard } from "../common/rh.guard";
+import { StaffGuard } from "../common/staff.guard";
 import { FormateurGuard } from "../common/formateur.guard";
 
 // Les vidéos sont bien plus volumineuses que l'audio — Multer bufférise en
@@ -266,63 +267,66 @@ export class EvaluationController {
     stream.pipe(res);
   }
 
-  // ---- Interface admin (RH) — validation + paiement ----------------------
+  // ---- Interface RH — validation + paiement (compte RH depuis 2026-09-18,
+  // voir rh.controller.ts pour le detail de la scission Admin/RH) ---------
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RhGuard)
   @Get("pending-validation")
   listPendingValidation() {
     return this.service.listPendingValidation();
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RhGuard)
   @Get("pipeline-overview")
   listPipelineOverview() {
     return this.service.listPipelineOverview();
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RhGuard)
   @Post("attempts/:id/validate-contract")
   validateContract(@Param("id") id: string, @Body() dto: ValidateContractDto) {
     return this.service.validateContract(id, dto);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RhGuard)
   @Post("attempts/:id/reject")
   rejectCandidate(@Param("id") id: string) {
     return this.service.rejectCandidate(id);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RhGuard)
   @Post("attempts/:id/send-now")
   sendContractNow(@Param("id") id: string) {
     return this.service.sendContractNow(id);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RhGuard)
   @Get("pending-payment")
   listPendingPayment() {
     return this.service.listPendingPayment();
   }
 
-  @UseGuards(AdminGuard)
+  // Partagé Admin (FormateursPanel, sélecteur de groupes à la création
+  // d'un formateur) / RH (pipeline de recrutement) — voir StaffGuard.
+  @UseGuards(StaffGuard)
   @Get("groupes-avec-places")
   listGroupesAvecPlaces() {
     return this.service.listGroupesAvecPlaces();
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(StaffGuard)
   @Post("groupes")
   createGroupe(@Body() dto: CreateGroupeDto) {
     return this.service.createGroupe(dto);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RhGuard)
   @Get("stats")
   getStats() {
     return this.service.getStats();
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RhGuard)
   @Post("attempts/:id/confirm-payment")
   confirmPayment(@Param("id") id: string, @Body() dto: ConfirmPaymentDto) {
     return this.service.confirmPayment(id, dto);

@@ -12,6 +12,7 @@ export default function Page() {
     <RhShell
       title="Recrutement"
       subtitle="Validation RH des candidats, contrats et confirmation des paiements."
+      roles={["rh"]}
     >
       <RecrutementPanels />
     </RhShell>
