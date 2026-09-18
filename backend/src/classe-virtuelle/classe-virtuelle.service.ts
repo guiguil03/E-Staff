@@ -77,6 +77,23 @@ export class ClasseVirtuelleService {
     return seance;
   }
 
+  // Les 12 créneaux structurels d'un groupe n'existent en base que si le
+  // seed les a créés (voir prisma/seed.ts) — jamais garanti en prod pour un
+  // groupe créé après coup par la RH (bug relevé le 2026-09-18 : "Séance
+  // n°1 introuvable" alors que le groupe existait bien). Contrairement à
+  // findSeanceOrThrow (lecture/annulation, où l'absence doit rester une
+  // 404 — rien à annuler ou afficher), planifier un horaire est l'action
+  // qui donne SENS à ce créneau : elle doit donc pouvoir le créer à la
+  // volée s'il n'existe pas encore, plutôt que d'exiger un seed préalable.
+  private async findOrCreateSeance(groupeCle: string, numero: number, formateurMatricule?: string) {
+    const groupe = await this.findGroupeOrThrowOwned(groupeCle, formateurMatricule);
+    return this.prisma.seance.upsert({
+      where: { groupeId_numero: { groupeId: groupe.id, numero } },
+      update: {},
+      create: { groupeId: groupe.id, numero },
+    });
+  }
+
   async getSeance(groupeCle: string, numero: number, formateurMatricule?: string) {
     const seance = await this.findSeanceOrThrow(groupeCle, numero, formateurMatricule);
     return { ...seance, groupeCle };
@@ -139,7 +156,7 @@ export class ClasseVirtuelleService {
 
   async upsertSeance(groupeCle: string, numero: number, dto: UpsertSeanceDto, formateurMatricule?: string) {
     const groupe = await this.findGroupeOrThrowOwned(groupeCle, formateurMatricule);
-    const seance = await this.findSeanceOrThrow(groupeCle, numero, formateurMatricule);
+    const seance = await this.findOrCreateSeance(groupeCle, numero, formateurMatricule);
 
     const nextStartAt = dto.startAt !== undefined ? new Date(dto.startAt) : seance.startAt;
     const dureeMinutes = dto.dureeMinutes ?? seance.dureeMinutes;
