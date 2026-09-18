@@ -12,6 +12,7 @@ export default function Page() {
     <RhShell
       title="Cycle complet"
       subtitle="Du dépôt de candidature à la production — coordonnées, test, paiement, affectation formation."
+      roles={["rh"]}
     >
       <CyclePanel />
     </RhShell>

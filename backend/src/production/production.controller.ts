@@ -14,7 +14,7 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
-import { AdminGuard } from "../common/admin.guard";
+import { RhGuard } from "../common/rh.guard";
 import { ProductionService } from "./production.service";
 import { UpsertSuperviseurDto } from "./dto/upsert-superviseur.dto";
 import { UpsertContratDto } from "./dto/upsert-contrat.dto";
@@ -32,7 +32,7 @@ import { UpsertChargeInfrastructureDto } from "./dto/upsert-charge-infrastructur
 
 @ApiTags("Production")
 @Controller("production")
-@UseGuards(AdminGuard)
+@UseGuards(RhGuard)
 export class ProductionController {
   constructor(private readonly service: ProductionService) {}
 

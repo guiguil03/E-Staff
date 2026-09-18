@@ -12,6 +12,7 @@ export default function Page() {
     <RhShell
       title="Réunions"
       subtitle="Convoquez une réunion pour l'équipe interne, les partenaires, ou les deux."
+      roles={["admin"]}
     >
       <ReunionsPanel />
     </RhShell>

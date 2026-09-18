@@ -12,6 +12,7 @@ export default function Page() {
     <RhShell
       title="Académie & Gestion des Vagues"
       subtitle="Groupes de formation, registre des apprenants et matricules."
+      roles={["admin"]}
     >
       <AcademiePanels />
     </RhShell>

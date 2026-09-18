@@ -13,6 +13,7 @@ export default function Page() {
     <RhShell
       title="Facturation & Encaissement"
       subtitle="Argent qui rentre — facturation des contrats B2B et suivi des règlements clients."
+      roles={["rh"]}
     >
       <div className="space-y-10">
         <FacturationPanel />

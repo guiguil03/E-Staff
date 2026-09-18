@@ -16,5 +16,12 @@ export const ACCOUNT_VIEW_AS_ADMIN_KEY = "estaf-view-as-admin";
 export const ROLE_ROUTES: Record<string, string> = {
   apprenant: "/compte/apprenant",
   formateur: "/compte/formateur",
-  admin: "/compte/admin",
+  // Compte RH surchargé, ventilé en deux le 2026-09-18 : Admin garde la
+  // génération de comptes/identifiants, les événements (réunions) et les
+  // rentrées — sa page d'accueil est donc Académie, pas Vue d'ensemble
+  // (qui reste la page d'accueil RH). RH récupère clients/contrats,
+  // finances, pilotage. Même portail (/compte/admin/*) — chaque page/lien
+  // de nav est filtré par rôle dans RhShell.
+  admin: "/compte/admin/academie",
+  rh: "/compte/admin",
 };

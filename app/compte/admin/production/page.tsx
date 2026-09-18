@@ -12,6 +12,7 @@ export default function Page() {
     <RhShell
       title="Production"
       subtitle="Agents diplômés en mission, contrats B2B et superviseurs."
+      roles={["rh"]}
     >
       <ProductionPanels />
     </RhShell>

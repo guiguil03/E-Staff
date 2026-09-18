@@ -14,7 +14,7 @@ export default async function Page({
 }) {
   const { matricule } = await params;
   return (
-    <RhShell title="Casier Apprenant" subtitle={`Historique complet — ${matricule}`}>
+    <RhShell title="Casier Apprenant" subtitle={`Historique complet — ${matricule}`} roles={["rh"]}>
       <ApprenantCasierPanel matricule={matricule} />
     </RhShell>
   );

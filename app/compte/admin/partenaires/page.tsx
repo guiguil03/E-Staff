@@ -12,6 +12,7 @@ export default function Page() {
     <RhShell
       title="Partenaires"
       subtitle="Répertoire des apporteurs d'affaires et suivi des candidatures Connecteur."
+      roles={["rh"]}
     >
       <PartenairesPanel />
     </RhShell>

@@ -12,6 +12,7 @@ export default function Page() {
     <RhShell
       title="Agents d'Acquisition"
       subtitle="Recommandations, conversions et réinscriptions par agent, avec commissions."
+      roles={["rh"]}
     >
       <AgentsAcquisitionPanel />
     </RhShell>

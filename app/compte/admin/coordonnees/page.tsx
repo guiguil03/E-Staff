@@ -12,6 +12,7 @@ export default function Page() {
     <RhShell
       title="Coordonnées"
       subtitle="Contact, CV et vidéos de test, regroupés par candidat."
+      roles={["rh"]}
     >
       <CoordonneesPanel />
     </RhShell>

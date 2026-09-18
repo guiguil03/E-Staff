@@ -12,6 +12,7 @@ export default function Page() {
     <RhShell
       title="Vue d'ensemble"
       subtitle="Talents, vagues de production et pilotage global."
+      roles={["rh"]}
     >
       <VueEnsemblePanel />
     </RhShell>

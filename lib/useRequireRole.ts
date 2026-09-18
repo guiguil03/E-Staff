@@ -13,9 +13,16 @@ import { ACCOUNT_MATRICULE_KEY, ACCOUNT_ROLE_KEY, ACCOUNT_VIEW_AS_ADMIN_KEY } fr
 // seule fois auprès du backend (usage unique, courte durée de vie — voir
 // AuthController.consumeViewAs), il pose la session apprenant dans ce nouvel
 // onglet sans jamais transmettre le vrai mot de passe à l'admin.
-export function useRequireRole(role: string) {
+// `role` accepte un seul rôle ou un tableau (ex. ["admin", "rh"] pour une
+// page du Portail ouverte aux deux depuis la scission du 2026-09-18 — voir
+// ROLE_ROUTES). Le tableau est comparé par valeur à chaque rendu ; passer
+// un littéral inline (`["admin", "rh"]`) est ok, la dépendance de l'effet
+// se base sur sa forme sérialisée, pas sur l'identité de la référence.
+export function useRequireRole(role: string | string[]) {
   const router = useRouter();
   const [checked, setChecked] = useState(false);
+  const roles = Array.isArray(role) ? role : [role];
+  const rolesKey = roles.join(",");
 
   useEffect(() => {
     let cancelled = false;
@@ -30,7 +37,7 @@ export function useRequireRole(role: string) {
             "/auth/view-as/consume",
             { token: viewAsToken }
           );
-          if (result.role === role) {
+          if (roles.includes(result.role)) {
             sessionStorage.setItem(ACCOUNT_ROLE_KEY, result.role);
             sessionStorage.setItem(ACCOUNT_MATRICULE_KEY, result.matricule);
             sessionStorage.setItem(ACCOUNT_VIEW_AS_ADMIN_KEY, "true");
@@ -46,7 +53,7 @@ export function useRequireRole(role: string) {
         }
       }
 
-      if (sessionStorage.getItem(ACCOUNT_ROLE_KEY) === role) {
+      if (roles.includes(sessionStorage.getItem(ACCOUNT_ROLE_KEY) ?? "")) {
         if (!cancelled) setChecked(true);
       } else {
         router.replace("/connexion");
@@ -57,7 +64,8 @@ export function useRequireRole(role: string) {
     return () => {
       cancelled = true;
     };
-  }, [router, role]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router, rolesKey]);
 
   return checked;
 }

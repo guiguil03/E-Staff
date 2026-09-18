@@ -10,7 +10,11 @@ export const metadata: Metadata = {
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return (
-    <RhShell title="Casier Contrat B2B" subtitle="Agents staffés et facturation, historique complet.">
+    <RhShell
+      title="Casier Contrat B2B"
+      subtitle="Agents staffés et facturation, historique complet."
+      roles={["rh"]}
+    >
       <ContratCasierPanel id={id} />
     </RhShell>
   );

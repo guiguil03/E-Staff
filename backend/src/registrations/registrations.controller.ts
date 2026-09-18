@@ -19,7 +19,7 @@ import { SubmitPaymentReferenceDto } from './submit-payment-reference.dto';
 import { SubmitPaymentPublicDto } from './submit-payment-public.dto';
 import { SendContractDto } from './send-contract.dto';
 import { PapiWebhookDto } from './papi-webhook.dto';
-import { AdminGuard } from '../common/admin.guard';
+import { RhGuard } from '../common/rh.guard';
 
 const MAX_CV_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
 const MAX_RECEIPT_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
@@ -35,29 +35,29 @@ export class RegistrationsController {
     return this.service.create(dto);
   }
 
-  // ---- Portail RH (admin) — contrat + paiement ---------------------------
+  // ---- Portail RH — contrat + paiement (RH depuis 2026-09-18) ------------
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RhGuard)
   @Get()
   list() {
     return this.service.list();
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RhGuard)
   @Post(':id/send-contract')
   sendContract(@Param('id') id: string, @Body() dto: SendContractDto) {
     return this.service.sendContract(id, dto);
   }
 
-  // Repli admin — au cas où l'inscrit transmet sa référence par téléphone
+  // Repli RH — au cas où l'inscrit transmet sa référence par téléphone
   // plutôt que via la page publique ci-dessous.
-  @UseGuards(AdminGuard)
+  @UseGuards(RhGuard)
   @Post(':id/payment-reference')
   submitPaymentReference(@Param('id') id: string, @Body() dto: SubmitPaymentReferenceDto) {
     return this.service.submitPaymentReference(id, dto);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(RhGuard)
   @Post(':id/confirm-payment')
   confirmPayment(@Param('id') id: string) {
     return this.service.confirmPayment(id);
