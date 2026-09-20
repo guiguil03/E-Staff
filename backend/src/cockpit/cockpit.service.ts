@@ -1,7 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import * as path from "path";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage.service";
+import { EmailService } from "../common/email.service";
+import { renderEmailHtml, emailQuote, emailParagraphsFromText } from "../common/email-template";
 
 // Agrégats réels du Cockpit Formateur — remplace les widgets qui tournaient
 // sur components/compte-formateur/exampleData.ts (Vivier C1, moyennes de
@@ -44,7 +46,8 @@ interface RawApprenant {
 export class CockpitService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly storage: StorageService
+    private readonly storage: StorageService,
+    private readonly email: EmailService
   ) {}
 
   private async findFormateurOrThrow(matricule: string) {
@@ -155,9 +158,13 @@ export class CockpitService {
       : tousApprenants;
     const scoresParApprenant = this.buildScoresParApprenant(notations);
 
-    const parGroupe = new Map<string, { cle: string; label: string; moyennes: number[]; count: number }>();
+    const parGroupe = new Map<
+      string,
+      { id: string; cle: string; label: string; moyennes: number[]; count: number }
+    >();
     for (const a of apprenants) {
       const entry = parGroupe.get(a.groupe.cle) ?? {
+        id: a.groupe.id,
         cle: a.groupe.cle,
         label: a.groupe.label,
         moyennes: [],
@@ -176,7 +183,14 @@ export class CockpitService {
           g.moyennes.length > 0
             ? Math.round((g.moyennes.reduce((s, v) => s + v, 0) / g.moyennes.length) * 100) / 100
             : null;
-        return { cle: g.cle, label: g.label, moyenne, statut: this.statutFor(moyenne), apprenantsCount: g.count };
+        return {
+          id: g.id,
+          cle: g.cle,
+          label: g.label,
+          moyenne,
+          statut: this.statutFor(moyenne),
+          apprenantsCount: g.count,
+        };
       });
   }
 
@@ -487,5 +501,57 @@ export class CockpitService {
       throw new NotFoundException("Document introuvable.");
     }
     return this.storage.getObjectStream(doc.storageKey);
+  }
+
+  // Diffusion — jusqu'ici BroadcastCard ne faisait qu'un setState local,
+  // rien n'était sauvegardé ni envoyé (voir Diffusion dans schema.prisma).
+  // groupeId absent = tous les groupes du formateur connecté (borné par la
+  // règle d'exclusivité formateur/type de cours, voir RhService) plutôt
+  // qu'une diffusion académie entière. Persistée ET envoyée par e-mail à
+  // chaque apprenant ciblé.
+  async createDiffusion(matricule: string, groupeId: string | null, message: string) {
+    const formateur = await this.findFormateurOrThrow(matricule);
+
+    let cibles;
+    if (groupeId) {
+      const groupe = await this.prisma.groupe.findUnique({ where: { id: groupeId } });
+      if (!groupe) throw new NotFoundException("Groupe introuvable.");
+      if (groupe.formateurId !== formateur.id) {
+        throw new BadRequestException("Vous ne pouvez diffuser que sur vos propres groupes.");
+      }
+      cibles = await this.prisma.apprenant.findMany({ where: { groupeId } });
+    } else {
+      cibles = await this.prisma.apprenant.findMany({
+        where: { groupe: { formateurId: formateur.id } },
+      });
+    }
+
+    const diffusion = await this.prisma.diffusion.create({
+      data: { formateurId: formateur.id, groupeId, message },
+    });
+
+    await Promise.all(
+      cibles.map((a) =>
+        this.email.send({
+          to: a.email,
+          subject: `Annonce de votre formateur — ${formateur.prenom} ${formateur.nom}`,
+          text: `Bonjour ${a.prenom},\n\n${message}\n\n— ${formateur.prenom} ${formateur.nom}`,
+          html: renderEmailHtml({
+            title: "Annonce de votre formateur",
+            bodyHtml: emailQuote(message) + emailParagraphsFromText(`— ${formateur.prenom} ${formateur.nom}`),
+          }),
+        })
+      )
+    );
+
+    return { ...diffusion, destinatairesCount: cibles.length };
+  }
+
+  async listAnnonces(matricule: string) {
+    const formateur = await this.findFormateurOrThrow(matricule);
+    return this.prisma.diffusion.findMany({
+      where: { formateurId: formateur.id },
+      orderBy: { createdAt: "desc" },
+    });
   }
 }

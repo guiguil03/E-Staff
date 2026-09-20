@@ -196,10 +196,6 @@ export const OBJECTIFS_PAR_DEFAUT: Record<number, string> = {
   4: "Renforcement du vocabulaire professionnel sectoriel.",
 };
 
-export const BROADCAST_TARGETS = [
-  { key: "tous", label: "Tous les apprenants (30)" },
-  ...GROUPES.map((g) => ({ key: g.key, label: g.label })),
-];
 
 // Chiffres pré-remplis pour le Rapport Hebdomadaire (Constat).
 export const WEEKLY_REPORT_STATS = {

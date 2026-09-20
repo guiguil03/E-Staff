@@ -261,6 +261,30 @@ export class NotationService {
     }));
   }
 
+  // Annonces reçues par l'apprenant — diffusées par son formateur (voir
+  // CockpitService.createDiffusion), soit ciblées sur son groupe précis,
+  // soit sur "tous les groupes" de ce formateur (groupeId null).
+  async listAnnoncesForApprenant(matricule: string) {
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { matricule },
+      include: { groupe: true },
+    });
+    if (!apprenant) throw new NotFoundException(`Apprenant ${matricule} introuvable.`);
+
+    return this.prisma.diffusion.findMany({
+      where: {
+        OR: apprenant.groupe.formateurId
+          ? [
+              { groupeId: apprenant.groupeId },
+              { groupeId: null, formateurId: apprenant.groupe.formateurId },
+            ]
+          : [{ groupeId: apprenant.groupeId }],
+      },
+      include: { formateur: true },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
   // Page d'accueil du Compte Apprenant — consolide Apprenant, EvaluationAttempt
   // (diagnostic initial du test d'admission), Seance/Presence (assiduité,
   // prochaine séance) et Notation (évaluation cumulée, alerte pédagogique,

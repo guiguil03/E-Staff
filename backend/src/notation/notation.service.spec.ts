@@ -12,6 +12,7 @@ function makePrismaMock() {
     formateur: { findUnique: jest.fn() },
     notation: { findUnique: jest.fn(), findMany: jest.fn(), upsert: jest.fn() },
     presence: { findMany: jest.fn() },
+    diffusion: { findMany: jest.fn() },
   };
 }
 
@@ -582,6 +583,51 @@ describe("NotationService", () => {
       expect(result.prochaineSeance).toBeNull();
       expect(result.tauxEvolutionMensuel).toBe(0);
       expect(result.assiduite).toEqual([]);
+    });
+  });
+
+  describe("listAnnoncesForApprenant", () => {
+    it("récupère les annonces ciblées sur son groupe et celles diffusées sur tous les groupes de son formateur", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({
+        matricule: APPRENANT.matricule,
+        groupeId: GROUPE.id,
+        groupe: GROUPE,
+      });
+      prisma.diffusion.findMany.mockResolvedValue([]);
+
+      await service.listAnnoncesForApprenant(APPRENANT.matricule);
+
+      expect(prisma.diffusion.findMany).toHaveBeenCalledWith({
+        where: {
+          OR: [{ groupeId: GROUPE.id }, { groupeId: null, formateurId: "f-1" }],
+        },
+        include: { formateur: true },
+        orderBy: { createdAt: "desc" },
+      });
+    });
+
+    it("ne cherche que les annonces de son propre groupe si aucun formateur n'est encore assigné", async () => {
+      const groupeSansFormateur = { ...GROUPE, formateurId: null };
+      prisma.apprenant.findUnique.mockResolvedValue({
+        matricule: APPRENANT.matricule,
+        groupeId: groupeSansFormateur.id,
+        groupe: groupeSansFormateur,
+      });
+      prisma.diffusion.findMany.mockResolvedValue([]);
+
+      await service.listAnnoncesForApprenant(APPRENANT.matricule);
+
+      expect(prisma.diffusion.findMany).toHaveBeenCalledWith({
+        where: { OR: [{ groupeId: groupeSansFormateur.id }] },
+        include: { formateur: true },
+        orderBy: { createdAt: "desc" },
+      });
+    });
+
+    it("lève une erreur si l'apprenant n'existe pas", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+
+      await expect(service.listAnnoncesForApprenant("inconnu")).rejects.toThrow(NotFoundException);
     });
   });
 });

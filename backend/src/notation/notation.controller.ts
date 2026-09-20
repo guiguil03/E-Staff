@@ -87,6 +87,11 @@ export class NotationController {
     return this.service.getApprenantDashboard(matricule);
   }
 
+  @Get("apprenants/:matricule/annonces")
+  listAnnoncesForApprenant(@Param("matricule") matricule: string) {
+    return this.service.listAnnoncesForApprenant(matricule);
+  }
+
   @Get("apprenants/:matricule/notations")
   listApprenantNotations(@Param("matricule") matricule: string) {
     return this.service.listApprenantNotations(matricule);
