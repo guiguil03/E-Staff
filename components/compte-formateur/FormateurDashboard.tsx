@@ -13,9 +13,11 @@ import {
   BroadcastCard,
   VivierC1Card,
   WeeklyReportCard,
+  MesFichesCard,
 } from "./AdminColumn";
 import GroupDetailPanel from "./GroupDetailPanel";
 import WeeklyReportPanel from "./WeeklyReportPanel";
+import FichesPreparationPanel from "./FichesPreparationPanel";
 import PaymentAlertsTable from "./PaymentAlertsTable";
 import { apiGet } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
@@ -28,7 +30,7 @@ function formateurHeaders(): HeadersInit {
   return matricule ? { "x-formateur-matricule": matricule } : {};
 }
 
-type PanelState = { type: "group"; key: string } | { type: "report" } | null;
+type PanelState = { type: "group"; key: string } | { type: "report" } | { type: "fiches" } | null;
 
 // Garde d'accès + assemblage du Cockpit Formateur. Même stopgap que le
 // Compte Apprenant : rôle posé en sessionStorage par LoginForm après le
@@ -118,6 +120,9 @@ export default function FormateurDashboard() {
           <div className="lg:col-span-2">
             <WeeklyReportCard onOpenReport={() => setPanel({ type: "report" })} />
           </div>
+          <div className="lg:col-span-2">
+            <MesFichesCard onOpenFiches={() => setPanel({ type: "fiches" })} />
+          </div>
         </div>
 
         {panel?.type === "group" && (
@@ -128,6 +133,7 @@ export default function FormateurDashboard() {
           />
         )}
         {panel?.type === "report" && <WeeklyReportPanel onClose={() => setPanel(null)} />}
+        {panel?.type === "fiches" && <FichesPreparationPanel onClose={() => setPanel(null)} />}
       </div>
     </div>
   );

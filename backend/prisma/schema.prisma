@@ -494,6 +494,45 @@ model Formateur {
 
   groupes   Groupe[]
   paiements PaiementFormateur[]
+  documents FormateurDocument[]
+  bilans    BilanFormateur[]
+}
+
+// Bilan hebdomadaire validé par le formateur (voir CockpitService.submitBilanHebdo)
+// — jusqu'ici WeeklyReportPanel ne faisait qu'un setState local, rien n'était
+// sauvegardé ni transmis. statsSnapshot fige les chiffres du rapport hebdo
+// au moment de la validation (voir CockpitService.getRapportHebdo) pour que
+// l'historique reste lisible même si les chiffres bougent ensuite.
+model BilanFormateur {
+  id          String   @id @default(cuid())
+  formateurId String
+  formateur   Formateur @relation(fields: [formateurId], references: [id])
+
+  constat String
+  analyse String
+  axes    String
+
+  statsSnapshot Json
+
+  createdAt DateTime @default(now())
+}
+
+// Documents rattachés à un formateur — fiches de préparation (déposées
+// librement par le formateur lui-même) et contrat (déposé par la RH). Un
+// seul modèle pour les deux plutôt que deux tables quasi identiques ;
+// `type` distingue l'usage, `uploadedBy` qui l'a déposé. Fichier réel dans
+// le bucket S3-compatible (voir StorageService), storageKey seule en base.
+model FormateurDocument {
+  id          String   @id @default(cuid())
+  formateurId String
+  formateur   Formateur @relation(fields: [formateurId], references: [id])
+
+  type       String // "fiche_preparation" | "contrat"
+  filename   String
+  storageKey String
+  uploadedBy String // "formateur" | "rh"
+
+  createdAt DateTime @default(now())
 }
 
 // Paie individuelle d'un formateur pour une période — miroir de PaiementAgent

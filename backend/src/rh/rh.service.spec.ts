@@ -13,7 +13,7 @@ import { EmailService } from "../common/email.service";
 
 function makePrismaMock() {
   return {
-    groupe: { findMany: jest.fn(), findUnique: jest.fn(), updateMany: jest.fn() },
+    groupe: { findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
     tarifFormation: { upsert: jest.fn() },
     encaissementFormation: {
       findMany: jest.fn(),
@@ -56,7 +56,8 @@ describe("RhService", () => {
       prisma as unknown as PrismaService,
       {} as unknown as CockpitService,
       {} as unknown as NotationService,
-      email as unknown as EmailService
+      email as unknown as EmailService,
+      {} as never
     );
   });
 
@@ -855,6 +856,53 @@ describe("RhService", () => {
         where: { matricule: "ETF-2026-0001" },
         data: { abonnementExpireAt: new Date("2026-12-01") },
       });
+    });
+  });
+
+  // ---- Exclusivité formateur / type de cours (2026-09-20) -----------------
+
+  describe("assignFormateur / updateGroupeTypeCours — exclusivité type de cours", () => {
+    it("assigne librement un formateur à un groupe sans type de cours renseigné", async () => {
+      prisma.groupe.findUnique.mockResolvedValue({ id: "g-1", typeCours: null, formateurId: null });
+      prisma.formateur.findUnique.mockResolvedValue({ id: "f-1" });
+      prisma.groupe.update.mockResolvedValue({});
+
+      await service.assignFormateur("g-1", "f-1");
+
+      expect(prisma.groupe.findMany).not.toHaveBeenCalled();
+      expect(prisma.groupe.update).toHaveBeenCalledWith({
+        where: { id: "g-1" },
+        data: { formateurId: "f-1" },
+        include: { formateur: true },
+      });
+    });
+
+    it("refuse d'assigner un formateur déjà engagé sur un autre type de cours", async () => {
+      prisma.groupe.findUnique.mockResolvedValue({ id: "g-2", typeCours: "TEF", formateurId: null });
+      prisma.formateur.findUnique.mockResolvedValue({ id: "f-1" });
+      prisma.groupe.findMany.mockResolvedValue([{ id: "g-1", typeCours: "DELF/DALF" }]);
+
+      await expect(service.assignFormateur("g-2", "f-1")).rejects.toThrow(BadRequestException);
+      expect(prisma.groupe.update).not.toHaveBeenCalled();
+    });
+
+    it("autorise un second groupe du même type de cours pour ce formateur", async () => {
+      prisma.groupe.findUnique.mockResolvedValue({ id: "g-2", typeCours: "TEF", formateurId: null });
+      prisma.formateur.findUnique.mockResolvedValue({ id: "f-1" });
+      prisma.groupe.findMany.mockResolvedValue([{ id: "g-1", typeCours: "TEF" }]);
+      prisma.groupe.update.mockResolvedValue({});
+
+      await service.assignFormateur("g-2", "f-1");
+
+      expect(prisma.groupe.update).toHaveBeenCalled();
+    });
+
+    it("refuse de changer le type de cours d'un groupe si ça entre en conflit avec le formateur déjà assigné", async () => {
+      prisma.groupe.findUnique.mockResolvedValue({ id: "g-1", typeCours: "TEF", formateurId: "f-1" });
+      prisma.groupe.findMany.mockResolvedValue([{ id: "g-2", typeCours: "TEF" }]);
+
+      await expect(service.updateGroupeTypeCours("g-1", "FOL")).rejects.toThrow(BadRequestException);
+      expect(prisma.groupe.update).not.toHaveBeenCalled();
     });
   });
 });

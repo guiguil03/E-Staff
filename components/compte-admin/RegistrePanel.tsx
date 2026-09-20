@@ -14,8 +14,18 @@ interface RegistreRow {
   email: string;
   statut: string;
   formation: string;
+  niveau: string | null;
+  dateTest: string | null;
   dateAdmission: string | null;
+  dateInscription: string;
+  finInscription: string | null;
+  formateurAssigne: string | null;
+  dateEntreeProd: string | null;
   derniereMissionClient: string | null;
+}
+
+function fmtDate(iso: string | null): string {
+  return iso ? new Date(iso).toLocaleDateString("fr-FR") : "—";
 }
 
 interface Vague {
@@ -78,7 +88,7 @@ export default function RegistrePanel() {
     const q = filter.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) =>
-      [r.matricule, r.prenom, r.nom, r.email, r.formation, r.statut]
+      [r.matricule, r.prenom, r.nom, r.email, r.formation, r.statut, r.niveau, r.formateurAssigne]
         .join(" ")
         .toLowerCase()
         .includes(q)
@@ -198,14 +208,19 @@ export default function RegistrePanel() {
 
         {Array.isArray(rows) && (
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-left">
+            <table className="w-full min-w-[1400px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-white/10 font-mono text-[11px] uppercase tracking-widest text-white/40">
                   <th className="py-2 pr-4">Matricule</th>
                   <th className="py-2 pr-4">Nom &amp; Prénom</th>
                   <th className="py-2 pr-4">Statut</th>
                   <th className="py-2 pr-4">Formation</th>
-                  <th className="py-2 pr-4">Date admission</th>
+                  <th className="py-2 pr-4">Niveau</th>
+                  <th className="py-2 pr-4">Date de test</th>
+                  <th className="py-2 pr-4">Date d&apos;inscription</th>
+                  <th className="py-2 pr-4">Fin d&apos;inscription</th>
+                  <th className="py-2 pr-4">Formateur assigné</th>
+                  <th className="py-2 pr-4">Date d&apos;entrée en prod</th>
                   <th className="py-2 pr-4">Dernière mission (Client)</th>
                 </tr>
               </thead>
@@ -237,10 +252,17 @@ export default function RegistrePanel() {
                       </span>
                     </td>
                     <td className="py-2.5 pr-4">{r.formation}</td>
+                    <td className="py-2.5 pr-4 text-white/60">{r.niveau ?? "—"}</td>
+                    <td className="py-2.5 pr-4 font-mono text-xs text-white/50">{fmtDate(r.dateTest)}</td>
                     <td className="py-2.5 pr-4 font-mono text-xs text-white/50">
-                      {r.dateAdmission
-                        ? new Date(r.dateAdmission).toLocaleDateString("fr-FR")
-                        : "—"}
+                      {fmtDate(r.dateInscription)}
+                    </td>
+                    <td className="py-2.5 pr-4 font-mono text-xs text-white/50">
+                      {fmtDate(r.finInscription)}
+                    </td>
+                    <td className="py-2.5 pr-4 text-white/60">{r.formateurAssigne ?? "—"}</td>
+                    <td className="py-2.5 pr-4 font-mono text-xs text-white/50">
+                      {fmtDate(r.dateEntreeProd)}
                     </td>
                     <td className="py-2.5 pr-4 font-mono text-xs text-white/40">
                       {r.derniereMissionClient ?? "—"}
@@ -249,7 +271,7 @@ export default function RegistrePanel() {
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-6 text-center font-sans text-sm text-white/40">
+                    <td colSpan={11} className="py-6 text-center font-sans text-sm text-white/40">
                       Aucun résultat.
                     </td>
                   </tr>

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -7,9 +8,14 @@ import {
   Post,
   Put,
   Query,
+  Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { AdminGuard } from '../common/admin.guard';
 import { RhGuard } from '../common/rh.guard';
 import { StaffGuard } from '../common/staff.guard';
@@ -29,6 +35,13 @@ import { EnvoyerResultatsDto } from './dto/envoyer-resultats.dto';
 import { CreateApprenantDto } from './dto/create-apprenant.dto';
 import { CreateAgentAcquisitionDto } from './dto/create-agent-acquisition.dto';
 import { RenouvelerAbonnementDto } from './dto/renouveler-abonnement.dto';
+
+const MAX_CONTRAT_UPLOAD_BYTES = 20 * 1024 * 1024; // 20 Mo
+const ALLOWED_CONTRAT_MIMETYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
 
 // Compte RH surchargé, ventilé en deux le 2026-09-18 : Admin garde la
 // génération de comptes/identifiants (formateur, apprenant), les
@@ -221,6 +234,36 @@ export class RhController {
   @Get('formateurs/:id/casier')
   getFormateurCasier(@Param('id') id: string) {
     return this.service.getFormateurCasier(id);
+  }
+
+  @UseGuards(StaffGuard)
+  @Post('formateurs/:id/contrat')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_CONTRAT_UPLOAD_BYTES },
+      fileFilter: (_req, file, cb) => {
+        cb(null, ALLOWED_CONTRAT_MIMETYPES.includes(file.mimetype));
+      },
+    }),
+  )
+  uploadFormateurContrat(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException(
+        'Fichier manquant, trop volumineux (20 Mo max) ou format non supporté (PDF, Word).',
+      );
+    }
+    return this.service.uploadFormateurContrat(id, file);
+  }
+
+  @UseGuards(StaffGuard)
+  @Get('formateurs/documents/:documentId')
+  async streamFormateurDocument(
+    @Param('documentId') documentId: string,
+    @Res() res: Response,
+  ) {
+    const { stream, contentType } = await this.service.getFormateurDocumentStream(documentId);
+    if (contentType) res.set('Content-Type', contentType);
+    stream.pipe(res);
   }
 
   @UseGuards(RhGuard)

@@ -46,7 +46,7 @@ describe("CockpitService — scoping par formateur", () => {
 
   beforeEach(() => {
     prisma = makePrismaMock();
-    service = new CockpitService(prisma as unknown as PrismaService);
+    service = new CockpitService(prisma as unknown as PrismaService, {} as never);
   });
 
   describe("getGroupes", () => {
