@@ -11,6 +11,7 @@ import QuickActions from "./QuickActions";
 import MonDossier from "./MonDossier";
 import MesNotationsTable from "./MesNotationsTable";
 import ParametresPanel from "./ParametresPanel";
+import AnnoncesCard from "./AnnoncesCard";
 import { useRequireRole } from "@/lib/useRequireRole";
 import ViewAsBanner from "@/components/ViewAsBanner";
 import { apiGet } from "@/lib/api";
@@ -103,6 +104,7 @@ export default function ApprenantDashboard() {
   const niveauInitial: PalierKey = data.diagnosticInitial?.tier
     ? (TIER_TO_NIVEAU_INITIAL[data.diagnosticInitial.tier] ?? "pre-b1")
     : "pre-b1";
+  const matricule = sessionStorage.getItem(ACCOUNT_MATRICULE_KEY);
 
   return (
     <div className="min-h-screen bg-obsidian px-4 py-10 sm:px-6 sm:py-14">
@@ -139,6 +141,7 @@ export default function ApprenantDashboard() {
           </div>
 
           <div className="flex flex-col gap-6">
+            {matricule && <AnnoncesCard matricule={matricule} />}
             <CecrGauge
               value={computeJaugePosition(niveauInitial, data.tauxEvolutionMensuel)}
               displayValue={data.tauxEvolutionMensuel}

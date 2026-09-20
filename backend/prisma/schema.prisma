@@ -468,6 +468,23 @@ model Groupe {
 
   apprenants Apprenant[]
   seances    Seance[]
+  diffusions Diffusion[]
+}
+
+// Annonce diffusée par un formateur — jusqu'ici BroadcastCard (Cockpit
+// Formateur) ne faisait qu'un setState local, rien n'était sauvegardé ni
+// transmis. groupeId nul = tous les groupes de ce formateur (borné par la
+// règle d'exclusivité formateur/type de cours, voir
+// RhService.assertFormateurTypeCoursCompatible) plutôt qu'une vraie
+// diffusion académie entière.
+model Diffusion {
+  id          String    @id @default(cuid())
+  formateurId String
+  formateur   Formateur @relation(fields: [formateurId], references: [id])
+  groupeId    String?
+  groupe      Groupe?   @relation(fields: [groupeId], references: [id])
+  message     String
+  createdAt   DateTime  @default(now())
 }
 
 model Formateur {
@@ -492,10 +509,11 @@ model Formateur {
   // que la RH ne l'a pas renseigné.
   tarifFixe Float?
 
-  groupes   Groupe[]
-  paiements PaiementFormateur[]
-  documents FormateurDocument[]
-  bilans    BilanFormateur[]
+  groupes    Groupe[]
+  paiements  PaiementFormateur[]
+  documents  FormateurDocument[]
+  bilans     BilanFormateur[]
+  diffusions Diffusion[]
 }
 
 // Bilan hebdomadaire validé par le formateur (voir CockpitService.submitBilanHebdo)

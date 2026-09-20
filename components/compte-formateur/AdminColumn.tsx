@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPostAuthed } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
-import { APPRENANTS, BROADCAST_TARGETS, apprenantIdFromMatricule } from "./exampleData";
+import { APPRENANTS, apprenantIdFromMatricule } from "./exampleData";
 
 interface VivierApprenantApi {
   matricule: string;
@@ -13,6 +13,12 @@ interface VivierApprenantApi {
   nom: string;
   groupeCle: string;
   moyenneGlobale: number;
+}
+
+interface GroupeOption {
+  id: string;
+  label: string;
+  apprenantsCount: number;
 }
 
 function formateurHeaders(): HeadersInit {
@@ -77,14 +83,42 @@ export function SearchApprenantCard({ onSelectApprenant }: ApprenantPickerProps)
   );
 }
 
+// Diffusion réelle (voir CockpitService.createDiffusion) depuis 2026-09-20 —
+// persistée, envoyée par e-mail à chaque apprenant ciblé, et visible dans
+// leur Compte Apprenant (annonces). "Tous mes groupes" plutôt que "toute
+// l'Académie" : un formateur n'encadre qu'un seul type de cours (voir
+// RhService.assertFormateurTypeCoursCompatible), la diffusion reste bornée
+// à ce qu'il encadre réellement.
 export function BroadcastCard() {
-  const [broadcastTarget, setBroadcastTarget] = useState(BROADCAST_TARGETS[0].key);
+  const [groupes, setGroupes] = useState<GroupeOption[]>([]);
+  const [broadcastTarget, setBroadcastTarget] = useState("tous");
   const [broadcastMessage, setBroadcastMessage] = useState("");
   const [broadcastSent, setBroadcastSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function sendBroadcast() {
-    setBroadcastSent(true);
-    setBroadcastMessage("");
+  useEffect(() => {
+    apiGet<GroupeOption[]>("/cockpit/groupes", formateurHeaders())
+      .then(setGroupes)
+      .catch(() => setGroupes([]));
+  }, []);
+
+  async function sendBroadcast() {
+    setSending(true);
+    setError(null);
+    try {
+      await apiPostAuthed(
+        "/cockpit/diffusions",
+        { groupeId: broadcastTarget === "tous" ? null : broadcastTarget, message: broadcastMessage },
+        formateurHeaders()
+      );
+      setBroadcastSent(true);
+      setBroadcastMessage("");
+    } catch {
+      setError("Échec de l'envoi — réessayez.");
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
@@ -99,9 +133,10 @@ export function BroadcastCard() {
           }}
           className="mt-2 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
         >
-          {BROADCAST_TARGETS.map((t) => (
-            <option key={t.key} value={t.key}>
-              {t.label}
+          <option value="tous">Tous mes groupes</option>
+          {groupes.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.label} ({g.apprenantsCount})
             </option>
           ))}
         </select>
@@ -116,14 +151,19 @@ export function BroadcastCard() {
           className="mt-2 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
         />
         <div className="mt-2 flex items-center gap-3">
-          <Button variant="ghostDark" onClick={sendBroadcast} disabled={!broadcastMessage.trim()}>
-            Diffuser
+          <Button
+            variant="ghostDark"
+            onClick={sendBroadcast}
+            disabled={sending || !broadcastMessage.trim()}
+          >
+            {sending ? "Envoi..." : "Diffuser"}
           </Button>
           {broadcastSent && (
             <p className="font-sans text-xs text-white/50">
-              Messagerie en cours de construction — non transmise réellement.
+              Envoyé par e-mail et visible dans le Compte Apprenant des destinataires.
             </p>
           )}
+          {error && <p className="font-sans text-xs text-accent">{error}</p>}
         </div>
       </div>
     </Reveal>

@@ -19,6 +19,7 @@ import { FormateurGuard } from "../common/formateur.guard";
 import { CockpitService } from "./cockpit.service";
 import { SetAbonnementDto } from "./dto/set-abonnement.dto";
 import { SubmitBilanDto } from "./dto/submit-bilan.dto";
+import { CreateDiffusionDto } from "./dto/create-diffusion.dto";
 
 // Fiche de préparation = document pédagogique (support de cours), pas une
 // vidéo/audio d'évaluation — mêmes types que le CV candidat plutôt que ceux
@@ -113,6 +114,19 @@ export class CockpitController {
     const { stream, contentType } = await this.service.getDocumentStream(formateurMatricule, id);
     if (contentType) res.set("Content-Type", contentType);
     stream.pipe(res);
+  }
+
+  @Post("diffusions")
+  createDiffusion(
+    @Headers("x-formateur-matricule") formateurMatricule: string,
+    @Body() dto: CreateDiffusionDto
+  ) {
+    return this.service.createDiffusion(formateurMatricule, dto.groupeId ?? null, dto.message);
+  }
+
+  @Get("diffusions")
+  listAnnonces(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.listAnnonces(formateurMatricule);
   }
 
   @Get("paiements")
