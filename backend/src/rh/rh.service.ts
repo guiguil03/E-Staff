@@ -5,10 +5,12 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
+import * as path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { CockpitService } from '../cockpit/cockpit.service';
 import { NotationService } from '../notation/notation.service';
 import { EmailService } from '../common/email.service';
+import { StorageService } from '../common/storage.service';
 import { renderEmailHtml, emailParagraph, emailParagraphsFromText, credentialsBox } from '../common/email-template';
 import { TIER_LABELS } from '../evaluation/evaluation.service';
 import { EnvoyerResultatsDto } from './dto/envoyer-resultats.dto';
@@ -131,6 +133,7 @@ export class RhService {
     private readonly cockpit: CockpitService,
     private readonly notation: NotationService,
     private readonly email: EmailService,
+    private readonly storage: StorageService,
   ) {}
 
   // ---- Vue d'ensemble -----------------------------------------------------
@@ -206,15 +209,19 @@ export class RhService {
 
   // ---- Registre global des agents & apprenants -----------------------------
 
+  // Registre global — un formateur assigné, une date de test (soumission),
+  // un niveau et une entrée en prod (première mission, distincte de la
+  // dernière utilisée pour le statut/client courant) en plus des champs
+  // déjà là, demandés par la cliente le 2026-09-20 pour donner une vraie
+  // traçabilité de bout en bout (test -> inscription -> formation -> prod).
   async getRegistre() {
     const apprenants = await this.prisma.apprenant.findMany({
       include: {
-        groupe: true,
+        groupe: { include: { formateur: true } },
         evaluationAttempt: true,
         missions: {
           include: { contrat: true },
-          orderBy: { dateDebut: 'desc' },
-          take: 1,
+          orderBy: { dateDebut: 'asc' },
         },
       },
       orderBy: { matricule: 'asc' },
@@ -222,8 +229,9 @@ export class RhService {
 
     return apprenants.map((a) => {
       const tier = a.evaluationAttempt?.tier ?? null;
-      const derniereMission = a.missions[0];
-      const enProduction = derniereMission && derniereMission.dateFin === null;
+      const premiereMission = a.missions[0] ?? null;
+      const derniereMission = a.missions[a.missions.length - 1] ?? null;
+      const enProduction = !!derniereMission && derniereMission.dateFin === null;
       return {
         matricule: a.matricule,
         prenom: a.prenom,
@@ -235,7 +243,15 @@ export class RhService {
             ? 'Certifié'
             : 'En Formation',
         formation: a.groupe.label,
+        niveau: tier ? TIER_LABELS[tier] ?? tier : null,
+        dateTest: a.evaluationAttempt?.submittedAt ?? null,
         dateAdmission: a.evaluationAttempt?.gradedAt ?? null,
+        dateInscription: a.createdAt,
+        finInscription: a.abonnementExpireAt,
+        formateurAssigne: a.groupe.formateur
+          ? `${a.groupe.formateur.prenom} ${a.groupe.formateur.nom}`
+          : null,
+        dateEntreeProd: premiereMission?.dateDebut ?? null,
         derniereMissionClient: derniereMission?.contrat.clientNom ?? null,
       };
     });
@@ -432,6 +448,29 @@ export class RhService {
     return this.prisma.formateur.update({ where: { id }, data: dto });
   }
 
+  // Un formateur n'encadre qu'un seul type de cours à la fois (règle métier
+  // du 2026-09-20 : les critères d'évaluation diffèrent entre DELF/DALF,
+  // TEF, FOL...) — vérifié ici plutôt qu'en base (pas de contrainte SQL
+  // simple pour "au plus une valeur distincte parmi les groupes liés"). Ne
+  // bloque rien tant que le groupe cible n'a pas encore de typeCours
+  // renseigné : la règle ne s'applique qu'aux types réellement engagés.
+  private async assertFormateurTypeCoursCompatible(
+    formateurId: string,
+    groupeId: string,
+    typeCours: string | null,
+  ) {
+    if (!typeCours) return;
+    const autresGroupes = await this.prisma.groupe.findMany({
+      where: { formateurId, id: { not: groupeId }, typeCours: { not: null } },
+    });
+    const conflit = autresGroupes.find((g) => g.typeCours !== typeCours);
+    if (conflit) {
+      throw new BadRequestException(
+        `Ce formateur encadre déjà un groupe de type "${conflit.typeCours}" — un formateur ne peut être assigné qu'à un seul type de cours.`,
+      );
+    }
+  }
+
   async assignFormateur(groupeId: string, formateurId: string | null) {
     const groupe = await this.prisma.groupe.findUnique({
       where: { id: groupeId },
@@ -442,6 +481,7 @@ export class RhService {
         where: { id: formateurId },
       });
       if (!formateur) throw new NotFoundException('Formateur introuvable.');
+      await this.assertFormateurTypeCoursCompatible(formateurId, groupeId, groupe.typeCours);
     }
     return this.prisma.groupe.update({
       where: { id: groupeId },
@@ -455,6 +495,9 @@ export class RhService {
       where: { id: groupeId },
     });
     if (!groupe) throw new NotFoundException('Groupe introuvable.');
+    if (groupe.formateurId) {
+      await this.assertFormateurTypeCoursCompatible(groupe.formateurId, groupeId, typeCours);
+    }
     return this.prisma.groupe.update({
       where: { id: groupeId },
       data: { typeCours },
@@ -1033,13 +1076,22 @@ export class RhService {
     });
     if (!formateur) throw new NotFoundException('Formateur introuvable.');
 
-    const tauxParGroupe = await this.cockpit.getTauxReussiteParGroupe();
+    const [tauxParGroupe, vivierCount, documents, bilans] = await Promise.all([
+      this.cockpit.getTauxReussiteParGroupe(),
+      this.cockpit.getVivierCountForFormateur(id),
+      this.prisma.formateurDocument.findMany({
+        where: { formateurId: id },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.cockpit.listBilansFormateur(id),
+    ]);
 
     return {
       matricule: formateur.matricule,
       prenom: formateur.prenom,
       nom: formateur.nom,
       email: formateur.email,
+      vivierCount,
       vagues: formateur.groupes.map((g) => ({
         label: g.label,
         typeCours: g.typeCours,
@@ -1048,7 +1100,43 @@ export class RhService {
         apprenantsCount: g._count.apprenants,
         tauxReussite: tauxParGroupe.get(g.cle) ?? 0,
       })),
+      // Le contrat est un FormateurDocument comme les fiches de prép (voir
+      // schema.prisma), distingué par type — le plus récent fait foi en cas
+      // de renouvellement, pas d'historique de versions pour l'instant.
+      contrat: documents.find((d) => d.type === 'contrat') ?? null,
+      fichesPreparation: documents.filter((d) => d.type === 'fiche_preparation'),
+      bilans,
     };
+  }
+
+  // Contrat déposé par la RH sur la fiche du formateur (voir
+  // FormateurDocument dans schema.prisma) — même stockage S3-compatible que
+  // les fiches de prép, distingué par type/uploadedBy.
+  async uploadFormateurContrat(id: string, file: Express.Multer.File) {
+    const formateur = await this.prisma.formateur.findUnique({ where: { id } });
+    if (!formateur) throw new NotFoundException('Formateur introuvable.');
+
+    const extension = path.extname(file.originalname) || '';
+    const key = `formateurs/${formateur.id}/contrat/${Date.now()}${extension}`;
+    await this.storage.uploadBuffer(key, file.buffer, file.mimetype || 'application/octet-stream');
+    return this.prisma.formateurDocument.create({
+      data: {
+        formateurId: formateur.id,
+        type: 'contrat',
+        filename: file.originalname,
+        storageKey: key,
+        uploadedBy: 'rh',
+      },
+    });
+  }
+
+  // Téléchargement générique (contrat ou fiche de prép) depuis le Casier RH
+  // — pas de restriction par type, StaffGuard suffit au contrôle d'accès
+  // (voir rh.controller.ts).
+  async getFormateurDocumentStream(documentId: string) {
+    const doc = await this.prisma.formateurDocument.findUnique({ where: { id: documentId } });
+    if (!doc) throw new NotFoundException('Document introuvable.');
+    return this.storage.getObjectStream(doc.storageKey);
   }
 
   async getPartenaireCasier(id: string) {
@@ -1091,7 +1179,10 @@ export class RhService {
           where: { formateurId: null },
           include: { _count: { select: { apprenants: true } } },
         }),
-        this.prisma.formateur.findMany({ orderBy: { nom: 'asc' } }),
+        this.prisma.formateur.findMany({
+          orderBy: { nom: 'asc' },
+          include: { groupes: { where: { typeCours: { not: null } }, take: 1 } },
+        }),
         this.prisma.reunion.findMany({
           where: { statut: 'planifiee', startAt: { gte: new Date() } },
           orderBy: { startAt: 'asc' },
@@ -1114,9 +1205,14 @@ export class RhService {
           typeCours: g.typeCours,
           nbApprenants: g._count.apprenants,
         })),
+      // typeCoursActuel : le type de cours déjà engagé par ce formateur, s'il
+      // en encadre déjà un (voir assertFormateurTypeCoursCompatible) — sert
+      // au front à ne proposer que des formateurs compatibles avec le type
+      // du groupe à pourvoir.
       formateursDisponibles: formateurs.map((f) => ({
         id: f.id,
         nom: `${f.prenom} ${f.nom}`,
+        typeCoursActuel: f.groupes[0]?.typeCours ?? null,
       })),
       reunionsAVenir: reunionsAVenir.map((r) => ({
         id: r.id,

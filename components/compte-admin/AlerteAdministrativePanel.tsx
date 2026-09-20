@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { apiGet, apiPut } from "@/lib/api";
+import { apiGet, apiPut, ApiError } from "@/lib/api";
 import { adminHeaders } from "./adminHeaders";
 
 interface TestEnAttente {
@@ -22,6 +22,7 @@ interface GroupeSansFormateur {
 interface FormateurDisponible {
   id: string;
   nom: string;
+  typeCoursActuel: string | null;
 }
 
 interface ReunionAVenir {
@@ -61,6 +62,7 @@ export default function AlerteAdministrativePanel() {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [assignFormateurId, setAssignFormateurId] = useState<Record<string, string>>({});
   const [assigning, setAssigning] = useState<string | null>(null);
+  const [assignError, setAssignError] = useState<Record<string, string>>({});
 
   function refresh() {
     apiGet<AlertesAdministratives>("/rh/alertes-administratives", adminHeaders())
@@ -81,9 +83,15 @@ export default function AlerteAdministrativePanel() {
     const formateurId = assignFormateurId[groupeId];
     if (!formateurId) return;
     setAssigning(groupeId);
+    setAssignError((prev) => ({ ...prev, [groupeId]: "" }));
     try {
       await apiPut(`/rh/groupes/${groupeId}/formateur`, { formateurId }, adminHeaders());
       refresh();
+    } catch (err) {
+      setAssignError((prev) => ({
+        ...prev,
+        [groupeId]: err instanceof ApiError ? err.message : "Erreur — réessayez.",
+      }));
     } finally {
       setAssigning(null);
     }
@@ -133,11 +141,14 @@ export default function AlerteAdministrativePanel() {
               className="rounded border border-white/20 bg-obsidian px-2 py-1 font-sans text-xs text-white outline-none focus:border-accent"
             >
               <option value="">— Choisir un formateur —</option>
-              {data.formateursDisponibles.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.nom}
-                </option>
-              ))}
+              {data.formateursDisponibles
+                .filter((f) => !g.typeCours || !f.typeCoursActuel || f.typeCoursActuel === g.typeCours)
+                .map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.nom}
+                    {f.typeCoursActuel ? ` (${f.typeCoursActuel})` : ""}
+                  </option>
+                ))}
             </select>
             <button
               onClick={() => assigner(g.groupeId)}
@@ -147,6 +158,9 @@ export default function AlerteAdministrativePanel() {
               {assigning === g.groupeId ? "..." : "Attribuer"}
             </button>
           </div>
+          {assignError[g.groupeId] && (
+            <p className="mt-2 font-mono text-[11px] text-accent">{assignError[g.groupeId]}</p>
+          )}
         </AlertCard>
       ),
     });

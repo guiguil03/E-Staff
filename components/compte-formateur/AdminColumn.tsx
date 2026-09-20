@@ -207,6 +207,28 @@ export function VivierC1Card({ onSelectApprenant }: ApprenantPickerProps) {
   );
 }
 
+interface FichesProps {
+  onOpenFiches: () => void;
+}
+
+export function MesFichesCard({ onOpenFiches }: FichesProps) {
+  return (
+    <Reveal className="h-full">
+      <div className="flex h-full flex-col justify-center rounded border border-white/10 bg-obsidianCard p-6 text-center">
+        <h3 className="font-display text-base font-semibold text-white">
+          Mes fiches de préparation
+        </h3>
+        <p className="mt-1 font-sans text-xs text-white/60">
+          Déposez les supports que vous comptez utiliser en séance.
+        </p>
+        <Button variant="ghostDark" className="mt-3" onClick={onOpenFiches}>
+          Gérer mes fiches
+        </Button>
+      </div>
+    </Reveal>
+  );
+}
+
 export function WeeklyReportCard({ onOpenReport }: ReportProps) {
   return (
     <Reveal className="h-full">

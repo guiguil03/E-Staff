@@ -1,5 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import * as path from "path";
 import { PrismaService } from "../prisma/prisma.service";
+import { StorageService } from "../common/storage.service";
 
 // Agrégats réels du Cockpit Formateur — remplace les widgets qui tournaient
 // sur components/compte-formateur/exampleData.ts (Vivier C1, moyennes de
@@ -40,7 +42,10 @@ interface RawApprenant {
 
 @Injectable()
 export class CockpitService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService
+  ) {}
 
   private async findFormateurOrThrow(matricule: string) {
     const formateur = await this.prisma.formateur.findUnique({ where: { matricule } });
@@ -229,6 +234,19 @@ export class CockpitService {
     return result;
   }
 
+  // Vivier d'un formateur — mêmes règle et seuil que getVivierC1 (cohorte
+  // entière), restreint aux apprenants de ses propres groupes. Sert au
+  // Casier Formateur RH (voir RhService.getFormateurCasier).
+  async getVivierCountForFormateur(formateurId: string): Promise<number> {
+    const { apprenants, notations } = await this.loadRaw();
+    const scoresParApprenant = this.buildScoresParApprenant(notations);
+    return apprenants.filter((a) => {
+      if (a.groupe.formateurId !== formateurId) return false;
+      const moyenne = this.moyenneGlobale(scoresParApprenant.get(a.id));
+      return moyenne !== null && moyenne >= VIVIER_C1_THRESHOLD;
+    }).length;
+  }
+
   async getGroupeDetail(cle: string, formateurMatricule?: string) {
     const groupe = await this.prisma.groupe.findUnique({ where: { cle } });
     if (!groupe) throw new NotFoundException(`Groupe ${cle} introuvable.`);
@@ -407,5 +425,67 @@ export class CockpitService {
       groupeCle: updated.groupe.cle,
       abonnementExpireAt: updated.abonnementExpireAt,
     };
+  }
+
+  // Bilan hebdomadaire — jusqu'ici WeeklyReportPanel ne faisait qu'un
+  // setState local à la validation, rien n'était sauvegardé ni transmis à
+  // la RH/direction (voir BilanFormateur dans schema.prisma). Le snapshot
+  // des chiffres est figé au moment de la validation pour rester lisible
+  // même si les chiffres globaux bougent ensuite.
+  async submitBilanHebdo(matricule: string, dto: { constat: string; analyse: string; axes: string }) {
+    const formateur = await this.findFormateurOrThrow(matricule);
+    const statsSnapshot = await this.getRapportHebdo();
+    return this.prisma.bilanFormateur.create({
+      data: {
+        formateurId: formateur.id,
+        constat: dto.constat,
+        analyse: dto.analyse,
+        axes: dto.axes,
+        statsSnapshot,
+      },
+    });
+  }
+
+  async listBilansFormateur(formateurId: string) {
+    return this.prisma.bilanFormateur.findMany({
+      where: { formateurId },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  // Fiches de préparation — upload libre par le formateur lui-même (voir
+  // FormateurDocument dans schema.prisma), consultables ensuite depuis son
+  // Casier RH (RhService.getFormateurCasier).
+  async uploadDocument(matricule: string, file: Express.Multer.File) {
+    const formateur = await this.findFormateurOrThrow(matricule);
+    const extension = path.extname(file.originalname) || "";
+    const key = `formateurs/${formateur.id}/fiches/${Date.now()}${extension}`;
+    await this.storage.uploadBuffer(key, file.buffer, file.mimetype || "application/octet-stream");
+    return this.prisma.formateurDocument.create({
+      data: {
+        formateurId: formateur.id,
+        type: "fiche_preparation",
+        filename: file.originalname,
+        storageKey: key,
+        uploadedBy: "formateur",
+      },
+    });
+  }
+
+  async listDocuments(matricule: string) {
+    const formateur = await this.findFormateurOrThrow(matricule);
+    return this.prisma.formateurDocument.findMany({
+      where: { formateurId: formateur.id, type: "fiche_preparation" },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async getDocumentStream(matricule: string, documentId: string) {
+    const formateur = await this.findFormateurOrThrow(matricule);
+    const doc = await this.prisma.formateurDocument.findUnique({ where: { id: documentId } });
+    if (!doc || doc.formateurId !== formateur.id) {
+      throw new NotFoundException("Document introuvable.");
+    }
+    return this.storage.getObjectStream(doc.storageKey);
   }
 }
