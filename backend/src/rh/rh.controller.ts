@@ -35,6 +35,7 @@ import { EnvoyerResultatsDto } from './dto/envoyer-resultats.dto';
 import { CreateApprenantDto } from './dto/create-apprenant.dto';
 import { CreateAgentAcquisitionDto } from './dto/create-agent-acquisition.dto';
 import { RenouvelerAbonnementDto } from './dto/renouveler-abonnement.dto';
+import { isOfficeDocument } from '../common/file-signature';
 
 const MAX_CONTRAT_UPLOAD_BYTES = 20 * 1024 * 1024; // 20 Mo
 const ALLOWED_CONTRAT_MIMETYPES = [
@@ -259,6 +260,9 @@ export class RhController {
       throw new BadRequestException(
         'Fichier manquant, trop volumineux (20 Mo max) ou format non supporté (PDF, Word).',
       );
+    }
+    if (!isOfficeDocument(file.buffer)) {
+      throw new BadRequestException('Le fichier ne semble pas être un PDF ou Word valide.');
     }
     return this.service.uploadFormateurContrat(id, file);
   }

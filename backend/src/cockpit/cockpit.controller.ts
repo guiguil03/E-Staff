@@ -20,6 +20,7 @@ import { CockpitService } from "./cockpit.service";
 import { SetAbonnementDto } from "./dto/set-abonnement.dto";
 import { SubmitBilanDto } from "./dto/submit-bilan.dto";
 import { CreateDiffusionDto } from "./dto/create-diffusion.dto";
+import { isOfficeDocument } from "../common/file-signature";
 
 // Fiche de préparation = document pédagogique (support de cours), pas une
 // vidéo/audio d'évaluation — mêmes types que le CV candidat plutôt que ceux
@@ -96,6 +97,9 @@ export class CockpitController {
       throw new BadRequestException(
         "Fichier manquant, trop volumineux (20 Mo max) ou format non supporté (PDF, Word, PowerPoint)."
       );
+    }
+    if (!isOfficeDocument(file.buffer)) {
+      throw new BadRequestException("Le fichier ne semble pas être un PDF, Word ou PowerPoint valide.");
     }
     return this.service.uploadDocument(formateurMatricule, file);
   }

@@ -84,15 +84,31 @@ export class ClasseVirtuelleReminderService {
       // redémarrage backend qui aurait fait manquer la fenêtre).
       if (!seance.startAt || seance.startAt.getTime() <= now) continue;
 
+      // Ne marque le rappel "envoyé" que si aucun envoi n'a réellement
+      // échoué (2026-09-21, audit — avant ça, un échec réseau/fournisseur
+      // marquait quand même le flag : l'apprenant n'était alors JAMAIS
+      // relancé, sans qu'aucune alerte ne le signale). "no-provider-
+      // configured" (mode dev sans clé API) ne compte pas comme un échec —
+      // voir EmailService, c'est un comportement dégradé assumé, pas une
+      // panne à réessayer.
       const link = `${APP_URL}/compte/apprenant/classe-virtuelle`;
+      let toutEnvoye = true;
       for (const apprenant of seance.groupe.apprenants) {
-        await this.email.send({
+        const result = await this.email.send({
           to: apprenant.email,
           subject: params.subject(seance.groupe.label),
           text: params.buildText(apprenant.prenom, seance.groupe.label, seance.startAt, link),
           html: params.buildHtml(apprenant.prenom, seance.groupe.label, seance.startAt, link),
         });
+        if (!result.delivered && result.reason !== "no-provider-configured") {
+          toutEnvoye = false;
+          this.logger.error(
+            `Échec d'envoi du rappel (${params.flagField}) à ${apprenant.email} pour la séance ${seance.groupe.label} n°${seance.numero} (${result.reason}) — nouvel essai au prochain cron.`
+          );
+        }
       }
+
+      if (!toutEnvoye) continue;
 
       await this.prisma.seance.update({
         where: { id: seance.id },

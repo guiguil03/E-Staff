@@ -62,6 +62,29 @@ describe("ClasseVirtuelleReminderService", () => {
     expect(call15min[0].where.rappel15minEnvoyeAt).toBeNull();
   });
 
+  it("ne marque pas le flag si un envoi a réellement échoué — retenté au prochain cron", async () => {
+    prisma.seance.findMany.mockResolvedValueOnce([seance()]).mockResolvedValueOnce([]);
+    email.send
+      .mockResolvedValueOnce({ delivered: true })
+      .mockResolvedValueOnce({ delivered: false, reason: "network-error" });
+
+    await service.handleReminders();
+
+    expect(prisma.seance.update).not.toHaveBeenCalled();
+  });
+
+  it("marque quand même le flag si le seul échec est le mode stub (pas de clé API configurée)", async () => {
+    prisma.seance.findMany.mockResolvedValueOnce([seance()]).mockResolvedValueOnce([]);
+    email.send.mockResolvedValue({ delivered: false, reason: "no-provider-configured" });
+
+    await service.handleReminders();
+
+    expect(prisma.seance.update).toHaveBeenCalledWith({
+      where: { id: "seance-1" },
+      data: { rappelJ1EnvoyeAt: expect.any(Date) },
+    });
+  });
+
   it("ne rappelle pas une séance déjà commencée (rattrapage après redémarrage)", async () => {
     prisma.seance.findMany
       .mockResolvedValueOnce([seance({ startAt: new Date(now - 60 * 1000) })])

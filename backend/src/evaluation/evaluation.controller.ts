@@ -33,12 +33,16 @@ import { StaffGuard } from "../common/staff.guard";
 import { FormateurGuard } from "../common/formateur.guard";
 import { FormateurOuRhGuard } from "../common/formateur-ou-rh.guard";
 import { RateLimitGuard } from "../common/rate-limit.guard";
+import { isAudio, isPdf, isVideo } from "../common/file-signature";
 
 // Les vidéos sont bien plus volumineuses que l'audio — Multer bufférise en
 // mémoire (pas de config disque ici, cohérent avec l'upload audio existant),
 // donc une limite explicite est nécessaire pour éviter un upload sans borne.
 const MAX_VIDEO_UPLOAD_BYTES = 300 * 1024 * 1024; // 300 Mo
 const MAX_CV_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
+// Aucune limite n'existait avant (audit du 2026-09-21) — un enregistrement
+// audio de mise en situation dure quelques minutes, 50 Mo est très large.
+const MAX_AUDIO_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 @ApiTags("Évaluation")
 @Controller("evaluation")
@@ -116,6 +120,11 @@ export class EvaluationController {
         "Fichier CV manquant, trop volumineux (10 Mo max) ou pas au format PDF."
       );
     }
+    // Vérifie le contenu réel du fichier (signature binaire), pas juste le
+    // Content-Type déclaré par le client — voir common/file-signature.ts.
+    if (!isPdf(file.buffer)) {
+      throw new BadRequestException("Le fichier ne semble pas être un PDF valide.");
+    }
     return this.service.uploadCv(id, file);
   }
 
@@ -146,14 +155,23 @@ export class EvaluationController {
     return this.service.submitPartieOuverte(id, dto);
   }
 
+  // Aucune limite de taille ni de type n'existait avant (audit du
+  // 2026-09-21) — n'importe quel fichier, de n'importe quelle taille,
+  // pouvait être déposé ici sous couvert d'être un "audio".
   @UseGuards(RateLimitGuard("evaluation-upload-audio", 20))
   @Post("attempts/:id/situations")
-  @UseInterceptors(FileInterceptor("audio"))
+  @UseInterceptors(FileInterceptor("audio", { limits: { fileSize: MAX_AUDIO_UPLOAD_BYTES } }))
   uploadSituationAudio(
     @Param("id") id: string,
     @Body() dto: UploadSituationDto,
     @UploadedFile() file: Express.Multer.File
   ) {
+    if (!file) {
+      throw new BadRequestException("Fichier audio manquant ou trop volumineux (50 Mo max).");
+    }
+    if (!isAudio(file.buffer)) {
+      throw new BadRequestException("Le fichier ne semble pas être un enregistrement audio valide.");
+    }
     return this.service.saveSituationAudio(id, dto.situationIndex, file);
   }
 
@@ -176,6 +194,9 @@ export class EvaluationController {
       throw new BadRequestException(
         "Fichier vidéo manquant, trop volumineux (300 Mo max) ou format non supporté."
       );
+    }
+    if (!isVideo(file.buffer)) {
+      throw new BadRequestException("Le fichier ne semble pas être une vidéo valide.");
     }
     return this.service.saveVideoResponse(id, dto.taskIndex, file, dto.subjectKey, dto.optionKey);
   }
