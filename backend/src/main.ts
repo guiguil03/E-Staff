@@ -3,10 +3,21 @@ import { ValidationPipe } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import basicAuth = require("express-basic-auth");
 import * as cookieParser from "cookie-parser";
+import * as Sentry from "@sentry/node";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/all-exceptions.filter";
 
 async function bootstrap() {
+  // Suivi d'erreurs (2026-09-21, audit) — inactif tant que SENTRY_DSN n'est
+  // pas renseigné (aucun compte créé à ce jour) : Sentry.init sans DSN est
+  // un no-op documenté par le SDK, donc ce bloc ne change rien tant que la
+  // variable d'env est vide. Voir all-exceptions.filter.ts pour l'endroit
+  // où les erreurs 5xx sont effectivement remontées.
+  if (process.env.SENTRY_DSN) {
+    Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0.1 });
+  }
+
+
   // Erreur explicite au démarrage plutôt qu'un JWT_SECRET manquant
   // découvert au premier login en prod — voir common/session.ts.
   if (!process.env.JWT_SECRET) {

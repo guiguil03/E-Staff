@@ -1502,30 +1502,56 @@ export class RhService {
   // une ligne PaiementFormateur par formateur et par période au premier
   // accès, base initiale = Formateur.tarifFixe.
 
-  private async getOrCreatePaiementFormateur(formateurId: string, periode: string) {
-    const existing = await this.prisma.paiementFormateur.findUnique({
-      where: { formateurId_periode: { formateurId, periode } },
+  // Get-or-create GROUPÉ (2026-09-21, corrige un N+1 repéré à l'audit perf —
+  // même famille que ProductionService.getDetailPaieAgents) : un
+  // createMany({skipDuplicates: true}) avec le montantBase par défaut de
+  // TOUS les formateurs concernés, suivi d'un seul findMany, remplace ce qui
+  // était un aller-retour DB (findUnique, puis formateur.findUnique +
+  // create éventuels) par formateur. Une ligne déjà corrigée par la RH
+  // n'est jamais écrasée (contrainte @@unique([formateurId, periode])).
+  private async getOrCreatePaiementFormateurRows(
+    formateurs: { id: string; tarifFixe: number | null }[],
+    periode: string,
+  ) {
+    // Pas de garde sur formateurs.length === 0 : createMany({data: []}) et
+    // findMany({where: {formateurId: {in: []}}}) sont des no-op valides côté
+    // Prisma, inutile de complexifier le typage pour ce cas.
+    await this.prisma.paiementFormateur.createMany({
+      data: formateurs.map((f) => ({
+        formateurId: f.id,
+        periode,
+        montantBase: f.tarifFixe ?? 0,
+      })),
+      skipDuplicates: true,
     });
-    if (existing) return existing;
-    const formateur = await this.prisma.formateur.findUnique({ where: { id: formateurId } });
-    return this.prisma.paiementFormateur.create({
-      data: { formateurId, periode, montantBase: formateur?.tarifFixe ?? 0 },
+
+    const rows = await this.prisma.paiementFormateur.findMany({
+      where: { formateurId: { in: formateurs.map((f) => f.id) }, periode },
     });
+    return new Map(rows.map((r) => [r.formateurId, r]));
   }
 
   // Heures réellement programmées (Seance.dureeMinutes, startAt renseigné)
-  // sur un groupe pendant le mois de paie — seule donnée fiable pour "heures
-  // effectuées" (la Presence issue des webhooks Daily n'est pas rattachée à
-  // un Formateur par id, seulement à un rôle/displayName, trop fragile pour
-  // servir de base de paie).
-  private async heuresGroupeSurPeriode(groupeId: string, periode: string): Promise<number> {
+  // pour plusieurs groupes pendant le mois de paie, en un seul aller-retour
+  // DB (2026-09-21 — un appel par groupe auparavant) — seule donnée fiable
+  // pour "heures effectuées" (la Presence issue des webhooks Daily n'est pas
+  // rattachée à un Formateur par id, seulement à un rôle/displayName, trop
+  // fragile pour servir de base de paie).
+  private async heuresParGroupeSurPeriode(groupeIds: string[], periode: string) {
+    const heures = new Map<string, number>();
+    if (groupeIds.length === 0) return heures;
+
     const [year, month] = periode.split('-').map(Number);
     const debut = new Date(Date.UTC(year, month - 1, 1));
     const fin = new Date(Date.UTC(year, month, 1));
     const seances = await this.prisma.seance.findMany({
-      where: { groupeId, startAt: { gte: debut, lt: fin } },
+      where: { groupeId: { in: groupeIds }, startAt: { gte: debut, lt: fin } },
     });
-    return round2(seances.reduce((sum, s) => sum + s.dureeMinutes, 0) / 60);
+    for (const s of seances) {
+      heures.set(s.groupeId, (heures.get(s.groupeId) ?? 0) + s.dureeMinutes / 60);
+    }
+    for (const [id, total] of heures) heures.set(id, round2(total));
+    return heures;
   }
 
   async getTableauPaieFormateurs(periode?: string) {
@@ -1535,6 +1561,8 @@ export class RhService {
       orderBy: { nom: 'asc' },
     });
 
+    const rowByFormateurId = await this.getOrCreatePaiementFormateurRows(formateurs, p);
+
     const parBucket = new Map<string, typeof formateurs>();
     for (const f of formateurs) {
       const bucket = bucketFormateur(f.groupes);
@@ -1543,25 +1571,23 @@ export class RhService {
       parBucket.set(bucket, list);
     }
 
-    return Promise.all(
-      BUCKETS_PAIE_FORMATEURS.map(async (bucket) => {
-        const list = parBucket.get(bucket) ?? [];
-        let netAPayerTotal = 0;
-        let payes = 0;
-        for (const f of list) {
-          const row = await this.getOrCreatePaiementFormateur(f.id, p);
-          netAPayerTotal += row.montantBase + row.montantPrime - row.retenue;
-          if (row.statut === 'paye') payes += 1;
-        }
-        return {
-          bucket,
-          nbFormateurs: list.length,
-          netAPayerTotal: round2(netAPayerTotal),
-          payes,
-          enAttente: list.length - payes,
-        };
-      }),
-    );
+    return BUCKETS_PAIE_FORMATEURS.map((bucket) => {
+      const list = parBucket.get(bucket) ?? [];
+      let netAPayerTotal = 0;
+      let payes = 0;
+      for (const f of list) {
+        const row = rowByFormateurId.get(f.id)!;
+        netAPayerTotal += row.montantBase + row.montantPrime - row.retenue;
+        if (row.statut === 'paye') payes += 1;
+      }
+      return {
+        bucket,
+        nbFormateurs: list.length,
+        netAPayerTotal: round2(netAPayerTotal),
+        payes,
+        enAttente: list.length - payes,
+      };
+    });
   }
 
   async getDetailPaieFormateurs(bucket: string, periode?: string) {
@@ -1572,36 +1598,37 @@ export class RhService {
     });
     const filtres = formateurs.filter((f) => bucketFormateur(f.groupes) === bucket);
 
-    const lignes = await Promise.all(
-      filtres.map(async (f) => {
-        const groupesDetail = await Promise.all(
-          f.groupes.map(async (g) => ({
-            groupeLabel: g.label,
-            typeCours: g.typeCours,
-            heuresEffectuees: await this.heuresGroupeSurPeriode(g.id, p),
-          })),
-        );
-        const heuresTotal = round2(groupesDetail.reduce((sum, g) => sum + g.heuresEffectuees, 0));
+    const [rowByFormateurId, heuresByGroupeId] = await Promise.all([
+      this.getOrCreatePaiementFormateurRows(filtres, p),
+      this.heuresParGroupeSurPeriode(filtres.flatMap((f) => f.groupes.map((g) => g.id)), p),
+    ]);
 
-        const row = await this.getOrCreatePaiementFormateur(f.id, p);
-        const netAPayer = round2(row.montantBase + row.montantPrime - row.retenue);
+    const lignes = filtres.map((f) => {
+      const groupesDetail = f.groupes.map((g) => ({
+        groupeLabel: g.label,
+        typeCours: g.typeCours,
+        heuresEffectuees: heuresByGroupeId.get(g.id) ?? 0,
+      }));
+      const heuresTotal = round2(groupesDetail.reduce((sum, g) => sum + g.heuresEffectuees, 0));
 
-        return {
-          formateurId: f.id,
-          matricule: f.matricule,
-          formateurNom: `${f.prenom} ${f.nom}`,
-          groupes: groupesDetail,
-          heuresTotal,
-          montantBase: row.montantBase,
-          montantPrime: row.montantPrime,
-          retenue: row.retenue,
-          moyenPaiement: row.moyenPaiement,
-          netAPayer,
-          statut: row.statut,
-          datePaiement: row.datePaiement,
-        };
-      }),
-    );
+      const row = rowByFormateurId.get(f.id)!;
+      const netAPayer = round2(row.montantBase + row.montantPrime - row.retenue);
+
+      return {
+        formateurId: f.id,
+        matricule: f.matricule,
+        formateurNom: `${f.prenom} ${f.nom}`,
+        groupes: groupesDetail,
+        heuresTotal,
+        montantBase: row.montantBase,
+        montantPrime: row.montantPrime,
+        retenue: row.retenue,
+        moyenPaiement: row.moyenPaiement,
+        netAPayer,
+        statut: row.statut,
+        datePaiement: row.datePaiement,
+      };
+    });
 
     return { periode: p, bucket, lignes };
   }

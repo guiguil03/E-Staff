@@ -179,6 +179,7 @@ export default function ContratInscrit({ registrationId }: { registrationId: str
                 value={reference}
                 onChange={(e) => setReference(e.target.value)}
                 placeholder="Référence de la transaction"
+                aria-label="Référence de la transaction"
                 required
                 className="flex-1 rounded border border-white/20 bg-obsidian px-4 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
               />
@@ -186,6 +187,7 @@ export default function ContratInscrit({ registrationId }: { registrationId: str
                 type="file"
                 accept="application/pdf,image/jpeg,image/png,image/webp"
                 onChange={(e) => setRecu(e.target.files?.[0] ?? null)}
+                aria-label="Reçu de paiement (PDF, JPEG, PNG ou WebP)"
                 className="flex-1 rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-xs text-white/70 file:mr-3 file:rounded file:border-0 file:bg-accent file:px-3 file:py-1 file:font-sans file:text-xs file:text-obsidian"
               />
             </div>

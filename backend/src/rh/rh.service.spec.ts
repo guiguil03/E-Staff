@@ -27,7 +27,9 @@ function makePrismaMock() {
     formateur: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
     paiementFormateur: {
       findUnique: jest.fn(),
+      findMany: jest.fn(),
       create: jest.fn(),
+      createMany: jest.fn().mockResolvedValue({ count: 0 }),
       update: jest.fn(),
       updateMany: jest.fn(),
     },
@@ -303,14 +305,11 @@ describe("RhService", () => {
           ],
         },
       ]);
-      prisma.paiementFormateur.findUnique.mockResolvedValue(null);
-      prisma.formateur.findUnique.mockResolvedValue({ id: "f-1", tarifFixe: 500000 });
-      prisma.paiementFormateur.create.mockResolvedValue({
-        montantBase: 500000,
-        montantPrime: 0,
-        retenue: 0,
-        statut: "attente",
-      });
+      // Regroupé (2026-09-21) : plus de findUnique/create par formateur —
+      // createMany({skipDuplicates}) puis un seul findMany derrière.
+      prisma.paiementFormateur.findMany.mockResolvedValue([
+        { formateurId: "f-1", montantBase: 500000, montantPrime: 0, retenue: 0, statut: "attente" },
+      ]);
 
       const result = await service.getTableauPaieFormateurs("2026-03");
 
@@ -328,12 +327,9 @@ describe("RhService", () => {
 
     it("un formateur sans groupe tombe dans 'Formation externe'", async () => {
       prisma.formateur.findMany.mockResolvedValue([{ id: "f-1", groupes: [] }]);
-      prisma.paiementFormateur.findUnique.mockResolvedValue({
-        montantBase: 100000,
-        montantPrime: 20000,
-        retenue: 5000,
-        statut: "paye",
-      });
+      prisma.paiementFormateur.findMany.mockResolvedValue([
+        { formateurId: "f-1", montantBase: 100000, montantPrime: 20000, retenue: 5000, statut: "paye" },
+      ]);
 
       const result = await service.getTableauPaieFormateurs("2026-03");
 
@@ -354,24 +350,30 @@ describe("RhService", () => {
         { id: "f-1", prenom: "Awa", nom: "Rakoto", matricule: "F-01", groupes: [{ id: "g-1", label: "Groupe A", cle: "A", typeCours: "FOL" }] },
       ]);
       // Seule la 2e séance (mars) doit compter — la 1re (février) et la 3e (avril) sont hors période.
+      // Regroupé (2026-09-21) : un seul seance.findMany pour tous les groupes
+      // filtrés (groupeId: {in: [...]})  au lieu d'un appel par groupe.
       prisma.seance.findMany.mockImplementation(({ where }: any) => {
         const debut: Date = where.startAt.gte;
         const fin: Date = where.startAt.lt;
         const toutes = [
-          { dureeMinutes: 120, startAt: new Date(Date.UTC(2026, 1, 15)) },
-          { dureeMinutes: 90, startAt: new Date(Date.UTC(2026, 2, 10)) },
-          { dureeMinutes: 60, startAt: new Date(Date.UTC(2026, 3, 1)) },
+          { groupeId: "g-1", dureeMinutes: 120, startAt: new Date(Date.UTC(2026, 1, 15)) },
+          { groupeId: "g-1", dureeMinutes: 90, startAt: new Date(Date.UTC(2026, 2, 10)) },
+          { groupeId: "g-1", dureeMinutes: 60, startAt: new Date(Date.UTC(2026, 3, 1)) },
         ];
+        expect(where.groupeId.in).toContain("g-1");
         return Promise.resolve(toutes.filter((s) => s.startAt >= debut && s.startAt < fin));
       });
-      prisma.paiementFormateur.findUnique.mockResolvedValue({
-        montantBase: 100000,
-        montantPrime: 0,
-        retenue: 0,
-        statut: "attente",
-        moyenPaiement: null,
-        datePaiement: null,
-      });
+      prisma.paiementFormateur.findMany.mockResolvedValue([
+        {
+          formateurId: "f-1",
+          montantBase: 100000,
+          montantPrime: 0,
+          retenue: 0,
+          statut: "attente",
+          moyenPaiement: null,
+          datePaiement: null,
+        },
+      ]);
 
       const result = await service.getDetailPaieFormateurs("FOL", "2026-03");
 
@@ -411,15 +413,15 @@ describe("RhService", () => {
         { id: "f-2", prenom: "B", nom: "B", matricule: "F-02", groupes: [] },
       ]);
       const statutParFormateur: Record<string, string> = { "f-1": "paye", "f-2": "attente" };
-      prisma.paiementFormateur.findUnique.mockImplementation(({ where }: any) => {
-        const formateurId = where.formateurId_periode.formateurId as string;
-        return Promise.resolve({
+      prisma.paiementFormateur.findMany.mockResolvedValue(
+        Object.entries(statutParFormateur).map(([formateurId, statut]) => ({
+          formateurId,
           montantBase: 1,
           montantPrime: 0,
           retenue: 0,
-          statut: statutParFormateur[formateurId],
-        });
-      });
+          statut,
+        }))
+      );
       prisma.paiementFormateur.updateMany.mockResolvedValue({ count: 1 });
 
       await service.payerTousFormateurs("Formation externe", "2026-03");
