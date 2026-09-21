@@ -5,15 +5,16 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import type { Request } from "express";
+import { readSession } from "./session";
 import { recordFailure, recordSuccess, remainingLockoutSeconds } from "./login-rate-limit";
 
 // Gate des quelques routes genuinement partagées entre les comptes Admin et
 // RH (ex. la liste des groupes avec places, utilisée à la fois par
 // Académie/Formateurs — Admin — et par le pipeline de recrutement — RH) :
-// accepte l'un OU l'autre des deux matricules de test. À ne pas utiliser
-// par défaut — la plupart des routes doivent rester tranchées AdminGuard
-// XOR RhGuard (voir rh.controller.ts) pour que la ventilation des accès
-// reste lisible.
+// accepte une session signée avec le rôle "admin" OU "rh". À ne pas
+// utiliser par défaut — la plupart des routes doivent rester tranchées
+// AdminGuard XOR RhGuard (voir rh.controller.ts) pour que la ventilation
+// des accès reste lisible.
 @Injectable()
 export class StaffGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
@@ -25,15 +26,12 @@ export class StaffGuard implements CanActivate {
       throw new UnauthorizedException(`Trop de tentatives. Réessayez dans ${lockedFor}s.`);
     }
 
-    const adminMatricule = request.headers["x-admin-matricule"];
-    const rhMatricule = request.headers["x-rh-matricule"];
-    const isAdmin = !!process.env.ADMIN_TEST_MATRICULE && adminMatricule === process.env.ADMIN_TEST_MATRICULE;
-    const isRh = !!process.env.RH_TEST_MATRICULE && rhMatricule === process.env.RH_TEST_MATRICULE;
-
-    if (!isAdmin && !isRh) {
+    const session = readSession(request);
+    if (!session || (session.role !== "admin" && session.role !== "rh")) {
       recordFailure(key);
       throw new UnauthorizedException("Accès refusé.");
     }
+
     recordSuccess(key);
     return true;
   }

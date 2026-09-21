@@ -16,6 +16,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { FormateurGuard } from "../common/formateur.guard";
+import { ApprenantGuard } from "../common/apprenant.guard";
 import { NotationService } from "./notation.service";
 import { GradeNotationDto } from "./dto/grade-notation.dto";
 
@@ -80,23 +81,29 @@ export class NotationController {
   }
 
   // ---- Apprenant (pas de guard — même niveau de protection stopgap que le
-  // reste du Compte Apprenant, matricule comme identifiant) ------------------
+  // reste du Compte Apprenant — désormais gardé par ApprenantGuard : la
+  // session doit correspondre exactement au matricule de l'URL (voir
+  // apprenant.guard.ts), ce qui ferme l'IDOR par itération de matricule.
 
+  @UseGuards(ApprenantGuard)
   @Get("apprenants/:matricule/dashboard")
   getApprenantDashboard(@Param("matricule") matricule: string) {
     return this.service.getApprenantDashboard(matricule);
   }
 
+  @UseGuards(ApprenantGuard)
   @Get("apprenants/:matricule/annonces")
   listAnnoncesForApprenant(@Param("matricule") matricule: string) {
     return this.service.listAnnoncesForApprenant(matricule);
   }
 
+  @UseGuards(ApprenantGuard)
   @Get("apprenants/:matricule/notations")
   listApprenantNotations(@Param("matricule") matricule: string) {
     return this.service.listApprenantNotations(matricule);
   }
 
+  @UseGuards(ApprenantGuard)
   @Get("apprenants/:matricule/notations/:numero/:competence")
   getApprenantNotationDetail(
     @Param("matricule") matricule: string,
@@ -106,6 +113,7 @@ export class NotationController {
     return this.service.getApprenantNotationDetail(matricule, numero, competence);
   }
 
+  @UseGuards(ApprenantGuard)
   @Post("apprenants/:matricule/notations/:numero/:competence/devoir")
   @UseInterceptors(FileInterceptor("fichier"))
   uploadDevoir(

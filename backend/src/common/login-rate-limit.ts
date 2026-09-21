@@ -1,7 +1,7 @@
-// Anti-brute-force minimal pour les gates par code/matricule partagé
-// (TrainerGuard, FormateurGuard, AdminGuard, /auth/login) — ces codes sont
-// des secrets partagés mémorisables (pas de mot de passe fort), donc sans
-// limite de tentatives ils sont devinables par force brute. Store en mémoire
+// Anti-brute-force minimal pour les gates par session (FormateurGuard,
+// AdminGuard, RhGuard, ApprenantGuard, StaffGuard, /auth/login) — protège
+// à la fois les tentatives de connexion et les sessions invalides/expirées
+// présentées en boucle. Store en mémoire
 // (process unique, comme le reste des stopgaps de ce projet) : suffisant vu
 // le volume et repart à zéro à chaque redéploiement, ce qui est acceptable
 // pour ce niveau de risque.

@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Headers, Param, Post, Put, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Put, Req, UseGuards } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
+import type { Request } from "express";
 import { AdminGuard } from "../common/admin.guard";
+import { readSession } from "../common/session";
 import { ForumService } from "./forum.service";
 import { UpsertForumLiveDto } from "./dto/upsert-forum-live.dto";
 
@@ -33,9 +35,14 @@ export class ForumController {
     return this.service.getProchainLive();
   }
 
-  // Public pour les spectateurs (matricule admin optionnel → jeton hôte).
+  // Public pour les spectateurs — jeton hôte seulement si l'appelant a une
+  // vraie session admin signée (voir common/session.ts). Avant, un simple
+  // header `x-admin-matricule` auto-déclaré suffisait à obtenir le jeton
+  // hôte : n'importe qui connaissant (ou devinant) ce matricule pouvait se
+  // faire passer pour l'hôte du Live.
   @Get("live/room")
-  getLiveRoom(@Headers("x-admin-matricule") adminMatricule?: string) {
-    return this.service.getLiveRoom(adminMatricule);
+  getLiveRoom(@Req() request: Request) {
+    const isAdmin = readSession(request)?.role === "admin";
+    return this.service.getLiveRoom(isAdmin);
   }
 }

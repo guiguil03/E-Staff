@@ -31,6 +31,7 @@ import { CreateGroupeDto } from "./dto/create-groupe.dto";
 import { RhGuard } from "../common/rh.guard";
 import { StaffGuard } from "../common/staff.guard";
 import { FormateurGuard } from "../common/formateur.guard";
+import { RateLimitGuard } from "../common/rate-limit.guard";
 
 // Les vidéos sont bien plus volumineuses que l'audio — Multer bufférise en
 // mémoire (pas de config disque ici, cohérent avec l'upload audio existant),
@@ -92,11 +93,13 @@ export class EvaluationController {
     return this.service.listAgentsAcquisition();
   }
 
+  @UseGuards(RateLimitGuard("evaluation-create-candidat", 5))
   @Post("candidats")
   createCandidat(@Body() dto: CreateCandidatDto) {
     return this.service.createCandidat(dto);
   }
 
+  @UseGuards(RateLimitGuard("evaluation-upload-cv", 10))
   @Post("candidats/:id/cv")
   @UseInterceptors(
     FileInterceptor("cv", {
@@ -116,8 +119,8 @@ export class EvaluationController {
   }
 
   // Consultation du CV depuis la fiche RH (Cycle complet) — même principe
-  // que le streaming audio/vidéo existant, pas de garde (voir commentaire
-  // TrainerGuard plus bas).
+  // que le streaming audio/vidéo existant, pas de garde (id cuid non
+  // énumérable — voir audit sécurité 2026-09-21 pour le suivi de ce point).
   @Get("candidats/:id/cv")
   async streamCv(@Param("id") id: string, @Res() res: Response) {
     const { stream, contentType } = await this.service.getCvStream(id);
@@ -140,6 +143,7 @@ export class EvaluationController {
     return this.service.submitPartieOuverte(id, dto);
   }
 
+  @UseGuards(RateLimitGuard("evaluation-upload-audio", 20))
   @Post("attempts/:id/situations")
   @UseInterceptors(FileInterceptor("audio"))
   uploadSituationAudio(
@@ -150,6 +154,7 @@ export class EvaluationController {
     return this.service.saveSituationAudio(id, dto.situationIndex, file);
   }
 
+  @UseGuards(RateLimitGuard("evaluation-upload-video", 10))
   @Post("attempts/:id/videos")
   @UseInterceptors(
     FileInterceptor("video", {
@@ -173,12 +178,13 @@ export class EvaluationController {
   }
 
   // ---- Interface formateur ------------------------------------------------
-  // Code formateur (TrainerGuard) retiré temporairement le 2026-08-25 à la
-  // demande du client — trop de friction pour l'usage actuel (une poignée
-  // de personnes connues). La page reste hors nav, accessible par URL
-  // directe uniquement. À réintroduire une vraie auth avant d'ouvrir l'accès
-  // plus largement (voir TrainerGuard, toujours défini dans common/, pas
-  // supprimé).
+  // Code formateur partagé (ex-TrainerGuard) retiré temporairement le
+  // 2026-08-25 à la demande du client — trop de friction pour l'usage
+  // actuel (une poignée de personnes connues). La page reste hors nav,
+  // accessible par URL directe uniquement. TrainerGuard a depuis été
+  // supprimé (2026-09-21, code mort, plus jamais monté sur aucune route) —
+  // réintroduire une vraie auth (session signée, voir FormateurGuard) avant
+  // d'ouvrir l'accès plus largement.
 
   @Get("attempts")
   listAttemptsForGrading() {

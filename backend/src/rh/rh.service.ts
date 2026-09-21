@@ -740,6 +740,7 @@ export class RhService {
         email: attempt.candidat.email,
         phone: attempt.candidat.phone,
         coordonneesRecuesLe: attempt.candidat.createdAt,
+        dataPurgedAt: attempt.candidat.dataPurgedAt,
       },
       test: {
         statut: attempt.status,
@@ -771,6 +772,65 @@ export class RhService {
       formation,
       production,
     };
+  }
+
+  // Purge RGPD manuelle (Cycle complet — bouton "Supprimer les données
+  // personnelles") : supprime du stockage S3 le CV, les enregistrements
+  // audio/vidéo des mises en situation et le PDF de contrat, puis anonymise
+  // les coordonnées du candidat en base. Volontairement limité aux données
+  // directement identifiantes et aux fichiers ; les réponses texte (essai,
+  // partie ouverte) portent sur des sujets imposés et gardent leur valeur
+  // d'audit de notation, elles ne sont pas touchées. Irréversible — pas de
+  // "undo" possible une fois les fichiers supprimés du bucket.
+  async purgeCandidatData(attemptId: string) {
+    const attempt = await this.prisma.evaluationAttempt.findUnique({
+      where: { id: attemptId },
+      include: { candidat: true, situationResponses: true, videoResponses: true },
+    });
+    if (!attempt) throw new NotFoundException('Tentative introuvable.');
+    if (attempt.candidat.dataPurgedAt) {
+      throw new BadRequestException('Les données de ce candidat ont déjà été supprimées.');
+    }
+
+    const keysToDelete = [
+      attempt.candidat.cvKey,
+      attempt.contractPdfKey,
+      ...attempt.situationResponses.map((s) => s.audioUrl),
+      ...attempt.videoResponses.map((v) => v.videoUrl),
+    ].filter((key): key is string => Boolean(key));
+
+    // Pas de rattrapage silencieux : si un fichier ne peut pas être
+    // supprimé (droit d'accès, clé déjà absente...), la purge s'arrête et
+    // remonte l'erreur plutôt que de marquer le candidat "purgé" alors que
+    // des données personnelles subsistent réellement dans le bucket.
+    await Promise.all(keysToDelete.map((key) => this.storage.deleteObject(key)));
+
+    const dataPurgedAt = new Date();
+    await this.prisma.$transaction([
+      this.prisma.candidat.update({
+        where: { id: attempt.candidat.id },
+        data: {
+          firstName: 'Anonymisé',
+          lastName: '',
+          email: `anonymise-${attempt.candidat.id}@e-staf.local`,
+          phone: '',
+          cvKey: null,
+          dataPurgedAt,
+        },
+      }),
+      this.prisma.evaluationAttempt.update({
+        where: { id: attempt.id },
+        data: { contractPdfKey: attempt.contractPdfKey ? null : undefined },
+      }),
+      ...attempt.situationResponses.map((s) =>
+        this.prisma.situationResponse.update({ where: { id: s.id }, data: { audioUrl: 'SUPPRIME_RGPD' } })
+      ),
+      ...attempt.videoResponses.map((v) =>
+        this.prisma.videoResponse.update({ where: { id: v.id }, data: { videoUrl: 'SUPPRIME_RGPD' } })
+      ),
+    ]);
+
+    return { ok: true, dataPurgedAt };
   }
 
   // ---- Envoi des résultats au candidat (Cycle complet) ---------------------

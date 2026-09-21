@@ -162,6 +162,14 @@ export class RhController {
     return this.service.getPersonneCasier(attemptId);
   }
 
+  // Purge RGPD manuelle — voir RhService.purgeCandidatData. Irréversible,
+  // déclenchée au cas par cas par la RH depuis la fiche candidat.
+  @UseGuards(RhGuard)
+  @Post('cycle/:attemptId/purge')
+  purgeCandidatData(@Param('attemptId') attemptId: string) {
+    return this.service.purgeCandidatData(attemptId);
+  }
+
   // ---- Rentrées (Vagues) — Admin -------------------------------------------
 
   @UseGuards(AdminGuard)
