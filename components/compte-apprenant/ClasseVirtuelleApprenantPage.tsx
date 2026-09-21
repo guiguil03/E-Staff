@@ -22,7 +22,12 @@ interface RoomStatus {
 export default function ClasseVirtuelleApprenantPage() {
   const checked = useRequireRole("apprenant");
   const [status, setStatus] = useState<RoomStatus | null | "loading" | "erreur">("loading");
+  const [erreurDetail, setErreurDetail] = useState<string | null>(null);
 
+  // Une 401/403 (session expirée, matricule qui ne correspond plus à la
+  // session signée) ne doit jamais s'afficher comme "rien de prévu" — ça
+  // masquait une vraie panne d'authentification derrière un état qui a
+  // l'air normal (voir signalement du 2026-09-22).
   useEffect(() => {
     if (!checked) return;
     const matricule = sessionStorage.getItem(ACCOUNT_MATRICULE_KEY);
@@ -32,7 +37,14 @@ export default function ClasseVirtuelleApprenantPage() {
     }
     apiGet<RoomStatus | null>(`/apprenants/${matricule}/prochaine-seance-room`)
       .then(setStatus)
-      .catch((err) => setStatus(err instanceof ApiError ? null : "erreur"));
+      .catch((err) => {
+        setStatus("erreur");
+        setErreurDetail(
+          err instanceof ApiError && (err.status === 401 || err.status === 403)
+            ? "Votre session a expiré — reconnectez-vous."
+            : null
+        );
+      });
   }, [checked]);
 
   if (!checked || status === "loading") {
@@ -67,9 +79,11 @@ export default function ClasseVirtuelleApprenantPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-obsidian px-4 text-center">
       <p className="font-sans text-sm text-white/60">
-        {status && typeof status === "object" && !status.configured
-          ? "La visio n'est pas encore configurée pour cette séance."
-          : "Aucune classe virtuelle n'est disponible pour le moment."}
+        {status === "erreur"
+          ? erreurDetail ?? "Impossible de charger la classe virtuelle — réessayez."
+          : status && typeof status === "object" && !status.configured
+            ? "La visio n'est pas encore configurée pour cette séance."
+            : "Aucune classe virtuelle n'est disponible pour le moment."}
       </p>
       <Link
         href="/compte/apprenant"

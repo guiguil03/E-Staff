@@ -44,6 +44,16 @@ const ALLOWED_DOCUMENT_MIMETYPES = [
 export class CockpitController {
   constructor(private readonly service: CockpitService) {}
 
+  @Get("profil")
+  getProfil(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.getProfil(formateurMatricule);
+  }
+
+  @Get("apprenants")
+  listApprenants(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.listApprenants(formateurMatricule);
+  }
+
   @Get("groupes")
   getGroupes(@Headers("x-formateur-matricule") formateurMatricule: string) {
     return this.service.getGroupes(formateurMatricule);
@@ -55,6 +65,14 @@ export class CockpitController {
     @Headers("x-formateur-matricule") formateurMatricule: string
   ) {
     return this.service.getGroupeDetail(cle, formateurMatricule);
+  }
+
+  @Get("apprenants/:matricule/fiche")
+  getApprenantFiche(
+    @Param("matricule") matricule: string,
+    @Headers("x-formateur-matricule") formateurMatricule: string
+  ) {
+    return this.service.getApprenantFiche(matricule, formateurMatricule);
   }
 
   @Get("vivier-c1")

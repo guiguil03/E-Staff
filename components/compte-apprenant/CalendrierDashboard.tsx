@@ -31,9 +31,15 @@ export default function CalendrierDashboard() {
       setSeances("erreur");
       return;
     }
+    // Une 401/403 (session expirée) doit remonter comme une vraie erreur,
+    // pas comme "aucune séance" — ce masquage cachait une panne
+    // d'authentification derrière un calendrier vide qui a l'air normal
+    // (voir signalement du 2026-09-22).
     apiGet<SeanceApi[]>(`/apprenants/${matricule}/seances`)
       .then(setSeances)
-      .catch((err) => setSeances(err instanceof ApiError ? [] : "erreur"));
+      .catch((err) =>
+        setSeances(err instanceof ApiError && err.status !== 401 && err.status !== 403 ? [] : "erreur")
+      );
   }, [checked]);
 
   if (!checked) {

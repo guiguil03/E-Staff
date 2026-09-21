@@ -9,13 +9,10 @@ import { useRequireRole } from "@/lib/useRequireRole";
 import { apiDelete, apiGet, apiPut, ApiError } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 import {
-  APPRENANTS,
   DERNIERE_SEANCE_PASSEE,
-  GROUPES,
   OBJECTIFS_PAR_DEFAUT,
   SEANCE_NUMBERS,
-  apprenantMatricule,
-  type Apprenant,
+  apprenantIdFromMatricule,
 } from "./exampleData";
 import { COMPETENCY_DEFS, tauxAssimilation } from "./gradingGrids";
 
@@ -30,6 +27,18 @@ interface SeanceApi {
   objectifs: string | null;
   dailyRoomName: string | null;
   dailyRoomUrl: string | null;
+}
+
+interface GroupeOption {
+  cle: string;
+  label: string;
+}
+
+interface ApprenantListApi {
+  matricule: string;
+  prenom: string;
+  nom: string;
+  groupeCle: string;
 }
 
 function formateurHeaders(): HeadersInit {
@@ -55,7 +64,9 @@ function toDatetimeLocalValue(iso: string): string {
 export default function PlanningDashboard() {
   const checked = useRequireRole("formateur");
   const searchParams = useSearchParams();
-  const [groupeKey, setGroupeKey] = useState(searchParams.get("groupe") || GROUPES[0].key);
+  const [groupes, setGroupes] = useState<GroupeOption[]>([]);
+  const [apprenants, setApprenants] = useState<ApprenantListApi[]>([]);
+  const [groupeKey, setGroupeKey] = useState(searchParams.get("groupe") || "");
   const [seance, setSeance] = useState(Number(searchParams.get("seance") ?? "1"));
   const [objectifs, setObjectifs] = useState(OBJECTIFS_PAR_DEFAUT[1] ?? "");
   const [horaireSeance, setHoraireSeance] = useState<SeanceApi | null>(null);
@@ -67,7 +78,24 @@ export default function PlanningDashboard() {
   const [horaireError, setHoraireError] = useState<string | null>(null);
   const [notations, setNotations] = useState<NotationMap | "loading" | "erreur">("loading");
 
-  const apprenantsGroupe = APPRENANTS.filter((a) => a.groupe === groupeKey);
+  const apprenantsGroupe = apprenants.filter((a) => a.groupeCle === groupeKey);
+
+  // Branché sur /cockpit/groupes et /cockpit/apprenants depuis le
+  // 2026-09-22 — le sélecteur de groupe et le tableau des 5 compétences
+  // tournaient avant sur exampleData.ts (6 faux groupes, 30 faux
+  // apprenants), jamais les vrais effectifs de ce formateur.
+  useEffect(() => {
+    if (!checked) return;
+    apiGet<GroupeOption[]>("/cockpit/groupes", formateurHeaders())
+      .then((data) => {
+        setGroupes(data);
+        setGroupeKey((current) => current || data[0]?.cle || "");
+      })
+      .catch(() => setGroupes([]));
+    apiGet<ApprenantListApi[]>("/cockpit/apprenants", formateurHeaders())
+      .then(setApprenants)
+      .catch(() => setApprenants([]));
+  }, [checked]);
 
   useEffect(() => {
     setObjectifs(OBJECTIFS_PAR_DEFAUT[seance] ?? "");
@@ -75,6 +103,7 @@ export default function PlanningDashboard() {
   }, [groupeKey, seance]);
 
   useEffect(() => {
+    if (!groupeKey) return;
     let cancelled = false;
     setNotations("loading");
     apiGet<NotationMap>(`/notations/${groupeKey}/${seance}`, formateurHeaders())
@@ -90,6 +119,7 @@ export default function PlanningDashboard() {
   }, [groupeKey, seance]);
 
   useEffect(() => {
+    if (!groupeKey) return;
     let cancelled = false;
     setHoraireStatus("loading");
     apiGet<SeanceApi>(`/seances/${groupeKey}/${seance}`, formateurHeaders())
@@ -153,12 +183,12 @@ export default function PlanningDashboard() {
     );
   }
 
-  function scoreFor(apprenant: Apprenant, competencyKey: string): number | null {
+  function scoreFor(apprenant: ApprenantListApi, competencyKey: string): number | null {
     if (notations === "loading" || notations === "erreur") return null;
-    return notations[apprenantMatricule(apprenant.id)]?.[competencyKey]?.scoreOn20 ?? null;
+    return notations[apprenant.matricule]?.[competencyKey]?.scoreOn20 ?? null;
   }
 
-  function moyenneApprenant(apprenant: Apprenant): number | null {
+  function moyenneApprenant(apprenant: ApprenantListApi): number | null {
     const scores = COMPETENCY_DEFS.map((c) => scoreFor(apprenant, c.key));
     if (scores.some((s) => s === null)) return null;
     const values = scores as number[];
@@ -201,8 +231,8 @@ export default function PlanningDashboard() {
                 onChange={(e) => setGroupeKey(e.target.value)}
                 className="mt-1 rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
               >
-                {GROUPES.map((g) => (
-                  <option key={g.key} value={g.key}>
+                {groupes.map((g) => (
+                  <option key={g.cle} value={g.cle}>
                     {g.label}
                   </option>
                 ))}
@@ -365,9 +395,9 @@ export default function PlanningDashboard() {
                   {apprenantsGroupe.map((a) => {
                     const moyenne = moyenneApprenant(a);
                     return (
-                      <tr key={a.id} className="border-b border-white/5">
+                      <tr key={a.matricule} className="border-b border-white/5">
                         <td className="py-2 pr-2 text-white">
-                          {a.firstName} {a.lastName}
+                          {a.prenom} {a.nom}
                         </td>
                         {COMPETENCY_DEFS.map((c) => {
                           const score = scoreFor(a, c.key);
@@ -385,7 +415,7 @@ export default function PlanningDashboard() {
                         </td>
                         <td className="py-2 text-right">
                           <Link
-                            href={`/compte/formateur/planning/noter/${a.id}?seance=${seance}&groupe=${groupeKey}`}
+                            href={`/compte/formateur/planning/noter/${apprenantIdFromMatricule(a.matricule)}?seance=${seance}&groupe=${groupeKey}`}
                             className="inline-block rounded border border-accent/40 px-3 py-1 font-mono text-[11px] uppercase tracking-widest text-accent hover:bg-accent/10"
                           >
                             Noter

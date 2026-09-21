@@ -57,6 +57,7 @@ function playAlertSound() {
 // la fenêtre, relâché (60s) en dehors.
 export default function ClasseVirtuelleJoinButton() {
   const [status, setStatus] = useState<RoomStatus | null | "loading" | "erreur">("loading");
+  const [erreurDetail, setErreurDetail] = useState<string | null>(null);
   const wasLiveRef = useRef(false);
 
   useEffect(() => {
@@ -78,12 +79,23 @@ export default function ClasseVirtuelleJoinButton() {
         }
         wasLiveRef.current = Boolean(data?.formateurEnLigne);
         setStatus(data);
+        setErreurDetail(null);
         if (!cancelled) {
           timeoutId = setTimeout(() => fetchStatus(m), data?.withinJoinWindow ? 15_000 : 60_000);
         }
       } catch (err) {
         if (cancelled) return;
-        setStatus(err instanceof ApiError ? null : "erreur");
+        // Une 401/403 (session expirée, matricule qui ne correspond plus à
+        // la session) ne doit JAMAIS s'afficher comme "rien de prévu" — ce
+        // masquage cachait une vraie panne d'authentification derrière un
+        // état qui a l'air normal (voir signalement du 2026-09-22).
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+          setStatus("erreur");
+          setErreurDetail("Votre session a expiré — reconnectez-vous.");
+        } else {
+          setStatus("erreur");
+          setErreurDetail(null);
+        }
         timeoutId = setTimeout(() => fetchStatus(m), 60_000);
       }
     }
@@ -104,8 +116,16 @@ export default function ClasseVirtuelleJoinButton() {
 
   // Rien à afficher tant qu'aucune séance n'est programmée — pas de
   // libellé "Rejoindre" trompeur pour une action qui n'existe pas encore.
-  if (status === "erreur" || status === null) {
+  // Distinct d'une vraie erreur (réseau/session expirée) depuis le
+  // 2026-09-22 : les deux affichaient avant le même message, masquant une
+  // panne d'authentification derrière un état qui a l'air normal.
+  if (status === null) {
     return <div className={infoClass}>Aucune classe virtuelle programmée pour le moment.</div>;
+  }
+  if (status === "erreur") {
+    return (
+      <div className={infoClass}>{erreurDetail ?? "Impossible de charger la classe virtuelle — réessayez."}</div>
+    );
   }
 
   // Le lien "Rejoindre" n'apparaît que dans la fenêtre de rejoin (10 min
