@@ -7,7 +7,13 @@ import Button from "@/components/ui/Button";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { apiGet } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
-import { APPRENANTS } from "./exampleData";
+
+interface ApprenantListApi {
+  matricule: string;
+  prenom: string;
+  nom: string;
+  groupeCle: string;
+}
 
 interface RoomStatus {
   groupeCle: string;
@@ -53,12 +59,19 @@ export default function ClasseVirtuelleFormateurPage({
   const checked = useRequireRole("formateur");
   const [status, setStatus] = useState<RoomStatus | "loading" | "erreur">("loading");
   const [launched, setLaunched] = useState(false);
+  const [apprenants, setApprenants] = useState<ApprenantListApi[]>([]);
 
   useEffect(() => {
     if (!checked) return;
     apiGet<RoomStatus>(`/seances/${groupeCle}/${numero}/room`, formateurHeaders())
       .then(setStatus)
       .catch(() => setStatus("erreur"));
+    // Branché sur /cockpit/apprenants depuis le 2026-09-22 — affichait avant
+    // 5 faux noms d'exampleData.ts comme "participants attendus", jamais le
+    // vrai effectif du groupe.
+    apiGet<ApprenantListApi[]>("/cockpit/apprenants", formateurHeaders())
+      .then(setApprenants)
+      .catch(() => setApprenants([]));
   }, [checked, groupeCle, numero]);
 
   if (!checked || status === "loading") {
@@ -92,7 +105,7 @@ export default function ClasseVirtuelleFormateurPage({
     );
   }
 
-  const apprenantsGroupe = APPRENANTS.filter((a) => a.groupe === groupeCle);
+  const apprenantsGroupe = apprenants.filter((a) => a.groupeCle === groupeCle);
 
   return (
     <div className="min-h-screen bg-obsidian px-4 py-10 sm:px-6 sm:py-14">
@@ -167,8 +180,8 @@ export default function ClasseVirtuelleFormateurPage({
                 </h3>
                 <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
                   {apprenantsGroupe.map((a) => (
-                    <li key={a.id} className="font-sans text-sm text-white/70">
-                      {a.firstName} {a.lastName}
+                    <li key={a.matricule} className="font-sans text-sm text-white/70">
+                      {a.prenom} {a.nom}
                     </li>
                   ))}
                 </ul>

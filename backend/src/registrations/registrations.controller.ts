@@ -21,6 +21,7 @@ import { SendContractDto } from './send-contract.dto';
 import { PapiWebhookDto } from './papi-webhook.dto';
 import { RhGuard } from '../common/rh.guard';
 import { RateLimitGuard } from '../common/rate-limit.guard';
+import { isImage, isPdf } from '../common/file-signature';
 
 const MAX_CV_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
 const MAX_RECEIPT_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
@@ -108,6 +109,9 @@ export class RegistrationsController {
   ) {
     const registration = await this.service.submitPaymentReferencePublic(id, dto);
     if (file) {
+      if (!isPdf(file.buffer) && !isImage(file.buffer)) {
+        throw new BadRequestException("Le fichier ne semble pas être un PDF ou une image valide.");
+      }
       return this.service.uploadPaymentReceipt(id, file);
     }
     return registration;
@@ -145,6 +149,9 @@ export class RegistrationsController {
       throw new BadRequestException(
         'Fichier CV manquant, trop volumineux (10 Mo max) ou pas au format PDF.',
       );
+    }
+    if (!isPdf(file.buffer)) {
+      throw new BadRequestException('Le fichier ne semble pas être un PDF valide.');
     }
     return this.service.uploadCv(id, file);
   }

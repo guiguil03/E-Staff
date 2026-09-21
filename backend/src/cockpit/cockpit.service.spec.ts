@@ -9,7 +9,7 @@ import { PrismaService } from "../prisma/prisma.service";
 
 function makePrismaMock() {
   return {
-    apprenant: { findMany: jest.fn().mockResolvedValue([]) },
+    apprenant: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
     notation: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn() },
     seance: { findMany: jest.fn().mockResolvedValue([]) },
     presence: { findMany: jest.fn().mockResolvedValue([]) },
@@ -70,6 +70,85 @@ describe("CockpitService — scoping par formateur", () => {
       const result = await service.getGroupes(FORMATEUR.matricule);
 
       expect(result.map((g) => g.cle)).toEqual(["A"]);
+    });
+  });
+
+  describe("listApprenants", () => {
+    it("ne renvoie que les apprenants des groupes du formateur connecté", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(FORMATEUR);
+      prisma.apprenant.findMany.mockResolvedValue([
+        { matricule: "ETF-2026-0001", prenom: "Awa", nom: "Diallo", groupe: { cle: "A" } },
+      ]);
+
+      const result = await service.listApprenants(FORMATEUR.matricule);
+
+      expect(prisma.apprenant.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { groupe: { formateurId: FORMATEUR.id } } })
+      );
+      expect(result).toEqual([{ matricule: "ETF-2026-0001", prenom: "Awa", nom: "Diallo", groupeCle: "A" }]);
+    });
+
+    it("lève NotFoundException si le matricule ne correspond à aucun formateur", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(null);
+      await expect(service.listApprenants("inconnu")).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe("getApprenantFiche", () => {
+    const APPRENANT_DETAIL = { id: "app-1", matricule: "ETF-2026-0001", prenom: "Awa", nom: "Diallo", groupe: GROUPE_A };
+
+    it("lève NotFoundException si le matricule n'existe pas", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+      await expect(service.getApprenantFiche("inconnu")).rejects.toThrow(NotFoundException);
+    });
+
+    it("lève ForbiddenException si l'apprenant n'est pas dans un groupe du formateur connecté", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(APPRENANT_DETAIL);
+      prisma.formateur.findUnique.mockResolvedValue(AUTRE_FORMATEUR);
+
+      await expect(
+        service.getApprenantFiche(APPRENANT_DETAIL.matricule, AUTRE_FORMATEUR.matricule)
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it("renvoie moyenne, compétences et rendus en attente à partir des vraies notations", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(APPRENANT_DETAIL);
+      prisma.apprenant.findMany.mockResolvedValue([{ ...APPRENANT_DETAIL, groupeId: GROUPE_A.id }]);
+      prisma.notation.findMany
+        .mockResolvedValueOnce([
+          { apprenantId: "app-1", competence: "expression_orale", scoreOn20: 16, seance: { numero: 1 } },
+          { apprenantId: "app-1", competence: "expression_ecrite", scoreOn20: 14, seance: { numero: 1 } },
+          { apprenantId: "app-1", competence: "comprehension_orale", scoreOn20: 15, seance: { numero: 1 } },
+          { apprenantId: "app-1", competence: "comprehension_ecrite", scoreOn20: 13, seance: { numero: 1 } },
+          { apprenantId: "app-1", competence: "posture_eloquence", scoreOn20: 17, seance: { numero: 1 } },
+        ])
+        .mockResolvedValueOnce([
+          { id: "not-1", competence: "expression_orale", fileName: "devoir.mp3", soumisAt: new Date("2026-09-01"), seance: { numero: 2 } },
+        ]);
+
+      const result = await service.getApprenantFiche(APPRENANT_DETAIL.matricule);
+
+      expect(result.moyenneGlobale).toBe(75); // 16+14+15+13+17
+      expect(result.groupeCle).toBe("A");
+      expect(result.history[0]).toEqual({ label: "S1", moyenne: 75 });
+      expect(result.rendusEnAttente).toEqual([
+        { id: "not-1", competence: "expression_orale", numero: 2, fileName: "devoir.mp3", soumisAt: new Date("2026-09-01") },
+      ]);
+    });
+  });
+
+  describe("getProfil", () => {
+    it("renvoie le prénom/nom du formateur connecté (2026-09-22 — remplace le prénom de démo en dur)", async () => {
+      prisma.formateur.findUnique.mockResolvedValue({ ...FORMATEUR, prenom: "Awa", nom: "Rakoto" });
+
+      const result = await service.getProfil(FORMATEUR.matricule);
+
+      expect(result).toEqual({ prenom: "Awa", nom: "Rakoto" });
+    });
+
+    it("lève NotFoundException si le matricule ne correspond à aucun formateur", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(null);
+      await expect(service.getProfil("inconnu")).rejects.toThrow(NotFoundException);
     });
   });
 

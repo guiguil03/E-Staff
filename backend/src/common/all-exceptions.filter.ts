@@ -1,12 +1,14 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from "@nestjs/common";
+import * as Sentry from "@sentry/node";
 import type { Request, Response } from "express";
 
 // Filtre global : NestJS gère déjà correctement la réponse HTTP par défaut
 // pour une exception non attrapée (message générique "Internal server
 // error", pas de fuite de stack trace) — ce qui manquait, c'est un log
 // exploitable (contexte de la requête) et un point d'accroche unique pour
-// brancher un outil de suivi d'erreurs (Sentry ou équivalent) plus tard
-// sans toucher à chaque contrôleur.
+// brancher un outil de suivi d'erreurs. Sentry.captureException ne fait
+// rien tant que SENTRY_DSN n'est pas configuré (voir main.ts) — aucun
+// compte créé à ce jour, ce bloc attend juste que ça change.
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger("UnhandledException");
@@ -29,6 +31,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (status >= 500) {
       const stack = exception instanceof Error ? exception.stack : undefined;
       this.logger.error(`${request.method} ${request.originalUrl} — ${status} (ip=${request.ip})`, stack);
+      Sentry.captureException(exception, {
+        extra: { method: request.method, url: request.originalUrl, ip: request.ip },
+      });
     }
 
     response.status(status).json(body);
