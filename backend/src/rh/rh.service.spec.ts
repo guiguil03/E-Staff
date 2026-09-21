@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CockpitService } from "../cockpit/cockpit.service";
 import { NotationService } from "../notation/notation.service";
 import { EmailService } from "../common/email.service";
+import { StorageService } from "../common/storage.service";
 
 // Cette suite se concentre sur la logique métier réelle du RhService (calculs
 // financiers, agrégations par période, règles de priorité) plutôt que sur
@@ -38,26 +39,32 @@ function makePrismaMock() {
       update: jest.fn(),
       count: jest.fn(),
     },
+    candidat: { update: jest.fn() },
+    situationResponse: { update: jest.fn() },
+    videoResponse: { update: jest.fn() },
     mission: { count: jest.fn() },
     agentAcquisition: { create: jest.fn(), findMany: jest.fn() },
     reinscription: { create: jest.fn() },
+    $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
   };
 }
 
 describe("RhService", () => {
   let prisma: ReturnType<typeof makePrismaMock>;
   let email: { send: jest.Mock };
+  let storage: { deleteObject: jest.Mock };
   let service: RhService;
 
   beforeEach(() => {
     prisma = makePrismaMock();
     email = { send: jest.fn().mockResolvedValue({ delivered: true }) };
+    storage = { deleteObject: jest.fn().mockResolvedValue(undefined) };
     service = new RhService(
       prisma as unknown as PrismaService,
       {} as unknown as CockpitService,
       {} as unknown as NotationService,
       email as unknown as EmailService,
-      {} as never
+      storage as unknown as StorageService
     );
   });
 
@@ -903,6 +910,89 @@ describe("RhService", () => {
 
       await expect(service.updateGroupeTypeCours("g-1", "FOL")).rejects.toThrow(BadRequestException);
       expect(prisma.groupe.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("purgeCandidatData", () => {
+    function attempt(overrides: Record<string, unknown> = {}) {
+      return {
+        id: "attempt-1",
+        contractPdfKey: "contracts/attempt-1.pdf",
+        candidat: {
+          id: "cand-1",
+          cvKey: "cv/cand-1.pdf",
+          dataPurgedAt: null,
+        },
+        situationResponses: [{ id: "sr-1", audioUrl: "audio/sr-1.webm" }],
+        videoResponses: [{ id: "vr-1", videoUrl: "video/vr-1.mp4" }],
+        ...overrides,
+      };
+    }
+
+    it("lève NotFoundException si la tentative n'existe pas", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(null);
+      await expect(service.purgeCandidatData("inconnu")).rejects.toThrow(NotFoundException);
+    });
+
+    it("refuse de purger deux fois le même candidat", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        attempt({ candidat: { id: "cand-1", cvKey: null, dataPurgedAt: new Date("2026-01-01") } })
+      );
+      await expect(service.purgeCandidatData("attempt-1")).rejects.toThrow(BadRequestException);
+      expect(storage.deleteObject).not.toHaveBeenCalled();
+    });
+
+    it("supprime tous les fichiers du bucket (CV, contrat, audio, vidéo)", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(attempt());
+      prisma.candidat.update.mockResolvedValue({});
+      prisma.evaluationAttempt.update.mockResolvedValue({});
+      prisma.situationResponse.update.mockResolvedValue({});
+      prisma.videoResponse.update.mockResolvedValue({});
+
+      await service.purgeCandidatData("attempt-1");
+
+      expect(storage.deleteObject).toHaveBeenCalledWith("cv/cand-1.pdf");
+      expect(storage.deleteObject).toHaveBeenCalledWith("contracts/attempt-1.pdf");
+      expect(storage.deleteObject).toHaveBeenCalledWith("audio/sr-1.webm");
+      expect(storage.deleteObject).toHaveBeenCalledWith("video/vr-1.mp4");
+    });
+
+    it("anonymise les coordonnées et vide les clés de fichiers en base", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(attempt());
+      prisma.candidat.update.mockResolvedValue({});
+      prisma.evaluationAttempt.update.mockResolvedValue({});
+      prisma.situationResponse.update.mockResolvedValue({});
+      prisma.videoResponse.update.mockResolvedValue({});
+
+      const result = await service.purgeCandidatData("attempt-1");
+
+      expect(prisma.candidat.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "cand-1" },
+          data: expect.objectContaining({
+            firstName: "Anonymisé",
+            cvKey: null,
+            dataPurgedAt: expect.any(Date),
+          }),
+        })
+      );
+      expect(prisma.situationResponse.update).toHaveBeenCalledWith({
+        where: { id: "sr-1" },
+        data: { audioUrl: "SUPPRIME_RGPD" },
+      });
+      expect(prisma.videoResponse.update).toHaveBeenCalledWith({
+        where: { id: "vr-1" },
+        data: { videoUrl: "SUPPRIME_RGPD" },
+      });
+      expect(result.ok).toBe(true);
+    });
+
+    it("n'écrit rien en base si la suppression d'un fichier échoue", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(attempt());
+      storage.deleteObject.mockRejectedValueOnce(new Error("S3 indisponible"));
+
+      await expect(service.purgeCandidatData("attempt-1")).rejects.toThrow("S3 indisponible");
+      expect(prisma.candidat.update).not.toHaveBeenCalled();
     });
   });
 });

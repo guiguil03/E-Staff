@@ -227,6 +227,13 @@ model Candidat {
 
   attempts EvaluationAttempt[]
 
+  // Purge RGPD manuelle déclenchée par la RH (voir RhService.
+  // purgeCandidatData) — non null = CV/audio/vidéo supprimés du stockage et
+  // coordonnées anonymisées. Conserve la date pour pouvoir justifier d'une
+  // suppression sur demande d'un candidat, sans perdre la trace statistique
+  // du passage dans le pipeline (voir RhService.getCycleComplet).
+  dataPurgedAt DateTime?
+
   @@index([agentAcquisitionId])
 }
 

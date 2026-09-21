@@ -1,0 +1,31 @@
+version: 2
+updates:
+  # Frontend (Next.js, racine du repo)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      # Minor/patch groupés en une seule PR — évite le bruit d'une PR par
+      # dépendance pour des mises à jour sans risque ; les majeures restent
+      # séparées (souvent bréquantes, ex. Next.js 14→16 identifié à
+      # l'audit du 2026-09-21) pour rester réviewables individuellement.
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # Backend (NestJS + Prisma)
+  - package-ecosystem: "npm"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # Workflows GitHub Actions eux-mêmes (actions/checkout, actions/setup-node...)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

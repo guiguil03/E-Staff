@@ -6,6 +6,7 @@ import Footer from '@/components/Footer'
 import './globals.css'
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://e-staf.com"),
   title: "e-Staf — Académie de langues & externalisation d'élite, Madagascar",
   description:
     "e-Staf accompagne talents et entreprises à Madagascar : préparation aux examens internationaux, programme d'excellence oratoire (FOL), et externalisation d'élite avec des profils formés et managés avec rigueur.",

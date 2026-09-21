@@ -4,6 +4,7 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import basicAuth = require("express-basic-auth");
 import * as cookieParser from "cookie-parser";
 import { AppModule } from "./app.module";
+import { AllExceptionsFilter } from "./common/all-exceptions.filter";
 
 async function bootstrap() {
   // Erreur explicite au démarrage plutôt qu'un JWT_SECRET manquant
@@ -41,6 +42,11 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     })
   );
+
+  // Logue toute erreur 5xx non gérée avec le contexte de la requête — voir
+  // all-exceptions.filter.ts pour le détail (aucun changement de
+  // comportement pour les exceptions déjà gérées ailleurs).
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   // Doc Swagger désactivée tant que SWAGGER_USER/SWAGGER_PASSWORD ne sont
   // pas renseignées (voir .env.example) — évite d'exposer publiquement la

@@ -279,6 +279,7 @@ export class RegistrationsService {
       registration.papiReference &&
       registration.papiNotificationToken &&
       dto.paymentReference === registration.papiReference &&
+      typeof dto.notificationToken === 'string' &&
       safeEqual(dto.notificationToken, registration.papiNotificationToken);
     if (!authentic) {
       throw new BadRequestException('Notification de paiement non reconnue.');
