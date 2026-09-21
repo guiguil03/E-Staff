@@ -8,6 +8,8 @@ function makePrismaMock() {
   return {
     groupe: { findUnique: jest.fn() },
     seance: { findUnique: jest.fn(), findMany: jest.fn(), update: jest.fn(), upsert: jest.fn() },
+    apprenant: { findUnique: jest.fn() },
+    presence: { count: jest.fn().mockResolvedValue(0) },
   };
 }
 
@@ -134,6 +136,102 @@ describe("ClasseVirtuelleService.upsertSeance — conflit d'horaire", () => {
       where: { groupeId_numero: { groupeId: "groupe-a", numero: 1 } },
       update: {},
       create: { groupeId: "groupe-a", numero: 1 },
+    });
+  });
+});
+
+// Signalement du 2026-09-22 : "la classe virtuelle n'apparaît pas côté
+// apprenant" — le reste du dashboard apprenant (notes, calendrier)
+// fonctionne, donc la session/le guard ne sont pas en cause. Cette suite
+// vérifie que la logique métier elle-même (retrouver la séance du groupe de
+// l'apprenant, calculer le statut de la salle) ne contient pas le bug —
+// aucun test n'existait avant sur ces deux méthodes.
+describe("ClasseVirtuelleService — côté apprenant", () => {
+  let prisma: ReturnType<typeof makePrismaMock>;
+  let daily: ReturnType<typeof makeDailyMock>;
+  let email: ReturnType<typeof makeEmailMock>;
+  let service: ClasseVirtuelleService;
+
+  beforeEach(() => {
+    prisma = makePrismaMock();
+    daily = makeDailyMock();
+    email = makeEmailMock();
+    service = new ClasseVirtuelleService(
+      prisma as unknown as PrismaService,
+      daily as unknown as DailyService,
+      email as unknown as EmailService
+    );
+  });
+
+  const APPRENANT = { id: "app-1", matricule: "ETF-2026-0001", prenom: "Awa", nom: "Diallo", groupeId: "groupe-a", groupe: GROUPE_A };
+
+  describe("getApprenantProchaineSeanceRoom", () => {
+    it("renvoie null si le matricule ne correspond à aucun apprenant", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+      await expect(service.getApprenantProchaineSeanceRoom("inconnu")).resolves.toBeNull();
+    });
+
+    it("renvoie null si le groupe de l'apprenant n'a aucune séance planifiée", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
+      prisma.seance.findMany.mockResolvedValue([]);
+      await expect(service.getApprenantProchaineSeanceRoom(APPRENANT.matricule)).resolves.toBeNull();
+      expect(prisma.seance.findMany).toHaveBeenCalledWith({
+        where: { groupeId: "groupe-a", startAt: { not: null } },
+      });
+    });
+
+    it("renvoie la prochaine séance planifiée du groupe de l'apprenant", async () => {
+      const startAt = new Date(Date.now() + 3600_000);
+      prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
+      prisma.seance.findMany.mockResolvedValue([
+        { ...SEANCE_A3, startAt, dailyRoomName: "room-1", dailyRoomUrl: "https://daily.example/room-1" },
+      ]);
+
+      const result = await service.getApprenantProchaineSeanceRoom(APPRENANT.matricule);
+
+      expect(result).not.toBeNull();
+      expect(result?.groupeCle).toBe("A");
+      expect(result?.numero).toBe(3);
+      expect(result?.configured).toBe(false); // DAILY_API_KEY absent dans ce test
+    });
+
+    it("ne renvoie jamais la séance d'un AUTRE groupe que celui de l'apprenant", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
+      // Simule ce que renverrait Prisma si le filtre groupeId était omis par erreur.
+      prisma.seance.findMany.mockImplementation(({ where }: any) => {
+        const toutes = [
+          { ...SEANCE_A3, groupeId: "groupe-a", startAt: new Date(Date.now() + 3600_000) },
+          { ...SEANCE_A3, id: "seance-b1", groupeId: "groupe-b", numero: 1, startAt: new Date(Date.now() + 1800_000) },
+        ];
+        return Promise.resolve(toutes.filter((s) => s.groupeId === where.groupeId));
+      });
+
+      const result = await service.getApprenantProchaineSeanceRoom(APPRENANT.matricule);
+
+      expect(result?.groupeCle).toBe("A");
+    });
+  });
+
+  describe("listApprenantSeances", () => {
+    it("renvoie [] si le matricule ne correspond à aucun apprenant", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+      await expect(service.listApprenantSeances("inconnu")).resolves.toEqual([]);
+    });
+
+    it("ne liste que les séances planifiées (startAt non nul) du groupe de l'apprenant", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
+      const startAt = new Date(Date.now() + 3600_000);
+      prisma.seance.findMany.mockResolvedValue([{ ...SEANCE_A3, startAt }]);
+
+      const result = await service.listApprenantSeances(APPRENANT.matricule);
+
+      expect(prisma.seance.findMany).toHaveBeenCalledWith({
+        where: { groupeId: "groupe-a", startAt: { not: null } },
+        orderBy: { startAt: "asc" },
+      });
+      expect(result).toEqual([
+        { groupeCle: "A", groupeLabel: "Groupe A", numero: 3, startAt, dureeMinutes: 90, objectifs: null },
+      ]);
     });
   });
 });
