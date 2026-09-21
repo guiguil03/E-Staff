@@ -116,8 +116,8 @@ export class EvaluationController {
   }
 
   // Consultation du CV depuis la fiche RH (Cycle complet) — même principe
-  // que le streaming audio/vidéo existant, pas de garde (voir commentaire
-  // TrainerGuard plus bas).
+  // que le streaming audio/vidéo existant, pas de garde (id cuid non
+  // énumérable — voir audit sécurité 2026-09-21 pour le suivi de ce point).
   @Get("candidats/:id/cv")
   async streamCv(@Param("id") id: string, @Res() res: Response) {
     const { stream, contentType } = await this.service.getCvStream(id);
@@ -173,12 +173,13 @@ export class EvaluationController {
   }
 
   // ---- Interface formateur ------------------------------------------------
-  // Code formateur (TrainerGuard) retiré temporairement le 2026-08-25 à la
-  // demande du client — trop de friction pour l'usage actuel (une poignée
-  // de personnes connues). La page reste hors nav, accessible par URL
-  // directe uniquement. À réintroduire une vraie auth avant d'ouvrir l'accès
-  // plus largement (voir TrainerGuard, toujours défini dans common/, pas
-  // supprimé).
+  // Code formateur partagé (ex-TrainerGuard) retiré temporairement le
+  // 2026-08-25 à la demande du client — trop de friction pour l'usage
+  // actuel (une poignée de personnes connues). La page reste hors nav,
+  // accessible par URL directe uniquement. TrainerGuard a depuis été
+  // supprimé (2026-09-21, code mort, plus jamais monté sur aucune route) —
+  // réintroduire une vraie auth (session signée, voir FormateurGuard) avant
+  // d'ouvrir l'accès plus largement.
 
   @Get("attempts")
   listAttemptsForGrading() {

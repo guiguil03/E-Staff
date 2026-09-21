@@ -11,6 +11,7 @@ import {
 } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { FormateurGuard } from "../common/formateur.guard";
+import { ApprenantGuard } from "../common/apprenant.guard";
 import { ClasseVirtuelleService } from "./classe-virtuelle.service";
 import { UpsertSeanceDto } from "./dto/upsert-seance.dto";
 
@@ -83,16 +84,16 @@ export class ClasseVirtuelleController {
     return this.service.getHistorique(groupeCle, formateurMatricule);
   }
 
-  // Pas de guard : le matricule apprenant joue ici le même rôle qu'ailleurs
-  // dans le stopgap actuel (identifiant, pas un secret fort) — cohérent
-  // avec le niveau de protection du reste du Compte Apprenant, qui n'a pas
-  // encore d'appel backend gardé.
+  // Gardé par ApprenantGuard : la session doit correspondre exactement au
+  // matricule de l'URL (voir apprenant.guard.ts).
+  @UseGuards(ApprenantGuard)
   @Get("apprenants/:matricule/prochaine-seance-room")
   getApprenantProchaineSeanceRoom(@Param("matricule") matricule: string) {
     return this.service.getApprenantProchaineSeanceRoom(matricule);
   }
 
   // Calendrier apprenant — séances planifiées de son groupe.
+  @UseGuards(ApprenantGuard)
   @Get("apprenants/:matricule/seances")
   listApprenantSeances(@Param("matricule") matricule: string) {
     return this.service.listApprenantSeances(matricule);

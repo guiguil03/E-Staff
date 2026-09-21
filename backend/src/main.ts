@@ -2,14 +2,26 @@ import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import basicAuth = require("express-basic-auth");
+import * as cookieParser from "cookie-parser";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
+  // Erreur explicite au démarrage plutôt qu'un JWT_SECRET manquant
+  // découvert au premier login en prod — voir common/session.ts.
+  if (!process.env.JWT_SECRET) {
+    throw new Error(
+      "JWT_SECRET n'est pas configuré — obligatoire pour signer les sessions (voir .env.example)."
+    );
+  }
+
   // rawBody: true expose req.rawBody sur toutes les routes — nécessaire
   // pour vérifier la signature HMAC des webhooks Daily (voir
   // daily-webhook.controller.ts), qui doit être calculée sur les octets
   // exacts reçus, pas sur une re-sérialisation du JSON parsé.
   const app = await NestFactory.create(AppModule, { rawBody: true });
+  // Nécessaire pour lire le cookie de session (voir common/session.ts) dans
+  // les guards — Express ne parse pas req.cookies par défaut.
+  app.use(cookieParser());
 
   // Nécessaire pour que `request.ip` reflète la vraie IP du client plutôt
   // que celle du proxy Railway — sinon tous les visiteurs partageraient la
