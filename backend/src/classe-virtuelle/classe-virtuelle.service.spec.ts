@@ -181,18 +181,30 @@ describe("ClasseVirtuelleService — côté apprenant", () => {
     });
 
     it("renvoie la prochaine séance planifiée du groupe de l'apprenant", async () => {
-      const startAt = new Date(Date.now() + 3600_000);
-      prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
-      prisma.seance.findMany.mockResolvedValue([
-        { ...SEANCE_A3, startAt, dailyRoomName: "room-1", dailyRoomUrl: "https://daily.example/room-1" },
-      ]);
+      // `configured` reflète Boolean(process.env.DAILY_API_KEY) — géré
+      // explicitement plutôt que supposé absent : Railway expose les
+      // variables du service pendant le build (prebuild lance ce test
+      // suite), donc une vraie clé peut très bien être présente ici (build
+      // cassé le 2026-09-22 par cette hypothèse implicite).
+      const originalKey = process.env.DAILY_API_KEY;
+      delete process.env.DAILY_API_KEY;
+      try {
+        const startAt = new Date(Date.now() + 3600_000);
+        prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
+        prisma.seance.findMany.mockResolvedValue([
+          { ...SEANCE_A3, startAt, dailyRoomName: "room-1", dailyRoomUrl: "https://daily.example/room-1" },
+        ]);
 
-      const result = await service.getApprenantProchaineSeanceRoom(APPRENANT.matricule);
+        const result = await service.getApprenantProchaineSeanceRoom(APPRENANT.matricule);
 
-      expect(result).not.toBeNull();
-      expect(result?.groupeCle).toBe("A");
-      expect(result?.numero).toBe(3);
-      expect(result?.configured).toBe(false); // DAILY_API_KEY absent dans ce test
+        expect(result).not.toBeNull();
+        expect(result?.groupeCle).toBe("A");
+        expect(result?.numero).toBe(3);
+        expect(result?.configured).toBe(false);
+      } finally {
+        if (originalKey === undefined) delete process.env.DAILY_API_KEY;
+        else process.env.DAILY_API_KEY = originalKey;
+      }
     });
 
     it("ne renvoie jamais la séance d'un AUTRE groupe que celui de l'apprenant", async () => {
