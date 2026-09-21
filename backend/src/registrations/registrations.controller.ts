@@ -20,6 +20,7 @@ import { SubmitPaymentPublicDto } from './submit-payment-public.dto';
 import { SendContractDto } from './send-contract.dto';
 import { PapiWebhookDto } from './papi-webhook.dto';
 import { RhGuard } from '../common/rh.guard';
+import { RateLimitGuard } from '../common/rate-limit.guard';
 
 const MAX_CV_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
 const MAX_RECEIPT_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
@@ -30,6 +31,7 @@ const RECEIPT_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image
 export class RegistrationsController {
   constructor(private readonly service: RegistrationsService) {}
 
+  @UseGuards(RateLimitGuard('registrations-create', 5))
   @Post()
   create(@Body() dto: CreateRegistrationDto) {
     return this.service.create(dto);
@@ -89,6 +91,7 @@ export class RegistrationsController {
 
   // Multipart : reçu optionnel (champ "recu") aux côtés de la référence et
   // de l'acceptation des CGU — un seul aller-retour pour l'inscrit.
+  @UseGuards(RateLimitGuard('registrations-paiement-public', 10))
   @Post('contrats/:id/paiement')
   @UseInterceptors(
     FileInterceptor('recu', {
@@ -121,11 +124,13 @@ export class RegistrationsController {
   // Appelé par Papi (pas par le front) après chaque évolution de statut
   // de paiement — voir RegistrationsService.handlePapiWebhook pour
   // l'authentification (pas de header/signature, Papi n'en fournit pas).
+  @UseGuards(RateLimitGuard('registrations-papi-webhook', 30))
   @Post('contrats/:id/paiement-webhook')
   handlePapiWebhook(@Param('id') id: string, @Body() dto: PapiWebhookDto) {
     return this.service.handlePapiWebhook(id, dto);
   }
 
+  @UseGuards(RateLimitGuard('registrations-upload-cv', 10))
   @Post(':id/cv')
   @UseInterceptors(
     FileInterceptor('cv', {

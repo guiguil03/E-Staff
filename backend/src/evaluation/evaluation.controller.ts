@@ -31,6 +31,7 @@ import { CreateGroupeDto } from "./dto/create-groupe.dto";
 import { RhGuard } from "../common/rh.guard";
 import { StaffGuard } from "../common/staff.guard";
 import { FormateurGuard } from "../common/formateur.guard";
+import { RateLimitGuard } from "../common/rate-limit.guard";
 
 // Les vidéos sont bien plus volumineuses que l'audio — Multer bufférise en
 // mémoire (pas de config disque ici, cohérent avec l'upload audio existant),
@@ -92,11 +93,13 @@ export class EvaluationController {
     return this.service.listAgentsAcquisition();
   }
 
+  @UseGuards(RateLimitGuard("evaluation-create-candidat", 5))
   @Post("candidats")
   createCandidat(@Body() dto: CreateCandidatDto) {
     return this.service.createCandidat(dto);
   }
 
+  @UseGuards(RateLimitGuard("evaluation-upload-cv", 10))
   @Post("candidats/:id/cv")
   @UseInterceptors(
     FileInterceptor("cv", {
@@ -140,6 +143,7 @@ export class EvaluationController {
     return this.service.submitPartieOuverte(id, dto);
   }
 
+  @UseGuards(RateLimitGuard("evaluation-upload-audio", 20))
   @Post("attempts/:id/situations")
   @UseInterceptors(FileInterceptor("audio"))
   uploadSituationAudio(
@@ -150,6 +154,7 @@ export class EvaluationController {
     return this.service.saveSituationAudio(id, dto.situationIndex, file);
   }
 
+  @UseGuards(RateLimitGuard("evaluation-upload-video", 10))
   @Post("attempts/:id/videos")
   @UseInterceptors(
     FileInterceptor("video", {
