@@ -1,17 +1,18 @@
 import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
 import { StaffGuard } from "./staff.guard";
+import { signSession } from "./session";
 
-function makeContext(headers: Record<string, string | undefined>, ip: string): ExecutionContext {
+process.env.JWT_SECRET = "test-secret";
+
+function makeContext(cookies: Record<string, string | undefined>, ip: string): ExecutionContext {
   return {
     switchToHttp: () => ({
-      getRequest: () => ({ headers, ip }),
+      getRequest: () => ({ cookies, ip }),
     }),
   } as unknown as ExecutionContext;
 }
 
 describe("StaffGuard", () => {
-  const originalAdmin = process.env.ADMIN_TEST_MATRICULE;
-  const originalRh = process.env.RH_TEST_MATRICULE;
   let ipCounter = 0;
 
   function freshIp(): string {
@@ -19,38 +20,35 @@ describe("StaffGuard", () => {
     return `10.99.1.${ipCounter}`;
   }
 
-  beforeEach(() => {
-    process.env.ADMIN_TEST_MATRICULE = "ADMIN-SECRET";
-    process.env.RH_TEST_MATRICULE = "RH-SECRET";
-  });
-
-  afterEach(() => {
-    if (originalAdmin === undefined) delete process.env.ADMIN_TEST_MATRICULE;
-    else process.env.ADMIN_TEST_MATRICULE = originalAdmin;
-    if (originalRh === undefined) delete process.env.RH_TEST_MATRICULE;
-    else process.env.RH_TEST_MATRICULE = originalRh;
-  });
-
-  it("laisse passer avec le matricule admin valide", () => {
+  it("laisse passer avec une session admin", () => {
     const guard = new StaffGuard();
-    expect(
-      guard.canActivate(makeContext({ "x-admin-matricule": "ADMIN-SECRET" }, freshIp()))
-    ).toBe(true);
+    const context = makeContext(
+      { estaf_session: signSession({ matricule: "ADMIN-1", role: "admin" }) },
+      freshIp()
+    );
+    expect(guard.canActivate(context)).toBe(true);
   });
 
-  it("laisse passer avec le matricule RH valide", () => {
+  it("laisse passer avec une session RH", () => {
     const guard = new StaffGuard();
-    expect(
-      guard.canActivate(makeContext({ "x-rh-matricule": "RH-SECRET" }, freshIp()))
-    ).toBe(true);
+    const context = makeContext(
+      { estaf_session: signSession({ matricule: "RH-1", role: "rh" }) },
+      freshIp()
+    );
+    expect(guard.canActivate(context)).toBe(true);
   });
 
-  it("rejette si aucun des deux matricules n'est valide", () => {
+  it("rejette une session d'un autre rôle", () => {
     const guard = new StaffGuard();
-    expect(() =>
-      guard.canActivate(
-        makeContext({ "x-admin-matricule": "wrong", "x-rh-matricule": "wrong" }, freshIp())
-      )
-    ).toThrow(UnauthorizedException);
+    const context = makeContext(
+      { estaf_session: signSession({ matricule: "ETF-FORM-2026-0001", role: "formateur" }) },
+      freshIp()
+    );
+    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+  });
+
+  it("rejette quand aucun cookie de session n'est présent", () => {
+    const guard = new StaffGuard();
+    expect(() => guard.canActivate(makeContext({}, freshIp()))).toThrow(UnauthorizedException);
   });
 });

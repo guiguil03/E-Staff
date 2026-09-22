@@ -6,7 +6,7 @@ import Reveal from "@/components/Reveal";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { apiGet, apiPut } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
-import { APPRENANTS, apprenantMatricule } from "./exampleData";
+import { apprenantMatricule } from "./exampleData";
 import {
   COMPETENCY_DEFS,
   EXPRESSION_ORALE_CRITERIA,
@@ -34,6 +34,13 @@ interface NotationApi {
   note: number | null;
   commentaires: string | null;
   scoreOn20: number | null;
+}
+
+interface ApprenantListApi {
+  matricule: string;
+  prenom: string;
+  nom: string;
+  groupeCle: string;
 }
 
 function formateurHeaders(): HeadersInit {
@@ -75,10 +82,20 @@ export default function NoterApprenantDashboard({
   const [notations, setNotations] = useState<Record<string, NotationApi | null> | "loading" | "erreur">(
     "loading"
   );
+  // Branché sur /cockpit/apprenants depuis le 2026-09-22 — le prénom/nom
+  // affichés venaient avant d'exampleData.ts (30 faux apprenants), la vraie
+  // notation étant déjà persistée sous le bon matricule depuis longtemps.
+  const [apprenant, setApprenant] = useState<ApprenantListApi | null | "loading">("loading");
 
-  const apprenant = APPRENANTS.find((a) => a.id === apprenantId);
-  const matricule = apprenant ? apprenantMatricule(apprenant.id) : null;
+  const matricule = apprenantMatricule(apprenantId);
   const backHref = `/compte/formateur/planning?groupe=${groupe}&seance=${seance}`;
+
+  useEffect(() => {
+    if (!checked) return;
+    apiGet<ApprenantListApi[]>("/cockpit/apprenants", formateurHeaders())
+      .then((list) => setApprenant(list.find((a) => a.matricule === matricule) ?? null))
+      .catch(() => setApprenant(null));
+  }, [checked, matricule]);
 
   useEffect(() => {
     if (!checked || !matricule) return;
@@ -95,7 +112,7 @@ export default function NoterApprenantDashboard({
       .catch(() => setNotations("erreur"));
   }, [checked, matricule, groupe, seance]);
 
-  if (!checked || notations === "loading") {
+  if (!checked || notations === "loading" || apprenant === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-obsidian">
         <p className="font-sans text-sm text-white/50">Chargement...</p>
@@ -103,7 +120,7 @@ export default function NoterApprenantDashboard({
     );
   }
 
-  if (!apprenant || !matricule) {
+  if (!apprenant) {
     return (
       <div className="min-h-screen bg-obsidian px-4 py-10 text-center">
         <p className="font-sans text-sm text-white/50">Apprenant introuvable.</p>
@@ -163,10 +180,10 @@ export default function NoterApprenantDashboard({
 
         <Reveal>
           <h1 className="mt-4 font-display text-2xl font-bold text-white sm:text-3xl">
-            {apprenant.firstName} {apprenant.lastName}
+            {apprenant.prenom} {apprenant.nom}
           </h1>
           <p className="mt-1 font-sans text-sm text-white/60">
-            Groupe {apprenant.groupe} — Séance n°{seance}
+            Groupe {apprenant.groupeCle} — Séance n°{seance}
           </p>
         </Reveal>
 

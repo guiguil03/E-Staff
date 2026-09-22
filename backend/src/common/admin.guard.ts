@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import type { Request } from "express";
+import { readSession } from "./session";
 import { recordFailure, recordSuccess, remainingLockoutSeconds } from "./login-rate-limit";
 
 // Gate des routes d'administration : planification du Live du Forum, et
@@ -12,11 +13,11 @@ import { recordFailure, recordSuccess, remainingLockoutSeconds } from "./login-r
 // apprenant), les événements (réunions) et les rentrées (Vagues) côté
 // Portail RH — le reste (clients/contrats, finances, pilotage) est passé à
 // RhGuard (voir rh.guard.ts), le compte admin d'origine étant surchargé.
-// Même pattern que FormateurGuard : le matricule admin envoyé dans le
-// header `x-admin-matricule` doit correspondre au compte de test
-// ADMIN_TEST_MATRICULE. Stopgap comme le reste des comptes de test, à
-// remplacer par une vraie auth (module 7 de la roadmap). Anti-brute-force
-// par IP depuis 2026-08-24 (voir login-rate-limit.ts).
+// Exige une session signée au login avec le rôle "admin" — remplace
+// l'ancien stopgap qui comparait un header `x-admin-matricule` à un secret
+// d'env partagé (secret forcément stocké côté client pour être renvoyé à
+// chaque appel, donc exposé à tout XSS/historique réseau, sans expiration
+// possible sans changer la variable d'env pour tout le monde à la fois).
 @Injectable()
 export class AdminGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
@@ -28,13 +29,12 @@ export class AdminGuard implements CanActivate {
       throw new UnauthorizedException(`Trop de tentatives. Réessayez dans ${lockedFor}s.`);
     }
 
-    const matricule = request.headers["x-admin-matricule"];
-    const expected = process.env.ADMIN_TEST_MATRICULE;
-
-    if (!expected || matricule !== expected) {
+    const session = readSession(request);
+    if (!session || session.role !== "admin") {
       recordFailure(key);
-      throw new UnauthorizedException("Matricule admin invalide.");
+      throw new UnauthorizedException("Session admin invalide ou expirée.");
     }
+
     recordSuccess(key);
     return true;
   }

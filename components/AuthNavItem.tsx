@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { ACCOUNT_ROLE_KEY, ACCOUNT_MATRICULE_KEY, ROLE_ROUTES } from "@/lib/accountSession";
+import { apiPost } from "@/lib/api";
 
 // Remplace "Se connecter" par le matricule (lien vers le tableau de bord) +
 // "Se déconnecter" une fois connecté. Rendu initial = déconnecté (state SSR-
@@ -29,6 +30,10 @@ export default function AuthNavItem() {
   }, [pathname]);
 
   function logout() {
+    // Efface aussi le cookie de session côté serveur (voir
+    // AuthController.logout) — sinon il reste valable jusqu'à son
+    // expiration (12h) même après un "Se déconnecter" côté client.
+    apiPost("/auth/logout", {}).catch(() => {});
     sessionStorage.removeItem(ACCOUNT_ROLE_KEY);
     sessionStorage.removeItem(ACCOUNT_MATRICULE_KEY);
     setSession(null);

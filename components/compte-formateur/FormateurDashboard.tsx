@@ -44,6 +44,7 @@ export default function FormateurDashboard() {
   const [panel, setPanel] = useState<PanelState>(null);
   const [groupes, setGroupes] = useState<CockpitGroupe[]>([]);
   const [globalC1Rate, setGlobalC1Rate] = useState(0);
+  const [prenom, setPrenom] = useState<string | null>(null);
 
   useEffect(() => {
     if (!checked) return;
@@ -53,6 +54,9 @@ export default function FormateurDashboard() {
     apiGet<{ globalRate: number }>("/cockpit/vivier-c1", formateurHeaders())
       .then((data) => setGlobalC1Rate(data.globalRate))
       .catch(() => setGlobalC1Rate(0));
+    apiGet<{ prenom: string }>("/cockpit/profil", formateurHeaders())
+      .then((data) => setPrenom(data.prenom))
+      .catch(() => setPrenom(null));
   }, [checked]);
 
   function goToApprenant(id: string) {
@@ -76,7 +80,7 @@ export default function FormateurDashboard() {
             Cockpit Formateur
           </p>
           <h1 className="mt-1 font-display text-xl font-semibold text-white sm:text-2xl">
-            Bonjour, Hasina
+            {prenom ? `Bonjour, ${prenom}` : "Bonjour"}
           </h1>
         </Reveal>
 

@@ -5,7 +5,7 @@ import Link from "next/link";
 import Reveal from "@/components/Reveal";
 import CalendarMonthView, { type CalendarEvent } from "@/components/ui/CalendarMonthView";
 import { useRequireRole } from "@/lib/useRequireRole";
-import { apiGet, ApiError } from "@/lib/api";
+import { apiGet } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 
 interface SeanceApi {
@@ -31,9 +31,13 @@ export default function CalendrierDashboard() {
       setSeances("erreur");
       return;
     }
+    // Toute erreur (401/403, 5xx, réseau) doit remonter comme une vraie
+    // erreur, jamais comme "aucune séance" — un calendrier vide en cas de
+    // panne backend a l'air normal et masque le vrai problème (voir
+    // signalement du 2026-09-22).
     apiGet<SeanceApi[]>(`/apprenants/${matricule}/seances`)
       .then(setSeances)
-      .catch((err) => setSeances(err instanceof ApiError ? [] : "erreur"));
+      .catch(() => setSeances("erreur"));
   }, [checked]);
 
   if (!checked) {

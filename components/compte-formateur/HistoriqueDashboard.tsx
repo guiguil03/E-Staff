@@ -6,7 +6,11 @@ import Reveal from "@/components/Reveal";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { apiGet, ApiError } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
-import { GROUPES } from "./exampleData";
+
+interface GroupeOption {
+  cle: string;
+  label: string;
+}
 
 interface PresenceApi {
   apprenantId: string | null;
@@ -44,13 +48,27 @@ function formatDuree(seconds: number | null): string {
 
 export default function HistoriqueDashboard() {
   const checked = useRequireRole("formateur");
-  const [groupeKey, setGroupeKey] = useState(GROUPES[0].key);
+  const [groupes, setGroupes] = useState<GroupeOption[]>([]);
+  const [groupeKey, setGroupeKey] = useState<string | null>(null);
   const [historique, setHistorique] = useState<SeanceHistoriqueApi[] | "loading" | "erreur">(
     "loading"
   );
 
+  // Branché sur /cockpit/groupes depuis le 2026-09-22 — le sélecteur de
+  // groupe listait avant les 6 groupes fictifs d'exampleData.ts, jamais les
+  // vrais groupes de ce formateur.
   useEffect(() => {
     if (!checked) return;
+    apiGet<GroupeOption[]>("/cockpit/groupes", formateurHeaders())
+      .then((data) => {
+        setGroupes(data);
+        setGroupeKey((current) => current ?? data[0]?.cle ?? null);
+      })
+      .catch(() => setGroupes([]));
+  }, [checked]);
+
+  useEffect(() => {
+    if (!checked || !groupeKey) return;
     setHistorique("loading");
     apiGet<SeanceHistoriqueApi[]>(`/groupes/${groupeKey}/historique`, formateurHeaders())
       .then(setHistorique)
@@ -88,12 +106,12 @@ export default function HistoriqueDashboard() {
                 Groupe
               </label>
               <select
-                value={groupeKey}
+                value={groupeKey ?? ""}
                 onChange={(e) => setGroupeKey(e.target.value)}
                 className="mt-1 rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
               >
-                {GROUPES.map((g) => (
-                  <option key={g.key} value={g.key}>
+                {groupes.map((g) => (
+                  <option key={g.cle} value={g.cle}>
                     {g.label}
                   </option>
                 ))}

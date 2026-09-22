@@ -559,6 +559,44 @@ describe("NotationService", () => {
       });
     });
 
+    it("choisit la séance future la plus proche dans le temps, même si le formateur l'a programmée avec un numéro plus élevé qu'une autre séance future plus lointaine", async () => {
+      const now = Date.now();
+      const jour = 24 * 60 * 60 * 1000;
+
+      prisma.apprenant.findUnique.mockResolvedValue({
+        id: "app-3",
+        matricule: "ETF-2026-0003",
+        prenom: "Fy",
+        groupeId: "groupe-1",
+        createdAt: new Date(now - jour),
+        abonnementExpireAt: null,
+        groupe: { label: "Groupe A", typeCours: null, formateur: null },
+        evaluationAttempt: null,
+      });
+
+      // Le formateur a programmé la séance n°5 pour demain, mais la séance
+      // n°3 (numéro plus petit) est programmée dans 2 mois : .find() sur une
+      // liste triée par numéro renverrait à tort la séance n°3.
+      const seanceProche = { id: "s-5", numero: 5, startAt: new Date(now + jour), objectifs: null };
+      const seanceLointaine = {
+        id: "s-3",
+        numero: 3,
+        startAt: new Date(now + 60 * jour),
+        objectifs: null,
+      };
+      prisma.seance.findMany.mockResolvedValue([seanceLointaine, seanceProche]);
+      prisma.presence.findMany.mockResolvedValue([]);
+      prisma.notation.findMany.mockResolvedValue([]);
+
+      const result = await service.getApprenantDashboard("ETF-2026-0003");
+
+      expect(result.prochaineSeance).toEqual({
+        numero: 5,
+        titre: "Séance 5",
+        startAt: seanceProche.startAt,
+      });
+    });
+
     it("ne fabrique aucune donnée quand l'apprenant n'a ni test d'admission ni notation ni séance passée", async () => {
       prisma.apprenant.findUnique.mockResolvedValue({
         id: "app-2",

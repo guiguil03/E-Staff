@@ -5,7 +5,7 @@ import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
 import { apiGet, apiPostAuthed } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
-import { APPRENANTS, apprenantIdFromMatricule } from "./exampleData";
+import { apprenantIdFromMatricule } from "./exampleData";
 
 interface VivierApprenantApi {
   matricule: string;
@@ -13,6 +13,13 @@ interface VivierApprenantApi {
   nom: string;
   groupeCle: string;
   moyenneGlobale: number;
+}
+
+interface ApprenantListApi {
+  matricule: string;
+  prenom: string;
+  nom: string;
+  groupeCle: string;
 }
 
 interface GroupeOption {
@@ -41,12 +48,22 @@ interface ReportProps {
 // h-full pour s'aligner sur la hauteur de leurs voisines de rangée. Pointage
 // et diffusion restent en état local (pas de backend de présence/messagerie
 // pour l'instant) ; honnête sur ce qui est simulé vs. vraiment envoyé.
+// Branché sur /cockpit/apprenants depuis le 2026-09-22 — cherchait avant
+// dans exampleData.ts (30 faux noms), donc chercher un vrai apprenant ne
+// renvoyait jamais rien.
 export function SearchApprenantCard({ onSelectApprenant }: ApprenantPickerProps) {
   const [search, setSearch] = useState("");
+  const [apprenants, setApprenants] = useState<ApprenantListApi[]>([]);
+
+  useEffect(() => {
+    apiGet<ApprenantListApi[]>("/cockpit/apprenants", formateurHeaders())
+      .then(setApprenants)
+      .catch(() => setApprenants([]));
+  }, []);
 
   const filteredApprenants = search.trim()
-    ? APPRENANTS.filter((a) =>
-        `${a.firstName} ${a.lastName}`.toLowerCase().includes(search.toLowerCase())
+    ? apprenants.filter((a) =>
+        `${a.prenom} ${a.nom}`.toLowerCase().includes(search.toLowerCase())
       )
     : [];
 
@@ -66,13 +83,13 @@ export function SearchApprenantCard({ onSelectApprenant }: ApprenantPickerProps)
         {filteredApprenants.length > 0 && (
           <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
             {filteredApprenants.map((a) => (
-              <li key={a.id}>
+              <li key={a.matricule}>
                 <button
-                  onClick={() => onSelectApprenant(a.id)}
+                  onClick={() => onSelectApprenant(apprenantIdFromMatricule(a.matricule))}
                   className="w-full rounded px-2 py-1.5 text-left font-sans text-sm text-white/80 transition-colors hover:bg-obsidian hover:text-accent"
                 >
-                  {a.firstName} {a.lastName}{" "}
-                  <span className="text-white/40">— Groupe {a.groupe}</span>
+                  {a.prenom} {a.nom}{" "}
+                  <span className="text-white/40">— Groupe {a.groupeCle}</span>
                 </button>
               </li>
             ))}

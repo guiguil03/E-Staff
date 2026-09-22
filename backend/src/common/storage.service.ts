@@ -39,6 +39,12 @@ export class StorageService {
     );
   }
 
+  // Purge RGPD (voir RhService.purgeCandidatData) — seul appelant à ce
+  // jour : le reste du produit ne supprime jamais un fichier déposé.
+  async deleteObject(key: string): Promise<void> {
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+  }
+
   async getObjectStream(
     key: string
   ): Promise<{ stream: Readable; contentType?: string }> {

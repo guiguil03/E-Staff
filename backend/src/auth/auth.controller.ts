@@ -4,11 +4,12 @@ import {
   Param,
   Post,
   Req,
+  Res,
   UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { LoginDto } from "./dto/login.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
@@ -19,6 +20,7 @@ import { AdminGuard } from "../common/admin.guard";
 import { RhGuard } from "../common/rh.guard";
 import { recordFailure, recordSuccess, remainingLockoutSeconds } from "../common/login-rate-limit";
 import { consumeViewAsToken } from "../common/view-as-token";
+import { clearSessionCookie, setSessionCookie, SessionRole } from "../common/session";
 
 // Login générique — stopgap pour Admin/RH (un identifiant de test partagé
 // par compte, une seule personne interne connue par compte — voir brainstorm
@@ -47,7 +49,11 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post("login")
-  async login(@Body() dto: LoginDto, @Req() request: Request) {
+  async login(
+    @Body() dto: LoginDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response
+  ) {
     // Anti-brute-force par IP (voir login-rate-limit.ts) — protège à la fois
     // les codes de test partagés (formateur/admin) et les vrais mots de
     // passe apprenant.
@@ -62,23 +68,32 @@ export class AuthController {
     );
     if (account) {
       recordSuccess(key);
+      setSessionCookie(response, { matricule: dto.matricule, role: account.role as SessionRole });
       return { ok: true, role: account.role };
     }
 
     const formateur = await this.authService.loginFormateur(dto.matricule, dto.password);
     if (formateur) {
       recordSuccess(key);
+      setSessionCookie(response, { matricule: formateur.matricule, role: "formateur" });
       return { ok: true, role: "formateur" };
     }
 
     const apprenant = await this.authService.loginApprenant(dto.matricule, dto.password);
     if (apprenant) {
       recordSuccess(key);
+      setSessionCookie(response, { matricule: apprenant.matricule, role: "apprenant" });
       return { ok: true, role: "apprenant" };
     }
 
     recordFailure(key);
     throw new UnauthorizedException("Matricule ou mot de passe invalide.");
+  }
+
+  @Post("logout")
+  logout(@Res({ passthrough: true }) response: Response) {
+    clearSessionCookie(response);
+    return { ok: true };
   }
 
   @Post("change-password")
@@ -117,11 +132,22 @@ export class AuthController {
   }
 
   @Post("view-as/consume")
-  consumeViewAs(@Body() dto: ConsumeViewAsTokenDto) {
+  consumeViewAs(
+    @Body() dto: ConsumeViewAsTokenDto,
+    @Res({ passthrough: true }) response: Response
+  ) {
     const result = consumeViewAsToken(dto.token);
     if (!result) {
       throw new UnauthorizedException("Lien de connexion invalide ou expiré.");
     }
+    // Pose la session du nouvel onglet (rôle/matricule ciblés) au même
+    // titre qu'un vrai login — sans ça, les routes désormais gardées par
+    // FormateurGuard/ApprenantGuard resteraient inaccessibles depuis une
+    // session "se connecter en tant que".
+    setSessionCookie(response, {
+      matricule: result.matricule,
+      role: result.role as SessionRole,
+    });
     return result;
   }
 }

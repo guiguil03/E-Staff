@@ -1,21 +1,22 @@
 import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
 import { AdminGuard } from "./admin.guard";
 import { RhGuard } from "./rh.guard";
-import { TrainerGuard } from "./trainer.guard";
+import { signSession } from "./session";
 
-// AdminGuard, RhGuard et TrainerGuard partagent exactement le même squelette
-// (secret partagé par header + anti-brute-force via login-rate-limit.ts) —
-// un seul fichier paramétré plutôt que 3 fichiers quasi identiques, un cas
-// par guard suffit à couvrir la logique propre à chacun (nom du header/de la
-// var d'env, message d'erreur). FormateurGuard a son propre fichier
-// (formateur.guard.spec.ts) depuis qu'il vérifie un vrai compte en base
-// plutôt qu'un secret partagé — squelette différent (async, Prisma).
-// StaffGuard (les deux secrets à la fois) a aussi son propre fichier
-// (staff.guard.spec.ts), squelette différent (accepte deux headers).
-function makeContext(headers: Record<string, string | undefined>, ip: string): ExecutionContext {
+// AdminGuard et RhGuard partagent exactement le même squelette (session
+// signée par cookie + anti-brute-force via login-rate-limit.ts) — un seul
+// fichier paramétré plutôt que 2 fichiers quasi identiques, un cas par
+// guard suffit à couvrir la logique propre à chacun (rôle attendu, message
+// d'erreur). FormateurGuard a son propre fichier (formateur.guard.spec.ts).
+// ApprenantGuard aussi (apprenant.guard.spec.ts) — vérifie en plus que le
+// matricule de la session correspond à celui de l'URL. StaffGuard (les deux
+// rôles à la fois) a aussi son propre fichier (staff.guard.spec.ts).
+process.env.JWT_SECRET = "test-secret";
+
+function makeContext(cookies: Record<string, string | undefined>, ip: string): ExecutionContext {
   return {
     switchToHttp: () => ({
-      getRequest: () => ({ headers, ip }),
+      getRequest: () => ({ cookies, ip }),
     }),
   } as unknown as ExecutionContext;
 }
@@ -24,31 +25,20 @@ const cases = [
   {
     name: "AdminGuard",
     Guard: AdminGuard,
-    header: "x-admin-matricule",
-    envVar: "ADMIN_TEST_MATRICULE",
-    invalidMessage: "Matricule admin invalide.",
+    role: "admin" as const,
+    invalidMessage: "Session admin invalide ou expirée.",
     keyPrefix: "admin",
   },
   {
     name: "RhGuard",
     Guard: RhGuard,
-    header: "x-rh-matricule",
-    envVar: "RH_TEST_MATRICULE",
-    invalidMessage: "Matricule RH invalide.",
+    role: "rh" as const,
+    invalidMessage: "Session RH invalide ou expirée.",
     keyPrefix: "rh",
-  },
-  {
-    name: "TrainerGuard",
-    Guard: TrainerGuard,
-    header: "x-trainer-code",
-    envVar: "TRAINER_ACCESS_CODE",
-    invalidMessage: "Code formateur invalide.",
-    keyPrefix: "trainer",
   },
 ];
 
-describe.each(cases)("$name", ({ Guard, header, envVar, invalidMessage, keyPrefix }) => {
-  const originalEnv = process.env[envVar];
+describe.each(cases)("$name", ({ Guard, role, invalidMessage, keyPrefix }) => {
   let ipCounter = 0;
 
   function freshIp(): string {
@@ -56,62 +46,55 @@ describe.each(cases)("$name", ({ Guard, header, envVar, invalidMessage, keyPrefi
     return `10.${keyPrefix.length}.0.${ipCounter}`;
   }
 
-  afterEach(() => {
-    if (originalEnv === undefined) delete process.env[envVar];
-    else process.env[envVar] = originalEnv;
-  });
+  function validCookie() {
+    return { estaf_session: signSession({ matricule: "ETF-2026-0001", role }) };
+  }
 
-  it("laisse passer quand le secret envoyé correspond à la variable d'env", () => {
-    process.env[envVar] = "SECRET-123";
+  function wrongRoleCookie() {
+    const otherRole = role === "admin" ? "rh" : "admin";
+    return { estaf_session: signSession({ matricule: "ETF-2026-0001", role: otherRole }) };
+  }
+
+  it("laisse passer avec une session du bon rôle", () => {
     const guard = new Guard();
-    const context = makeContext({ [header]: "SECRET-123" }, freshIp());
+    const context = makeContext(validCookie(), freshIp());
     expect(guard.canActivate(context)).toBe(true);
   });
 
-  it("rejette quand le secret envoyé ne correspond pas", () => {
-    process.env[envVar] = "SECRET-123";
+  it("rejette une session d'un autre rôle", () => {
     const guard = new Guard();
-    const context = makeContext({ [header]: "wrong" }, freshIp());
+    const context = makeContext(wrongRoleCookie(), freshIp());
     expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
     expect(() => guard.canActivate(context)).toThrow(invalidMessage);
   });
 
-  it("rejette quand la variable d'env n'est pas configurée, même sans header", () => {
-    delete process.env[envVar];
+  it("rejette quand aucun cookie de session n'est présent", () => {
     const guard = new Guard();
     const context = makeContext({}, freshIp());
     expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
   });
 
-  it("verrouille l'IP après 5 échecs consécutifs, même avec le bon secret ensuite", () => {
-    process.env[envVar] = "SECRET-123";
+  it("verrouille l'IP après 5 échecs consécutifs, même avec une bonne session ensuite", () => {
     const guard = new Guard();
     const ip = freshIp();
 
     for (let i = 0; i < 5; i++) {
-      expect(() => guard.canActivate(makeContext({ [header]: "wrong" }, ip))).toThrow(
-        UnauthorizedException
-      );
+      expect(() => guard.canActivate(makeContext({}, ip))).toThrow(UnauthorizedException);
     }
 
-    expect(() => guard.canActivate(makeContext({ [header]: "SECRET-123" }, ip))).toThrow(
-      /Trop de tentatives/
-    );
+    expect(() => guard.canActivate(makeContext(validCookie(), ip))).toThrow(/Trop de tentatives/);
   });
 
   it("une réussite remet le compteur d'échecs à zéro pour cette IP", () => {
-    process.env[envVar] = "SECRET-123";
     const guard = new Guard();
     const ip = freshIp();
 
-    expect(() => guard.canActivate(makeContext({ [header]: "wrong" }, ip))).toThrow();
-    expect(() => guard.canActivate(makeContext({ [header]: "wrong" }, ip))).toThrow();
-    expect(() => guard.canActivate(makeContext({ [header]: "SECRET-123" }, ip))).not.toThrow();
+    expect(() => guard.canActivate(makeContext({}, ip))).toThrow();
+    expect(() => guard.canActivate(makeContext({}, ip))).toThrow();
+    expect(() => guard.canActivate(makeContext(validCookie(), ip))).not.toThrow();
 
     for (let i = 0; i < 4; i++) {
-      expect(() => guard.canActivate(makeContext({ [header]: "wrong" }, ip))).toThrow(
-        invalidMessage
-      );
+      expect(() => guard.canActivate(makeContext({}, ip))).toThrow(invalidMessage);
     }
   });
 });

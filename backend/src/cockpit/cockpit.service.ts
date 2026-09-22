@@ -145,6 +145,35 @@ export class CockpitService {
     return result;
   }
 
+  // Identité du formateur connecté (prénom affiché en en-tête du Cockpit) —
+  // avant le 2026-09-22, le prénom du compte de démo ("Hasina") restait
+  // affiché en dur, y compris une fois de vrais comptes individuels en
+  // place (2026-09-16).
+  async getProfil(formateurMatricule: string) {
+    const formateur = await this.findFormateurOrThrow(formateurMatricule);
+    return { prenom: formateur.prenom, nom: formateur.nom };
+  }
+
+  // Liste plate de tous les apprenants du formateur, tous groupes confondus
+  // — sert la recherche d'apprenant du Cockpit (voir AdminColumn.tsx,
+  // SearchApprenantCard). Avant le 2026-09-22, cette recherche tournait sur
+  // exampleData.ts (30 faux noms) : chercher un vrai apprenant ne
+  // renvoyait jamais rien.
+  async listApprenants(formateurMatricule: string) {
+    const formateur = await this.findFormateurOrThrow(formateurMatricule);
+    const apprenants = await this.prisma.apprenant.findMany({
+      where: { groupe: { formateurId: formateur.id } },
+      select: { matricule: true, prenom: true, nom: true, groupe: { select: { cle: true } } },
+      orderBy: { prenom: "asc" },
+    });
+    return apprenants.map((a) => ({
+      matricule: a.matricule,
+      prenom: a.prenom,
+      nom: a.nom,
+      groupeCle: a.groupe.cle,
+    }));
+  }
+
   // Filtré aux groupes du formateur connecté (voir Groupe.formateurId) —
   // avant les comptes individuels (2026-09-16), un seul compte formateur
   // partagé voyait systématiquement tous les groupes.
@@ -337,6 +366,81 @@ export class CockpitService {
       avgCompetencies,
       avgAbsence,
       apprenants: apprenantsList,
+    };
+  }
+
+  // Fiche individuelle d'un apprenant — moyenne, compétences (dernière note
+  // connue par compétence, même logique que le radar de groupe), historique
+  // par séance (même séances que EVOLUTION_SEANCES, pour rester cohérent
+  // avec la courbe de groupe) et rendus en attente de correction. Branché
+  // depuis le 2026-09-22 (ApprenantFichePage.tsx tournait avant sur
+  // exampleData.ts, 30 faux apprenants).
+  async getApprenantFiche(matricule: string, formateurMatricule?: string) {
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { matricule },
+      include: { groupe: true },
+    });
+    if (!apprenant) throw new NotFoundException(`Apprenant ${matricule} introuvable.`);
+
+    if (formateurMatricule) {
+      const formateur = await this.findFormateurOrThrow(formateurMatricule);
+      if (apprenant.groupe.formateurId !== formateur.id) {
+        throw new ForbiddenException(`Vous n'encadrez pas cet apprenant.`);
+      }
+    }
+
+    const { apprenants: tousApprenants, notations, seancesPassees, presences } = await this.loadRaw();
+    const scoresParApprenant = this.buildScoresParApprenant(notations);
+    const tauxAbsenceParApprenant = this.buildTauxAbsence(tousApprenants, seancesPassees, presences);
+    const bySeance = scoresParApprenant.get(apprenant.id);
+
+    const competencies = COMPETENCIES.map((key) => {
+      let latest: number | null = null;
+      let latestNumero = -1;
+      if (bySeance) {
+        for (const [numero, scores] of bySeance) {
+          if (scores[key] !== undefined && numero > latestNumero) {
+            latestNumero = numero;
+            latest = scores[key];
+          }
+        }
+      }
+      return { key, score: latest ?? 0 };
+    });
+
+    const history = EVOLUTION_SEANCES.map((numero) => {
+      const scores = bySeance?.get(numero);
+      const complete = scores && COMPETENCIES.every((c) => scores[c] !== undefined);
+      const moyenne = complete
+        ? Math.round(COMPETENCIES.reduce((sum, c) => sum + scores![c], 0) * 100) / 100
+        : null;
+      return { label: `S${numero}`, moyenne };
+    });
+
+    const tauxAbsence = tauxAbsenceParApprenant.get(apprenant.id) ?? null;
+    const rendus = await this.prisma.notation.findMany({
+      where: { apprenantId: apprenant.id, fileKey: { not: null }, gradedAt: null },
+      include: { seance: true },
+      orderBy: { soumisAt: "asc" },
+    });
+
+    return {
+      matricule: apprenant.matricule,
+      prenom: apprenant.prenom,
+      nom: apprenant.nom,
+      groupeCle: apprenant.groupe.cle,
+      moyenneGlobale: this.moyenneGlobale(bySeance),
+      tauxAbsence,
+      alerteDecrochage: tauxAbsence !== null && tauxAbsence >= ALERTE_DECROCHAGE_TAUX_ABSENCE,
+      competencies,
+      history,
+      rendusEnAttente: rendus.map((r) => ({
+        id: r.id,
+        competence: r.competence,
+        numero: r.seance.numero,
+        fileName: r.fileName,
+        soumisAt: r.soumisAt,
+      })),
     };
   }
 

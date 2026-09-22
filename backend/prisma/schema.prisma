@@ -124,9 +124,9 @@ model Registration {
   // conservé mais inutilisé côté produit depuis le retour au flux
   // déclaratif ci-dessus (2026-09-09) ; réactivable plus tard sans
   // migration si un vrai compte marchand est ouvert.
-  paymentAmount          Int?
-  papiReference          String?
-  papiNotificationToken  String?
+  paymentAmount         Int?
+  papiReference         String?
+  papiNotificationToken String?
 
   // "papi" | "manuel" — renseigné à la confirmation, pour distinguer un
   // paiement auto-confirmé par webhook Papi d'une confirmation manuelle
@@ -194,8 +194,8 @@ model Connecteur {
   status    String   @default("nouveau")
   createdAt DateTime @default(now())
 
-  apprenantsApportes Apprenant[]
-  contratsApportes   ContratB2B[]
+  apprenantsApportes   Apprenant[]
+  contratsApportes     ContratB2B[]
   commissionsDemarrage CommissionDemarrageApporteur[]
 }
 
@@ -226,6 +226,15 @@ model Candidat {
   agentAcquisition   AgentAcquisition? @relation(fields: [agentAcquisitionId], references: [id])
 
   attempts EvaluationAttempt[]
+
+  // Purge RGPD manuelle déclenchée par la RH (voir RhService.
+  // purgeCandidatData) — non null = CV/audio/vidéo supprimés du stockage et
+  // coordonnées anonymisées. Conserve la date pour pouvoir justifier d'une
+  // suppression sur demande d'un candidat, sans perdre la trace statistique
+  // du passage dans le pipeline (voir RhService.getCycleComplet).
+  dataPurgedAt DateTime?
+
+  @@index([agentAcquisitionId])
 }
 
 // ---------------------------------------------------------------------------
@@ -282,7 +291,7 @@ model EvaluationAttempt {
   // prorata des scores définis par sécurité, mais couvre maintenant les 5.
   totalScore Float?
   // "refuse" | "formation_b1" | "niveau_b2" | "niveau_c1" | "placement_direct"
-  tier String?
+  tier       String?
 
   submittedAt       DateTime?
   gradedAt          DateTime?
@@ -334,6 +343,8 @@ model EvaluationAttempt {
   videoResponses      VideoResponse[]
   essayResponse       EssayResponse?
   ecritOuvertResponse EcritOuvertResponse?
+
+  @@index([candidatId])
 }
 
 // Une réponse audio à une des 10 situations professionnelles (le candidat
@@ -419,11 +430,11 @@ model EcritOuvertResponse {
   attemptId String            @unique
   attempt   EvaluationAttempt @relation(fields: [attemptId], references: [id])
 
-  reformulationText String
-  plurielTexts      String // JSON string[3]
-  styleText         String
-  synonymeText      String
-  redactionText     String
+  reformulationText  String
+  plurielTexts       String // JSON string[3]
+  styleText          String
+  synonymeText       String
+  redactionText      String
   redactionWordCount Int
 
   score          Float? // 0 à 10
@@ -466,10 +477,9 @@ model Groupe {
   dateDebut DateTime?
   dateFin   DateTime?
 
-  apprenants    Apprenant[]
-  seances       Seance[]
-  diffusions    Diffusion[]
-  supportsCours SupportCours[]
+  apprenants Apprenant[]
+  seances    Seance[]
+  diffusions Diffusion[]
 }
 
 // Annonce diffusée par un formateur — jusqu'ici BroadcastCard (Cockpit
@@ -486,6 +496,9 @@ model Diffusion {
   groupe      Groupe?   @relation(fields: [groupeId], references: [id])
   message     String
   createdAt   DateTime  @default(now())
+
+  @@index([formateurId])
+  @@index([groupeId])
 }
 
 model Formateur {
@@ -548,7 +561,7 @@ model SupportCours {
 // au moment de la validation (voir CockpitService.getRapportHebdo) pour que
 // l'historique reste lisible même si les chiffres bougent ensuite.
 model BilanFormateur {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   formateurId String
   formateur   Formateur @relation(fields: [formateurId], references: [id])
 
@@ -559,6 +572,8 @@ model BilanFormateur {
   statsSnapshot Json
 
   createdAt DateTime @default(now())
+
+  @@index([formateurId])
 }
 
 // Documents rattachés à un formateur — fiches de préparation (déposées
@@ -567,7 +582,7 @@ model BilanFormateur {
 // `type` distingue l'usage, `uploadedBy` qui l'a déposé. Fichier réel dans
 // le bucket S3-compatible (voir StorageService), storageKey seule en base.
 model FormateurDocument {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   formateurId String
   formateur   Formateur @relation(fields: [formateurId], references: [id])
 
@@ -577,6 +592,8 @@ model FormateurDocument {
   uploadedBy String // "formateur" | "rh"
 
   createdAt DateTime @default(now())
+
+  @@index([formateurId])
 }
 
 // Paie individuelle d'un formateur pour une période — miroir de PaiementAgent
@@ -675,8 +692,8 @@ model Apprenant {
   moyenPaiementType      String? // "RIB" | "MVola" | "Orange Money" | "Airtel Money"
   coordonneesVerifieesLe DateTime?
 
-  presences Presence[]
-  notations Notation[]
+  presences         Presence[]
+  notations         Notation[]
   // Tentative d'évaluation à l'origine de la création de ce compte, quand
   // applicable (pipeline post-test) — absent pour les apprenants seedés/
   // créés manuellement.
@@ -702,18 +719,24 @@ model Apprenant {
   // Renouvellements d'abonnement FOL comptant comme "réinscription" pour la
   // commission de l'agent d'acquisition (voir RhService.renouvelerAbonnement).
   reinscriptions Reinscription[]
+
+  @@index([groupeId])
+  @@index([connecteurId])
+  @@index([agentAcquisitionId])
 }
 
 // Un renouvellement d'abonnement FOL déclenché par la RH — évènement tracé
 // (pas juste un écrasement de abonnementExpireAt) pour pouvoir compter le
 // nombre de réinscriptions dans le suivi des Agents d'Acquisition.
 model Reinscription {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   apprenantId String
   apprenant   Apprenant @relation(fields: [apprenantId], references: [id])
 
   renouveleLe      DateTime @default(now())
   nouvelleEcheance DateTime
+
+  @@index([apprenantId])
 }
 
 // Horaire réel d'une des 12 séances d'un groupe. startAt reste nullable :
@@ -778,6 +801,7 @@ model Notation {
   gradedAt     DateTime?
 
   @@unique([seanceId, apprenantId, competence])
+  @@index([apprenantId])
 }
 
 // Présence en classe virtuelle — alimentée par les webhooks Daily
@@ -786,9 +810,9 @@ model Notation {
 // qu'on n'arrive pas à rattacher (ex. le formateur, ou un identifiant de
 // token corrompu) — on garde quand même la ligne plutôt que de la perdre.
 model Presence {
-  id       String  @id @default(cuid())
+  id       String @id @default(cuid())
   seanceId String
-  seance   Seance  @relation(fields: [seanceId], references: [id])
+  seance   Seance @relation(fields: [seanceId], references: [id])
 
   apprenantId String?
   apprenant   Apprenant? @relation(fields: [apprenantId], references: [id])
@@ -800,6 +824,9 @@ model Presence {
   joinedAt      DateTime
   leftAt        DateTime?
   dureeSecondes Int?
+
+  @@index([seanceId])
+  @@index([apprenantId])
 }
 
 // ---------------------------------------------------------------------------
@@ -883,10 +910,10 @@ model Superviseur {
   moyenPaiementType      String? // "RIB" | "MVola" | "Orange Money" | "Airtel Money"
   coordonneesVerifieesLe DateTime?
 
-  missions               Mission[]
-  rapportsHebdo          RapportHebdoSuperviseur[]
-  paiements              PaiementSuperviseur[]
-  performancesParClient  PerformanceSuperviseurClient[]
+  missions              Mission[]
+  rapportsHebdo         RapportHebdoSuperviseur[]
+  paiements             PaiementSuperviseur[]
+  performancesParClient PerformanceSuperviseurClient[]
 }
 
 // Paie d'un superviseur pour une période — le Fixe + la somme des primes
@@ -937,6 +964,7 @@ model PerformanceSuperviseurClient {
   updatedAt DateTime @updatedAt
 
   @@unique([superviseurId, contratId, periode])
+  @@index([contratId])
 }
 
 model ContratB2B {
@@ -974,14 +1002,17 @@ model ContratB2B {
   // pas encore négocié/saisi.
   tarifMensuel Float?
 
-  missions                   Mission[]
-  factures                   Facture[]
-  objectifsJournaliers       ObjectifJournalier[]
-  rapportsHebdo              RapportHebdoSuperviseur[]
-  commissionDemarrage        CommissionDemarrageApporteur?
-  performancesSuperviseur    PerformanceSuperviseurClient[]
+  missions                Mission[]
+  factures                Facture[]
+  objectifsJournaliers    ObjectifJournalier[]
+  rapportsHebdo           RapportHebdoSuperviseur[]
+  commissionDemarrage     CommissionDemarrageApporteur?
+  performancesSuperviseur PerformanceSuperviseurClient[]
 
   createdAt DateTime @default(now())
+
+  @@index([entrepriseProjetId])
+  @@index([connecteurId])
 }
 
 model Mission {
@@ -1010,10 +1041,14 @@ model Mission {
   // Nullable : pas toujours négocié/saisi au moment de la création.
   tarifNegocie Float?
 
-  suivisHebdo    SuiviAgentHebdo[]
-  paiements      PaiementAgent[]
+  suivisHebdo SuiviAgentHebdo[]
+  paiements   PaiementAgent[]
 
   createdAt DateTime @default(now())
+
+  @@index([apprenantId])
+  @@index([contratId])
+  @@index([superviseurId])
 }
 
 model Facture {
@@ -1029,6 +1064,8 @@ model Facture {
   statut       String    @default("emise")
   dateEmission DateTime  @default(now())
   datePaiement DateTime?
+
+  @@index([contratId])
 }
 
 // Objectif journalier d'un contrat B2B — saisie manuelle par le superviseur
@@ -1042,8 +1079,8 @@ model ObjectifJournalier {
   contratId String
   contrat   ContratB2B @relation(fields: [contratId], references: [id])
 
-  jour       DateTime // horodatage normalisé à minuit, un enregistrement par jour et par contrat
-  tauxAtteint Float   // % de l'objectif journalier atteint
+  jour        DateTime // horodatage normalisé à minuit, un enregistrement par jour et par contrat
+  tauxAtteint Float // % de l'objectif journalier atteint
 
   createdAt DateTime @default(now())
 
@@ -1107,6 +1144,7 @@ model RapportHebdoSuperviseur {
   updatedAt DateTime @updatedAt
 
   @@unique([contratId, semaine])
+  @@index([superviseurId])
 }
 
 // Ligne du "Tableau de bord financier global" — un poste de charge (sur les
@@ -1192,6 +1230,8 @@ model CommissionDemarrageApporteur {
   datePaiement DateTime?
 
   createdAt DateTime @default(now())
+
+  @@index([connecteurId])
 }
 
 // Ligne de charge sous le poste "Charges Fixes Infrastructure" — loyer,
@@ -1209,8 +1249,8 @@ model CommissionDemarrageApporteur {
 model TarifFormation {
   id String @id @default(cuid())
 
-  typeCours      String @unique
-  prixFormation  Float  @default(0)
+  typeCours     String @unique
+  prixFormation Float  @default(0)
 
   updatedAt DateTime @updatedAt
 }
@@ -1237,6 +1277,8 @@ model EncaissementFormation {
   moyenPaiement String? // "Mobile Money", "Virement bancaire", "Espèces", etc.
 
   createdAt DateTime @default(now())
+
+  @@index([apprenantId])
 }
 
 model ChargeInfrastructure {

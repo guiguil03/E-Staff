@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CockpitService } from "../cockpit/cockpit.service";
 import { NotationService } from "../notation/notation.service";
 import { EmailService } from "../common/email.service";
+import { StorageService } from "../common/storage.service";
 
 // Cette suite se concentre sur la logique métier réelle du RhService (calculs
 // financiers, agrégations par période, règles de priorité) plutôt que sur
@@ -26,7 +27,9 @@ function makePrismaMock() {
     formateur: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
     paiementFormateur: {
       findUnique: jest.fn(),
+      findMany: jest.fn(),
       create: jest.fn(),
+      createMany: jest.fn().mockResolvedValue({ count: 0 }),
       update: jest.fn(),
       updateMany: jest.fn(),
     },
@@ -38,26 +41,32 @@ function makePrismaMock() {
       update: jest.fn(),
       count: jest.fn(),
     },
+    candidat: { update: jest.fn() },
+    situationResponse: { update: jest.fn() },
+    videoResponse: { update: jest.fn() },
     mission: { count: jest.fn() },
     agentAcquisition: { create: jest.fn(), findMany: jest.fn() },
     reinscription: { create: jest.fn() },
+    $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
   };
 }
 
 describe("RhService", () => {
   let prisma: ReturnType<typeof makePrismaMock>;
   let email: { send: jest.Mock };
+  let storage: { deleteObject: jest.Mock };
   let service: RhService;
 
   beforeEach(() => {
     prisma = makePrismaMock();
     email = { send: jest.fn().mockResolvedValue({ delivered: true }) };
+    storage = { deleteObject: jest.fn().mockResolvedValue(undefined) };
     service = new RhService(
       prisma as unknown as PrismaService,
       {} as unknown as CockpitService,
       {} as unknown as NotationService,
       email as unknown as EmailService,
-      {} as never
+      storage as unknown as StorageService
     );
   });
 
@@ -296,14 +305,11 @@ describe("RhService", () => {
           ],
         },
       ]);
-      prisma.paiementFormateur.findUnique.mockResolvedValue(null);
-      prisma.formateur.findUnique.mockResolvedValue({ id: "f-1", tarifFixe: 500000 });
-      prisma.paiementFormateur.create.mockResolvedValue({
-        montantBase: 500000,
-        montantPrime: 0,
-        retenue: 0,
-        statut: "attente",
-      });
+      // Regroupé (2026-09-21) : plus de findUnique/create par formateur —
+      // createMany({skipDuplicates}) puis un seul findMany derrière.
+      prisma.paiementFormateur.findMany.mockResolvedValue([
+        { formateurId: "f-1", montantBase: 500000, montantPrime: 0, retenue: 0, statut: "attente" },
+      ]);
 
       const result = await service.getTableauPaieFormateurs("2026-03");
 
@@ -321,12 +327,9 @@ describe("RhService", () => {
 
     it("un formateur sans groupe tombe dans 'Formation externe'", async () => {
       prisma.formateur.findMany.mockResolvedValue([{ id: "f-1", groupes: [] }]);
-      prisma.paiementFormateur.findUnique.mockResolvedValue({
-        montantBase: 100000,
-        montantPrime: 20000,
-        retenue: 5000,
-        statut: "paye",
-      });
+      prisma.paiementFormateur.findMany.mockResolvedValue([
+        { formateurId: "f-1", montantBase: 100000, montantPrime: 20000, retenue: 5000, statut: "paye" },
+      ]);
 
       const result = await service.getTableauPaieFormateurs("2026-03");
 
@@ -347,24 +350,30 @@ describe("RhService", () => {
         { id: "f-1", prenom: "Awa", nom: "Rakoto", matricule: "F-01", groupes: [{ id: "g-1", label: "Groupe A", cle: "A", typeCours: "FOL" }] },
       ]);
       // Seule la 2e séance (mars) doit compter — la 1re (février) et la 3e (avril) sont hors période.
+      // Regroupé (2026-09-21) : un seul seance.findMany pour tous les groupes
+      // filtrés (groupeId: {in: [...]})  au lieu d'un appel par groupe.
       prisma.seance.findMany.mockImplementation(({ where }: any) => {
         const debut: Date = where.startAt.gte;
         const fin: Date = where.startAt.lt;
         const toutes = [
-          { dureeMinutes: 120, startAt: new Date(Date.UTC(2026, 1, 15)) },
-          { dureeMinutes: 90, startAt: new Date(Date.UTC(2026, 2, 10)) },
-          { dureeMinutes: 60, startAt: new Date(Date.UTC(2026, 3, 1)) },
+          { groupeId: "g-1", dureeMinutes: 120, startAt: new Date(Date.UTC(2026, 1, 15)) },
+          { groupeId: "g-1", dureeMinutes: 90, startAt: new Date(Date.UTC(2026, 2, 10)) },
+          { groupeId: "g-1", dureeMinutes: 60, startAt: new Date(Date.UTC(2026, 3, 1)) },
         ];
+        expect(where.groupeId.in).toContain("g-1");
         return Promise.resolve(toutes.filter((s) => s.startAt >= debut && s.startAt < fin));
       });
-      prisma.paiementFormateur.findUnique.mockResolvedValue({
-        montantBase: 100000,
-        montantPrime: 0,
-        retenue: 0,
-        statut: "attente",
-        moyenPaiement: null,
-        datePaiement: null,
-      });
+      prisma.paiementFormateur.findMany.mockResolvedValue([
+        {
+          formateurId: "f-1",
+          montantBase: 100000,
+          montantPrime: 0,
+          retenue: 0,
+          statut: "attente",
+          moyenPaiement: null,
+          datePaiement: null,
+        },
+      ]);
 
       const result = await service.getDetailPaieFormateurs("FOL", "2026-03");
 
@@ -404,15 +413,15 @@ describe("RhService", () => {
         { id: "f-2", prenom: "B", nom: "B", matricule: "F-02", groupes: [] },
       ]);
       const statutParFormateur: Record<string, string> = { "f-1": "paye", "f-2": "attente" };
-      prisma.paiementFormateur.findUnique.mockImplementation(({ where }: any) => {
-        const formateurId = where.formateurId_periode.formateurId as string;
-        return Promise.resolve({
+      prisma.paiementFormateur.findMany.mockResolvedValue(
+        Object.entries(statutParFormateur).map(([formateurId, statut]) => ({
+          formateurId,
           montantBase: 1,
           montantPrime: 0,
           retenue: 0,
-          statut: statutParFormateur[formateurId],
-        });
-      });
+          statut,
+        }))
+      );
       prisma.paiementFormateur.updateMany.mockResolvedValue({ count: 1 });
 
       await service.payerTousFormateurs("Formation externe", "2026-03");
@@ -903,6 +912,89 @@ describe("RhService", () => {
 
       await expect(service.updateGroupeTypeCours("g-1", "FOL")).rejects.toThrow(BadRequestException);
       expect(prisma.groupe.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("purgeCandidatData", () => {
+    function attempt(overrides: Record<string, unknown> = {}) {
+      return {
+        id: "attempt-1",
+        contractPdfKey: "contracts/attempt-1.pdf",
+        candidat: {
+          id: "cand-1",
+          cvKey: "cv/cand-1.pdf",
+          dataPurgedAt: null,
+        },
+        situationResponses: [{ id: "sr-1", audioUrl: "audio/sr-1.webm" }],
+        videoResponses: [{ id: "vr-1", videoUrl: "video/vr-1.mp4" }],
+        ...overrides,
+      };
+    }
+
+    it("lève NotFoundException si la tentative n'existe pas", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(null);
+      await expect(service.purgeCandidatData("inconnu")).rejects.toThrow(NotFoundException);
+    });
+
+    it("refuse de purger deux fois le même candidat", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        attempt({ candidat: { id: "cand-1", cvKey: null, dataPurgedAt: new Date("2026-01-01") } })
+      );
+      await expect(service.purgeCandidatData("attempt-1")).rejects.toThrow(BadRequestException);
+      expect(storage.deleteObject).not.toHaveBeenCalled();
+    });
+
+    it("supprime tous les fichiers du bucket (CV, contrat, audio, vidéo)", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(attempt());
+      prisma.candidat.update.mockResolvedValue({});
+      prisma.evaluationAttempt.update.mockResolvedValue({});
+      prisma.situationResponse.update.mockResolvedValue({});
+      prisma.videoResponse.update.mockResolvedValue({});
+
+      await service.purgeCandidatData("attempt-1");
+
+      expect(storage.deleteObject).toHaveBeenCalledWith("cv/cand-1.pdf");
+      expect(storage.deleteObject).toHaveBeenCalledWith("contracts/attempt-1.pdf");
+      expect(storage.deleteObject).toHaveBeenCalledWith("audio/sr-1.webm");
+      expect(storage.deleteObject).toHaveBeenCalledWith("video/vr-1.mp4");
+    });
+
+    it("anonymise les coordonnées et vide les clés de fichiers en base", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(attempt());
+      prisma.candidat.update.mockResolvedValue({});
+      prisma.evaluationAttempt.update.mockResolvedValue({});
+      prisma.situationResponse.update.mockResolvedValue({});
+      prisma.videoResponse.update.mockResolvedValue({});
+
+      const result = await service.purgeCandidatData("attempt-1");
+
+      expect(prisma.candidat.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "cand-1" },
+          data: expect.objectContaining({
+            firstName: "Anonymisé",
+            cvKey: null,
+            dataPurgedAt: expect.any(Date),
+          }),
+        })
+      );
+      expect(prisma.situationResponse.update).toHaveBeenCalledWith({
+        where: { id: "sr-1" },
+        data: { audioUrl: "SUPPRIME_RGPD" },
+      });
+      expect(prisma.videoResponse.update).toHaveBeenCalledWith({
+        where: { id: "vr-1" },
+        data: { videoUrl: "SUPPRIME_RGPD" },
+      });
+      expect(result.ok).toBe(true);
+    });
+
+    it("n'écrit rien en base si la suppression d'un fichier échoue", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(attempt());
+      storage.deleteObject.mockRejectedValueOnce(new Error("S3 indisponible"));
+
+      await expect(service.purgeCandidatData("attempt-1")).rejects.toThrow("S3 indisponible");
+      expect(prisma.candidat.update).not.toHaveBeenCalled();
     });
   });
 });

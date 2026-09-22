@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { timingSafeEqual } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../common/storage.service';
 import { EmailService } from '../common/email.service';
@@ -10,6 +11,13 @@ import { SendContractDto } from './send-contract.dto';
 import { PapiWebhookDto } from './papi-webhook.dto';
 import { generateRegistrationContractPdf } from './registration-contract-pdf';
 import { PapiService } from './papi.service';
+
+function safeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
 
 const RECEIPT_MIME_EXTENSIONS: Record<string, string> = {
   'application/pdf': 'pdf',
@@ -257,6 +265,11 @@ export class RegistrationsService {
   // Webhook Papi — pas de signature cryptographique fournie par Papi, on
   // authentifie donc la notification en comparant référence + token à ceux
   // stockés lors de la création du lien (voir createPaymentLinkPublic).
+  // notificationToken est le vrai porteur de secret ici (pas juste un
+  // identifiant comme paymentReference) : comparé en temps constant pour
+  // éviter qu'une attaque par timing sur cet endpoint public ne permette de
+  // le reconstituer caractère par caractère (même principe que la
+  // vérification HMAC des webhooks Daily — voir daily-webhook.controller.ts).
   // Idempotent : rejouer la même notification (SUCCESS) après confirmation
   // ne fait rien de plus.
   async handlePapiWebhook(id: string, dto: PapiWebhookDto) {
@@ -264,8 +277,10 @@ export class RegistrationsService {
 
     const authentic =
       registration.papiReference &&
+      registration.papiNotificationToken &&
       dto.paymentReference === registration.papiReference &&
-      dto.notificationToken === registration.papiNotificationToken;
+      typeof dto.notificationToken === 'string' &&
+      safeEqual(dto.notificationToken, registration.papiNotificationToken);
     if (!authentic) {
       throw new BadRequestException('Notification de paiement non reconnue.');
     }
