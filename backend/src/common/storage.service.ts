@@ -39,8 +39,8 @@ export class StorageService {
     );
   }
 
-  // Purge RGPD (voir RhService.purgeCandidatData) — seul appelant à ce
-  // jour : le reste du produit ne supprime jamais un fichier déposé.
+  // Suppression d'un objet — purge RGPD (RhService.purgeCandidatData) et
+  // suppression d'un support de cours par son formateur (SupportCoursService).
   async deleteObject(key: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
@@ -55,9 +55,5 @@ export class StorageService {
       stream: result.Body as Readable,
       contentType: result.ContentType,
     };
-  }
-
-  async deleteObject(key: string) {
-    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 }

@@ -477,9 +477,10 @@ model Groupe {
   dateDebut DateTime?
   dateFin   DateTime?
 
-  apprenants Apprenant[]
-  seances    Seance[]
-  diffusions Diffusion[]
+  apprenants    Apprenant[]
+  seances       Seance[]
+  diffusions    Diffusion[]
+  supportsCours SupportCours[]
 }
 
 // Annonce diffusée par un formateur — jusqu'ici BroadcastCard (Cockpit
@@ -553,6 +554,9 @@ model SupportCours {
   mimeType   String
 
   createdAt DateTime @default(now())
+
+  @@index([formateurId])
+  @@index([groupeId])
 }
 
 // Bilan hebdomadaire validé par le formateur (voir CockpitService.submitBilanHebdo)
