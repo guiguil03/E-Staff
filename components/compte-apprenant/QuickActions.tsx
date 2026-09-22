@@ -7,10 +7,10 @@ interface QuickActionsProps {
   prochaineSeance: { titre: string; startAt: string } | null;
 }
 
-// Actions non encore reliées à un vrai backend (salle de classe virtuelle,
-// supports de cours, dépôt d'exercice, messagerie formateur) sont affichées
-// honnêtement en état "Bientôt disponible" plutôt que comme des liens
-// morts — même logique que CalendarEmbed sur /entreprises.
+// Actions non encore reliées à un vrai backend (dépôt d'exercice libre,
+// messagerie formateur) sont affichées honnêtement en état "Bientôt
+// disponible" plutôt que comme des liens morts — même logique que
+// CalendarEmbed sur /entreprises.
 function PlaceholderAction({ label }: { label: string }) {
   return (
     <div className="flex items-center justify-between rounded border border-dashed border-white/15 px-4 py-3">
@@ -58,7 +58,7 @@ export default function QuickActions({ prochaineSeance }: QuickActionsProps) {
 
         <div className="mt-6 space-y-2">
           <ClasseVirtuelleJoinButton />
-          <PlaceholderAction label="Accéder aux supports de cours" />
+          <LiveAction label="Accéder aux supports de cours" href="/compte/apprenant/supports-de-cours" />
           <PlaceholderAction label="Rendre un exercice" />
           <LiveAction label="Calendrier des classes virtuelles" href="/compte/apprenant/calendrier" />
           <LiveAction label="Accéder au Forum" href="/forum" />

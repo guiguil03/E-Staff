@@ -9,15 +9,13 @@ import { useRequireRole } from "@/lib/useRequireRole";
 import { apiDelete, apiGet, apiPut, ApiError } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 import {
-  APPRENANTS,
   DERNIERE_SEANCE_PASSEE,
-  GROUPES,
   OBJECTIFS_PAR_DEFAUT,
   SEANCE_NUMBERS,
-  apprenantMatricule,
-  type Apprenant,
+  apprenantIdFromMatricule,
 } from "./exampleData";
 import { COMPETENCY_DEFS, tauxAssimilation } from "./gradingGrids";
+import SupportsCoursCard from "./SupportsCoursCard";
 
 type NotationMap = Record<string, Record<string, { scoreOn20: number | null }>>;
 
@@ -30,6 +28,32 @@ interface SeanceApi {
   objectifs: string | null;
   dailyRoomName: string | null;
   dailyRoomUrl: string | null;
+}
+
+interface GroupeApi {
+  id: string;
+  cle: string;
+  label: string;
+  moyenne: number | null;
+  statut: "vert" | "orange" | "rouge";
+  apprenantsCount: number;
+}
+
+interface GroupeDetailApprenant {
+  matricule: string;
+  prenom: string;
+  nom: string;
+  moyenneGlobale: number | null;
+  tauxAbsence: number | null;
+  alerteDecrochage: boolean;
+}
+
+interface GroupeDetailApi {
+  cle: string;
+  moyenne: number | null;
+  avgCompetencies: { key: string; score: number }[];
+  avgAbsence: number | null;
+  apprenants: GroupeDetailApprenant[];
 }
 
 function formateurHeaders(): HeadersInit {
@@ -55,7 +79,8 @@ function toDatetimeLocalValue(iso: string): string {
 export default function PlanningDashboard() {
   const checked = useRequireRole("formateur");
   const searchParams = useSearchParams();
-  const [groupeKey, setGroupeKey] = useState(searchParams.get("groupe") || GROUPES[0].key);
+  const [groupes, setGroupes] = useState<GroupeApi[] | "loading" | "erreur">("loading");
+  const [groupeKey, setGroupeKey] = useState(searchParams.get("groupe") || "");
   const [seance, setSeance] = useState(Number(searchParams.get("seance") ?? "1"));
   const [objectifs, setObjectifs] = useState(OBJECTIFS_PAR_DEFAUT[1] ?? "");
   const [horaireSeance, setHoraireSeance] = useState<SeanceApi | null>(null);
@@ -66,8 +91,48 @@ export default function PlanningDashboard() {
   );
   const [horaireError, setHoraireError] = useState<string | null>(null);
   const [notations, setNotations] = useState<NotationMap | "loading" | "erreur">("loading");
+  const [roster, setRoster] = useState<GroupeDetailApprenant[] | "loading" | "erreur">("loading");
 
-  const apprenantsGroupe = APPRENANTS.filter((a) => a.groupe === groupeKey);
+  // Les groupes/apprenants viennent désormais du vrai backend, scopés au
+  // formateur connecté (voir CockpitService.getGroupes/getGroupeDetail) —
+  // avant, cette page listait les 6 groupes fictifs A-F d'exampleData.ts
+  // quel que soit le formateur, ce qui pouvait faire planifier une séance
+  // pour un groupe/apprenant réel différent de celui affiché (bug relevé le
+  // 2026-09-22 : le formateur planifiait bien en base, mais l'apprenant
+  // vérifié ensuite n'était pas réellement dans ce groupe).
+  useEffect(() => {
+    let cancelled = false;
+    setGroupes("loading");
+    apiGet<GroupeApi[]>("/cockpit/groupes", formateurHeaders())
+      .then((data) => {
+        if (cancelled) return;
+        setGroupes(data);
+        if (!groupeKey && data.length > 0) setGroupeKey(data[0].cle);
+      })
+      .catch(() => {
+        if (!cancelled) setGroupes("erreur");
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!groupeKey) return;
+    let cancelled = false;
+    setRoster("loading");
+    apiGet<GroupeDetailApi>(`/cockpit/groupes/${groupeKey}/detail`, formateurHeaders())
+      .then((data) => {
+        if (!cancelled) setRoster(data.apprenants);
+      })
+      .catch(() => {
+        if (!cancelled) setRoster("erreur");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupeKey]);
 
   useEffect(() => {
     setObjectifs(OBJECTIFS_PAR_DEFAUT[seance] ?? "");
@@ -75,6 +140,7 @@ export default function PlanningDashboard() {
   }, [groupeKey, seance]);
 
   useEffect(() => {
+    if (!groupeKey) return;
     let cancelled = false;
     setNotations("loading");
     apiGet<NotationMap>(`/notations/${groupeKey}/${seance}`, formateurHeaders())
@@ -90,6 +156,7 @@ export default function PlanningDashboard() {
   }, [groupeKey, seance]);
 
   useEffect(() => {
+    if (!groupeKey) return;
     let cancelled = false;
     setHoraireStatus("loading");
     apiGet<SeanceApi>(`/seances/${groupeKey}/${seance}`, formateurHeaders())
@@ -153,19 +220,20 @@ export default function PlanningDashboard() {
     );
   }
 
-  function scoreFor(apprenant: Apprenant, competencyKey: string): number | null {
+  function scoreFor(matricule: string, competencyKey: string): number | null {
     if (notations === "loading" || notations === "erreur") return null;
-    return notations[apprenantMatricule(apprenant.id)]?.[competencyKey]?.scoreOn20 ?? null;
+    return notations[matricule]?.[competencyKey]?.scoreOn20 ?? null;
   }
 
-  function moyenneApprenant(apprenant: Apprenant): number | null {
-    const scores = COMPETENCY_DEFS.map((c) => scoreFor(apprenant, c.key));
+  function moyenneApprenant(matricule: string): number | null {
+    const scores = COMPETENCY_DEFS.map((c) => scoreFor(matricule, c.key));
     if (scores.some((s) => s === null)) return null;
     const values = scores as number[];
     return Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 100) / 100;
   }
 
-  const moyennesApprenants = apprenantsGroupe.map((a) => moyenneApprenant(a));
+  const apprenantsGroupe = Array.isArray(roster) ? roster : [];
+  const moyennesApprenants = apprenantsGroupe.map((a) => moyenneApprenant(a.matricule));
   const moyennesCompletes = moyennesApprenants.filter((m): m is number => m !== null);
   const moyenneGroupe =
     moyennesCompletes.length > 0
@@ -199,13 +267,15 @@ export default function PlanningDashboard() {
               <select
                 value={groupeKey}
                 onChange={(e) => setGroupeKey(e.target.value)}
+                disabled={!Array.isArray(groupes)}
                 className="mt-1 rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
               >
-                {GROUPES.map((g) => (
-                  <option key={g.key} value={g.key}>
-                    {g.label}
-                  </option>
-                ))}
+                {Array.isArray(groupes) &&
+                  groupes.map((g) => (
+                    <option key={g.cle} value={g.cle}>
+                      {g.label}
+                    </option>
+                  ))}
               </select>
             </div>
             <div>
@@ -225,7 +295,12 @@ export default function PlanningDashboard() {
               </select>
             </div>
             <p className="font-mono text-xs text-white/40">
-              {apprenantsGroupe.length} apprenants dans ce groupe
+              {groupes === "loading" && "Chargement des groupes..."}
+              {groupes === "erreur" && "Impossible de charger vos groupes."}
+              {Array.isArray(groupes) && groupes.length === 0 && "Aucun groupe ne vous est assigné."}
+              {Array.isArray(groupes) &&
+                groupes.length > 0 &&
+                `${apprenantsGroupe.length} apprenants dans ce groupe`}
             </p>
           </div>
         </Reveal>
@@ -326,14 +401,7 @@ export default function PlanningDashboard() {
               className="mt-2 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
             />
 
-            <div className="mt-4 flex items-center justify-between rounded border border-dashed border-white/15 px-4 py-3">
-              <p className="font-sans text-sm text-white/60">
-                Ressources / supports de cette séance
-              </p>
-              <span className="font-mono text-[10px] uppercase tracking-widest text-white/30">
-                Bientôt disponible
-              </span>
-            </div>
+            {groupeKey && <SupportsCoursCard groupeKey={groupeKey} seance={seance} />}
           </div>
         </Reveal>
 
@@ -362,15 +430,29 @@ export default function PlanningDashboard() {
                   </tr>
                 </thead>
                 <tbody>
+                  {roster === "loading" && (
+                    <tr>
+                      <td colSpan={COMPETENCY_DEFS.length + 3} className="py-4 text-center text-white/50">
+                        Chargement des apprenants...
+                      </td>
+                    </tr>
+                  )}
+                  {roster === "erreur" && (
+                    <tr>
+                      <td colSpan={COMPETENCY_DEFS.length + 3} className="py-4 text-center text-white/50">
+                        Impossible de charger les apprenants de ce groupe.
+                      </td>
+                    </tr>
+                  )}
                   {apprenantsGroupe.map((a) => {
-                    const moyenne = moyenneApprenant(a);
+                    const moyenne = moyenneApprenant(a.matricule);
                     return (
-                      <tr key={a.id} className="border-b border-white/5">
+                      <tr key={a.matricule} className="border-b border-white/5">
                         <td className="py-2 pr-2 text-white">
-                          {a.firstName} {a.lastName}
+                          {a.prenom} {a.nom}
                         </td>
                         {COMPETENCY_DEFS.map((c) => {
-                          const score = scoreFor(a, c.key);
+                          const score = scoreFor(a.matricule, c.key);
                           return (
                             <td key={c.key} className="py-2 pr-2 text-white/80">
                               {score ?? "—"}
@@ -385,7 +467,7 @@ export default function PlanningDashboard() {
                         </td>
                         <td className="py-2 text-right">
                           <Link
-                            href={`/compte/formateur/planning/noter/${a.id}?seance=${seance}&groupe=${groupeKey}`}
+                            href={`/compte/formateur/planning/noter/${apprenantIdFromMatricule(a.matricule)}?seance=${seance}&groupe=${groupeKey}`}
                             className="inline-block rounded border border-accent/40 px-3 py-1 font-mono text-[11px] uppercase tracking-widest text-accent hover:bg-accent/10"
                           >
                             Noter

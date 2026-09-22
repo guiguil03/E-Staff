@@ -466,9 +466,10 @@ model Groupe {
   dateDebut DateTime?
   dateFin   DateTime?
 
-  apprenants Apprenant[]
-  seances    Seance[]
-  diffusions Diffusion[]
+  apprenants    Apprenant[]
+  seances       Seance[]
+  diffusions    Diffusion[]
+  supportsCours SupportCours[]
 }
 
 // Annonce diffusée par un formateur — jusqu'ici BroadcastCard (Cockpit
@@ -509,11 +510,36 @@ model Formateur {
   // que la RH ne l'a pas renseigné.
   tarifFixe Float?
 
-  groupes    Groupe[]
-  paiements  PaiementFormateur[]
-  documents  FormateurDocument[]
-  bilans     BilanFormateur[]
-  diffusions Diffusion[]
+  groupes       Groupe[]
+  paiements     PaiementFormateur[]
+  documents     FormateurDocument[]
+  bilans        BilanFormateur[]
+  diffusions    Diffusion[]
+  supportsCours SupportCours[]
+}
+
+// Support de cours partagé par un formateur aux apprenants d'un groupe —
+// distinct de FormateurDocument (fiches de préparation, usage RH/perso, non
+// visible des apprenants). seanceNumero nul = document général du groupe
+// (pas rattaché à une séance précise) ; sinon 1..12, rattaché au créneau
+// structurel du groupe (même convention que Seance.numero — pas de FK vers
+// Seance, un support peut être déposé avant que la séance elle-même soit
+// planifiée). Le formateur choisit l'un ou l'autre au dépôt (décision
+// produit 2026-09-22, brainstorm "1er chose à mettre en place").
+model SupportCours {
+  id          String    @id @default(cuid())
+  formateurId String
+  formateur   Formateur @relation(fields: [formateurId], references: [id])
+  groupeId    String
+  groupe      Groupe    @relation(fields: [groupeId], references: [id])
+
+  seanceNumero Int?
+
+  filename   String
+  storageKey String
+  mimeType   String
+
+  createdAt DateTime @default(now())
 }
 
 // Bilan hebdomadaire validé par le formateur (voir CockpitService.submitBilanHebdo)
