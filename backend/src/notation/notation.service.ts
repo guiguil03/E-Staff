@@ -319,7 +319,14 @@ export class NotationService {
 
     // ---- Séances & prochaine séance ----------------------------------
     const seancesPassees = seances.filter((s) => s.startAt !== null && s.startAt <= now);
-    const prochaine = seances.find((s) => s.startAt !== null && s.startAt > now) ?? null;
+    // Tri par startAt croissant avant sélection : `seances` est chargé trié
+    // par numéro, pas par date, donc un formateur qui programme les séances
+    // dans le désordre (ex: séance 5 avant séance 3) ferait remonter ici la
+    // mauvaise séance avec un simple .find() sur la liste triée par numéro.
+    const prochaine =
+      seances
+        .filter((s) => s.startAt !== null && s.startAt > now)
+        .sort((a, b) => a.startAt!.getTime() - b.startAt!.getTime())[0] ?? null;
 
     // ---- Assiduité (4 dernières semaines ISO ayant une séance passée) -
     const presenceParSeance = new Map(presences.map((p) => [p.seanceId, p]));
