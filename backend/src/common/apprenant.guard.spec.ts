@@ -59,4 +59,24 @@ describe("ApprenantGuard", () => {
     const context = makeContext({}, { matricule: "ETF-2026-0001" }, freshIp());
     expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
   });
+
+  it("laisse passer une session valide même quand l'IP est verrouillée par d'autres échecs", () => {
+    const guard = new ApprenantGuard();
+    const ip = freshIp();
+    for (let i = 0; i < 5; i++) {
+      expect(() => guard.canActivate(makeContext({}, { matricule: "ETF-2026-0001" }, ip))).toThrow(
+        UnauthorizedException
+      );
+    }
+    expect(() => guard.canActivate(makeContext({}, { matricule: "ETF-2026-0001" }, ip))).toThrow(
+      /Trop de tentatives/
+    );
+
+    const valide = makeContext(
+      { estaf_session: signSession({ matricule: "ETF-2026-0002", role: "apprenant" }) },
+      { matricule: "ETF-2026-0002" },
+      ip
+    );
+    expect(guard.canActivate(valide)).toBe(true);
+  });
 });

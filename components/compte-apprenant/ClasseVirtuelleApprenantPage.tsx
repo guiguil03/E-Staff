@@ -69,11 +69,12 @@ export default function ClasseVirtuelleApprenantPage() {
       } catch (err) {
         if (cancelled) return;
         setStatus("erreur");
-        setErreurDetail(
-          err instanceof ApiError && (err.status === 401 || err.status === 403)
-            ? "Votre session a expiré — reconnectez-vous."
-            : null
-        );
+        // Pas de nouvel essai sur une 401/403 (voir ClasseVirtuelleJoinButton).
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+          setErreurDetail("Votre session a expiré — reconnectez-vous.");
+          return;
+        }
+        setErreurDetail(null);
         timeoutId = setTimeout(() => fetchStatus(m), 60_000);
       }
     }
