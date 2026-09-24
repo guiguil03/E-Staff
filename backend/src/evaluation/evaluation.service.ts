@@ -22,6 +22,7 @@ import { computeTier, computeTotalScore } from "./scoring";
 import {
   LEXIQUE_QUESTIONS,
   ORAL_QUESTIONS,
+  ORAL_MEDIA,
   scoreQcm,
 } from "./questions";
 import {
@@ -151,6 +152,7 @@ export class EvaluationService {
     return {
       lexique: LEXIQUE_QUESTIONS.map(strip),
       oral: ORAL_QUESTIONS.map(strip),
+      oralMedia: ORAL_MEDIA,
     };
   }
 

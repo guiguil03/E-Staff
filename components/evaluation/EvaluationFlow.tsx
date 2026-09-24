@@ -116,7 +116,7 @@ const EVALUATION_BLOCKS = [
   },
   {
     number: 4,
-    title: "Compréhension Orale (Podcasts B2 & C1)",
+    title: "Compréhension Orale (Vidéo + QCM)",
     available: true,
   },
   {
@@ -125,6 +125,13 @@ const EVALUATION_BLOCKS = [
     available: true,
   },
 ];
+
+interface EvaluationQuestions {
+  lexique: QcmQuestion[];
+  oral: QcmQuestion[];
+  // Vidéo support du Bloc 4 (voir ORAL_MEDIA côté backend, questions.ts).
+  oralMedia?: { embedUrl: string; sourceUrl: string };
+}
 
 // Affiche une question à la fois plutôt que la liste complète du bloc — plus
 // digeste pour le candidat qu'un long formulaire à faire défiler (retour
@@ -218,10 +225,9 @@ export default function EvaluationFlow() {
   const [error, setError] = useState<string | null>(null);
   const [agents, setAgents] = useState<AgentAcquisition[]>([]);
 
-  const [questions, setQuestions] = useState<{
-    lexique: QcmQuestion[];
-    oral: QcmQuestion[];
-  } | null>(null);
+  const [questions, setQuestions] = useState<EvaluationQuestions | null>(null);
+  // Bloc 4 : la vidéo est visionnée d'abord, les questions ensuite.
+  const [oralVideoSeen, setOralVideoSeen] = useState(false);
   const [situations, setSituations] = useState<Situation[]>([]);
   const [videoTasks, setVideoTasks] = useState<VideoTask[]>([]);
   const [essaySubjects, setEssaySubjects] = useState<EssaySubject[]>([]);
@@ -255,7 +261,7 @@ export default function EvaluationFlow() {
     lexiqueSubmitted && oralSubmitted && situationsDone && videosDone && essayDone;
 
   useEffect(() => {
-    apiGet<{ lexique: QcmQuestion[]; oral: QcmQuestion[] }>("/evaluation/questions")
+    apiGet<EvaluationQuestions>("/evaluation/questions")
       .then(setQuestions)
       .catch(() => setError("Impossible de charger les épreuves."));
     apiGet<Situation[]>("/evaluation/situations")
@@ -628,7 +634,7 @@ export default function EvaluationFlow() {
       },
       {
         number: 4,
-        title: "Compréhension Orale (Podcasts B2 & C1)",
+        title: "Compréhension Orale (Vidéo + QCM)",
         done: oralSubmitted,
         onClick: () => setStep("oral"),
       },
@@ -868,17 +874,74 @@ export default function EvaluationFlow() {
   }
 
   if (step === "oral") {
+    const media = questions.oralMedia;
+    // Premier écran : la vidéo seule, puis les questions — le candidat
+    // regarde le support avant de découvrir le QCM (consigne cliente du
+    // 2026-09-24). Il peut revenir revoir la vidéo depuis les questions.
+    if (media && !oralVideoSeen) {
+      return (
+        <div className="mx-auto max-w-lg rounded border border-white/10 bg-obsidianCard p-6">
+          <button
+            onClick={() => setStep("menu")}
+            className="mb-3 block font-sans text-xs text-accent hover:underline"
+          >
+            ← Retour au menu
+          </button>
+          <h3 className="font-display text-lg font-semibold text-white">
+            Bloc 4 — Compréhension Orale (Vidéo + QCM)
+          </h3>
+          <p className="mt-2 font-sans text-sm text-white/70">
+            Regardez attentivement la vidéo ci-dessous, puis répondez aux {questions.oral.length}{" "}
+            questions. Vous pourrez la revoir pendant le questionnaire.
+          </p>
+          <iframe
+            src={media.embedUrl}
+            title="Vidéo du Bloc 4"
+            className="mx-auto mt-4 aspect-[9/16] w-full max-w-xs rounded border-0"
+            allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share; fullscreen"
+            allowFullScreen
+          />
+          <p className="mt-2 text-center font-sans text-xs text-white/50">
+            La vidéo ne s&apos;affiche pas ?{" "}
+            <a
+              href={media.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent hover:underline"
+            >
+              Ouvrir sur Facebook
+            </a>
+          </p>
+          <div className="mt-6">
+            <Button variant="dark" onClick={() => setOralVideoSeen(true)}>
+              J&apos;ai regardé la vidéo — passer aux questions
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="mx-auto max-w-lg">
-        <button
-          onClick={() => setStep("menu")}
-          className="mb-3 font-sans text-xs text-accent hover:underline"
-        >
-          ← Retour au menu
-        </button>
+        <div className="mb-3 flex items-center justify-between">
+          <button
+            onClick={() => setStep("menu")}
+            className="font-sans text-xs text-accent hover:underline"
+          >
+            ← Retour au menu
+          </button>
+          {media && (
+            <button
+              onClick={() => setOralVideoSeen(false)}
+              className="font-sans text-xs text-accent hover:underline"
+            >
+              Revoir la vidéo
+            </button>
+          )}
+        </div>
         <QcmBlock
           key="oral"
-          title="Bloc 4 — Compréhension Orale (Podcasts B2 & C1)"
+          title="Bloc 4 — Compréhension Orale (Vidéo + QCM)"
           questions={questions.oral}
           answers={oralAnswers}
           onChange={(id, v) => setOralAnswers((a) => ({ ...a, [id]: v }))}

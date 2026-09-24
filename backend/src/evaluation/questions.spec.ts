@@ -59,6 +59,13 @@ describe("banques de questions — intégrité des données", () => {
     }
   });
 
+  it("ORAL_QUESTIONS a bien les 5 questions du Bloc 4, chacune avec 4 choix", () => {
+    expect(ORAL_QUESTIONS).toHaveLength(5);
+    for (const q of ORAL_QUESTIONS) {
+      expect(q.choices).toHaveLength(4);
+    }
+  });
+
   it("ORAL_QUESTIONS a des ids uniques et correctChoice fait partie des choix proposés", () => {
     const ids = ORAL_QUESTIONS.map((q) => q.id);
     expect(new Set(ids).size).toBe(ids.length);
