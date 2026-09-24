@@ -129,8 +129,8 @@ const EVALUATION_BLOCKS = [
 interface EvaluationQuestions {
   lexique: QcmQuestion[];
   oral: QcmQuestion[];
-  // Vidéo support du Bloc 4 (voir ORAL_MEDIA côté backend, questions.ts).
-  oralMedia?: { embedUrl: string; sourceUrl: string };
+  // Vidéo support du Bloc 4 (voir ORAL_MEDIA_KEY côté backend, questions.ts).
+  oralMedia?: { videoPath: string; sourceUrl: string };
 }
 
 // Affiche une question à la fois plutôt que la liste complète du bloc — plus
@@ -894,12 +894,12 @@ export default function EvaluationFlow() {
             Regardez attentivement la vidéo ci-dessous, puis répondez aux {questions.oral.length}{" "}
             questions. Vous pourrez la revoir pendant le questionnaire.
           </p>
-          <iframe
-            src={media.embedUrl}
-            title="Vidéo du Bloc 4"
-            className="mx-auto mt-4 aspect-[9/16] w-full max-w-xs rounded border-0"
-            allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share; fullscreen"
-            allowFullScreen
+          <video
+            controls
+            preload="metadata"
+            playsInline
+            src={`${API_URL}${media.videoPath}`}
+            className="mx-auto mt-4 max-h-[70vh] w-full rounded"
           />
           <p className="mt-2 text-center font-sans text-xs text-white/50">
             La vidéo ne s&apos;affiche pas ?{" "}
