@@ -89,13 +89,16 @@ export default function ClasseVirtuelleJoinButton() {
         // la session) ne doit JAMAIS s'afficher comme "rien de prévu" — ce
         // masquage cachait une vraie panne d'authentification derrière un
         // état qui a l'air normal (voir signalement du 2026-09-22).
+        // Pas de nouvel essai sur une 401/403 : la session ne se répare pas
+        // toute seule, et chaque échec compte dans le verrouillage
+        // anti-brute-force par IP côté backend (voir apprenant.guard.ts).
         if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
           setStatus("erreur");
           setErreurDetail("Votre session a expiré — reconnectez-vous.");
-        } else {
-          setStatus("erreur");
-          setErreurDetail(null);
+          return;
         }
+        setStatus("erreur");
+        setErreurDetail(null);
         timeoutId = setTimeout(() => fetchStatus(m), 60_000);
       }
     }
