@@ -22,8 +22,7 @@ import { computeTier, computeTotalScore } from "./scoring";
 import {
   LEXIQUE_QUESTIONS,
   ORAL_QUESTIONS,
-  ORAL_MEDIA_KEY,
-  ORAL_MEDIA_SOURCE_URL,
+  ORAL_AUDIO_KEY,
   scoreQcm,
 } from "./questions";
 import {
@@ -123,9 +122,9 @@ export class EvaluationService {
     return this.storage.getObjectStream(subject.referenceVideoKey);
   }
 
-  // Vidéo support du Bloc 4 (voir ORAL_MEDIA_KEY, questions.ts).
-  async getOralVideoStream() {
-    return this.storage.getObjectStream(ORAL_MEDIA_KEY);
+  // Extrait audio du Bloc 4 (voir ORAL_AUDIO_KEY, questions.ts).
+  async getOralAudioStream() {
+    return this.storage.getObjectStream(ORAL_AUDIO_KEY);
   }
 
   getVideoGradingCriteria() {
@@ -158,7 +157,7 @@ export class EvaluationService {
     return {
       lexique: LEXIQUE_QUESTIONS.map(strip),
       oral: ORAL_QUESTIONS.map(strip),
-      oralMedia: { videoPath: "/evaluation/oral-video", sourceUrl: ORAL_MEDIA_SOURCE_URL },
+      oralMedia: { audioPath: "/evaluation/oral-audio" },
     };
   }
 
