@@ -143,9 +143,18 @@ export default function PlanningDashboard() {
         setDureeInput(data.dureeMinutes);
         setHoraireStatus("idle");
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return;
         setHoraireSeance(null);
+        // 404 = créneau jamais créé en base (groupe créé par la RH après le
+        // seed) : ce n'est pas une erreur, juste une séance pas encore
+        // planifiée — "Planifier" la crée à la volée (voir
+        // ClasseVirtuelleService.findOrCreateSeance).
+        if (err instanceof ApiError && err.status === 404) {
+          setHoraireInput("");
+          setHoraireStatus("idle");
+          return;
+        }
         setHoraireStatus("error");
       });
     return () => {
