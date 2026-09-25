@@ -38,6 +38,12 @@ export class NotationController {
     return this.service.listACorriger(formateurMatricule);
   }
 
+  @Get("notations/corriges")
+  @UseGuards(FormateurGuard)
+  listCorriges(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.listCorriges(formateurMatricule);
+  }
+
   @Get("notations/:id/devoir")
   @UseGuards(FormateurGuard)
   async streamDevoir(

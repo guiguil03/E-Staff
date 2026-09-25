@@ -16,8 +16,17 @@ import {
 } from "./exampleData";
 import { COMPETENCY_DEFS, tauxAssimilation } from "./gradingGrids";
 import SupportsCoursCard from "./SupportsCoursCard";
+import { DevoirDownloadButton } from "./DevoirPreview";
 
-type NotationMap = Record<string, Record<string, { scoreOn20: number | null }>>;
+interface NotationCell {
+  id: string;
+  scoreOn20: number | null;
+  fileName: string | null;
+  soumisAt: string | null;
+  gradedAt: string | null;
+}
+
+type NotationMap = Record<string, Record<string, NotationCell>>;
 
 interface SeanceApi {
   id: string;
@@ -205,10 +214,23 @@ export default function PlanningDashboard() {
     );
   }
 
-  function scoreFor(matricule: string, competencyKey: string): number | null {
-    if (notations === "loading" || notations === "erreur") return null;
-    return notations[matricule]?.[competencyKey]?.scoreOn20 ?? null;
+  function cellFor(matricule: string, competencyKey: string): NotationCell | undefined {
+    if (notations === "loading" || notations === "erreur") return undefined;
+    return notations[matricule]?.[competencyKey];
   }
+
+  function scoreFor(matricule: string, competencyKey: string): number | null {
+    return cellFor(matricule, competencyKey)?.scoreOn20 ?? null;
+  }
+
+  // Rendus de la séance (tous apprenants du groupe) : combien ont été
+  // déposés, combien attendent encore une note — affiché en tête du tableau.
+  const rendus = apprenantsGroupe.flatMap((a) =>
+    COMPETENCY_DEFS.map((c) => cellFor(a.matricule, c.key)).filter(
+      (n): n is NotationCell => !!n?.fileName
+    )
+  );
+  const rendusACorriger = rendus.filter((n) => !n.gradedAt);
 
   function moyenneApprenant(matricule: string): number | null {
     const scores = COMPETENCY_DEFS.map((c) => scoreFor(matricule, c.key));
@@ -398,8 +420,28 @@ export default function PlanningDashboard() {
               Vue de lecture — la notation détaillée (grille de critères ou dépôt de document) se
               fait via le bouton &laquo; Noter &raquo;.
             </p>
+            {rendus.length > 0 && (
+              <p className="mt-3 font-sans text-sm text-white/80">
+                📎 {rendus.length} document{rendus.length > 1 ? "s" : ""} déposé
+                {rendus.length > 1 ? "s" : ""} pour cette séance
+                {rendusACorriger.length > 0 ? (
+                  <>
+                    {" "}
+                    ·{" "}
+                    <Link
+                      href={`/compte/formateur/corriger?rendu=${rendusACorriger[0].id}`}
+                      className="text-accent hover:underline"
+                    >
+                      {rendusACorriger.length} à corriger →
+                    </Link>
+                  </>
+                ) : (
+                  " · tous corrigés"
+                )}
+              </p>
+            )}
             <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[720px] font-sans text-sm">
+              <table className="w-full min-w-[900px] font-sans text-sm">
                 <thead>
                   <tr className="border-b border-white/10 text-left text-xs text-white/40">
                     <th className="py-2 pr-2 font-mono font-normal">Apprenant</th>
@@ -410,20 +452,21 @@ export default function PlanningDashboard() {
                     ))}
                     <th className="py-2 pr-2 font-mono font-normal text-right">Moyenne</th>
                     <th className="py-2 pr-2 font-mono font-normal text-right">Assimilation</th>
+                    <th className="py-2 pr-2 font-mono font-normal">Documents déposés</th>
                     <th className="py-2 font-mono font-normal text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {apprenants === "loading" && (
                     <tr>
-                      <td colSpan={COMPETENCY_DEFS.length + 3} className="py-4 text-center text-white/50">
+                      <td colSpan={COMPETENCY_DEFS.length + 5} className="py-4 text-center text-white/50">
                         Chargement des apprenants...
                       </td>
                     </tr>
                   )}
                   {apprenants === "erreur" && (
                     <tr>
-                      <td colSpan={COMPETENCY_DEFS.length + 3} className="py-4 text-center text-white/50">
+                      <td colSpan={COMPETENCY_DEFS.length + 5} className="py-4 text-center text-white/50">
                         Impossible de charger les apprenants de ce groupe.
                       </td>
                     </tr>
@@ -436,10 +479,26 @@ export default function PlanningDashboard() {
                           {a.prenom} {a.nom}
                         </td>
                         {COMPETENCY_DEFS.map((c) => {
-                          const score = scoreFor(a.matricule, c.key);
+                          const cell = cellFor(a.matricule, c.key);
+                          const score = cell?.scoreOn20 ?? null;
+                          // Rendu déposé mais pas encore noté : raccourci
+                          // direct vers sa correction.
+                          if (cell?.fileName && !cell.gradedAt) {
+                            return (
+                              <td key={c.key} className="py-2 pr-2">
+                                <Link
+                                  href={`/compte/formateur/corriger?rendu=${cell.id}`}
+                                  className="inline-block rounded border border-accent/50 bg-accent/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-accent hover:bg-accent/20"
+                                >
+                                  à corriger
+                                </Link>
+                              </td>
+                            );
+                          }
                           return (
                             <td key={c.key} className="py-2 pr-2 text-white/80">
                               {score ?? "—"}
+                              {cell?.fileName && <span className="ml-1 text-[10px]" title={cell.fileName}>📎</span>}
                             </td>
                           );
                         })}
@@ -448,6 +507,27 @@ export default function PlanningDashboard() {
                         </td>
                         <td className="py-2 pr-2 text-right font-mono text-sm text-white/70">
                           {moyenne !== null ? `${tauxAssimilation(moyenne)}%` : "—"}
+                        </td>
+                        <td className="py-2 pr-2">
+                          {(() => {
+                            const docs = COMPETENCY_DEFS.map((c) => ({
+                              def: c,
+                              cell: cellFor(a.matricule, c.key),
+                            })).filter(({ cell }) => !!cell?.fileName);
+                            if (docs.length === 0) {
+                              return <span className="text-white/30">—</span>;
+                            }
+                            return (
+                              <ul className="space-y-0.5">
+                                {docs.map(({ def, cell }) => (
+                                  <li key={def.key} className="flex items-center gap-2 whitespace-nowrap">
+                                    <span className="font-sans text-[11px] text-white/60">{def.label}</span>
+                                    <DevoirDownloadButton notationId={cell!.id} fileName={cell!.fileName} />
+                                  </li>
+                                ))}
+                              </ul>
+                            );
+                          })()}
                         </td>
                         <td className="py-2 text-right">
                           <Link

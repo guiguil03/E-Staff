@@ -56,7 +56,13 @@ export async function apiDelete<T>(path: string, headers?: HeadersInit): Promise
 export async function apiGet<T>(path: string, headers?: HeadersInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, { credentials: CREDENTIALS, headers });
   if (!res.ok) throw new ApiError("Une erreur est survenue.", res.status);
-  return res.json();
+  // Un handler NestJS qui renvoie `null` répond 200 avec un corps VIDE, sur
+  // lequel res.json() lève une exception : « pas de notation pour cette
+  // compétence » ou « aucune séance programmée » passaient alors pour une
+  // erreur (bug relevé le 2026-09-25 : la page Noter n'affichait aucune note
+  // existante dès qu'une seule compétence n'était pas encore notée).
+  const text = await res.text();
+  return (text ? JSON.parse(text) : null) as T;
 }
 
 export async function apiPostAuthed<T>(

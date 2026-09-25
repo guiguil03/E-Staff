@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import CorrigerDashboard from "@/components/compte-formateur/CorrigerDashboard";
 
 export const metadata: Metadata = {
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 };
 
 export default function CorrigerPage() {
-  return <CorrigerDashboard />;
+  return (
+    <Suspense fallback={null}>
+      <CorrigerDashboard />
+    </Suspense>
+  );
 }
