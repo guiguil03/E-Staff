@@ -43,6 +43,11 @@ async function bootstrap() {
   if (!process.env.AWS_S3_BUCKET_NAME) {
     missingIntegrations.push("AWS_S3_BUCKET_NAME (upload CV/audio/vidéo indisponible)");
   }
+  if (!process.env.RH_NOTIFICATION_EMAIL) {
+    missingIntegrations.push(
+      "RH_NOTIFICATION_EMAIL (la RH n'est jamais prévenue par e-mail des tests corrigés à valider)"
+    );
+  }
   if (missingIntegrations.length > 0) {
     logger.warn(`Intégrations non configurées au démarrage :\n  - ${missingIntegrations.join("\n  - ")}`);
   }

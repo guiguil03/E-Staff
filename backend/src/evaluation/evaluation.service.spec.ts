@@ -19,6 +19,7 @@ function makePrismaMock() {
     ecritOuvertResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     apprenant: { findMany: jest.fn(), create: jest.fn() },
     groupe: { findUnique: jest.fn() },
+    formateur: { findMany: jest.fn().mockResolvedValue([]) },
   };
 }
 
@@ -138,6 +139,51 @@ describe("EvaluationService", () => {
       const finalizeCall = prisma.evaluationAttempt.update.mock.calls[1][0];
       expect(finalizeCall.data.status).toBe("soumis");
       expect(finalizeCall.data.submittedAt).toBeInstanceOf(Date);
+    });
+
+    it("prévient chaque formateur par e-mail quand un test passe en 'soumis'", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({
+          lexiqueAnswers: "{}",
+          ecritOuvertResponse: { score: 8 },
+          oralAnswers: "{}",
+          situationResponses: new Array(5).fill({}),
+          videoResponses: new Array(2).fill({}),
+          essayResponse: { score: 9 },
+          candidat: CANDIDAT,
+        })
+      );
+      prisma.formateur.findMany.mockResolvedValue([
+        { prenom: "Ravaka", email: "ravaka@example.com" },
+        { prenom: "Sans", email: "" },
+      ]);
+
+      await service.submitAnswers("attempt-1", { oralAnswers: { q1: "a" } });
+
+      expect(email.send).toHaveBeenCalledTimes(1);
+      expect(email.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: "ravaka@example.com",
+          subject: "Nouveau test d'admission à corriger — Awa Diallo",
+        })
+      );
+    });
+
+    it("ne bloque pas la soumission si l'envoi aux formateurs échoue", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({
+          lexiqueAnswers: "{}",
+          ecritOuvertResponse: { score: 8 },
+          oralAnswers: "{}",
+          situationResponses: new Array(5).fill({}),
+          videoResponses: new Array(2).fill({}),
+          essayResponse: { score: 9 },
+          candidat: CANDIDAT,
+        })
+      );
+      prisma.formateur.findMany.mockRejectedValue(new Error("db down"));
+
+      await expect(service.submitAnswers("attempt-1", { oralAnswers: { q1: "a" } })).resolves.not.toThrow();
     });
   });
 

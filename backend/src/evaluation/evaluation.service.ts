@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Logger,
 } from "@nestjs/common";
 import * as path from "path";
 import * as bcrypt from "bcryptjs";
@@ -81,6 +82,8 @@ export const TIER_LABELS: Record<string, string> = {
 
 @Injectable()
 export class EvaluationService {
+  private readonly logger = new Logger(EvaluationService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
@@ -256,6 +259,38 @@ export class EvaluationService {
         where: { id: attemptId },
         data: { status: "soumis", submittedAt: new Date() },
       });
+      await this.notifierFormateursTestSoumis(attempt.candidat);
+    }
+  }
+
+  // Prévient les formateurs qu'un test d'admission attend une correction —
+  // la file « Tests d'admission » est commune à tous les formateurs (voir
+  // listAttemptsForGrading), qui devaient jusqu'ici aller vérifier d'eux-
+  // mêmes. Un échec d'envoi ne bloque jamais la soumission du candidat.
+  private async notifierFormateursTestSoumis(candidat: { firstName: string; lastName: string }) {
+    try {
+      const formateurs = await this.prisma.formateur.findMany({ select: { prenom: true, email: true } });
+      const link = `${process.env.FRONTEND_URL ?? "http://localhost:3000"}/evaluation/formateur`;
+      const nom = `${candidat.firstName} ${candidat.lastName}`;
+      for (const formateur of formateurs.filter((f) => f.email?.trim())) {
+        await this.email.send({
+          to: formateur.email,
+          subject: `Nouveau test d'admission à corriger — ${nom}`,
+          text: `Bonjour ${formateur.prenom},\n\n${nom} vient de terminer son test d'admission. Il attend une correction (mises en situation, vidéos, écrits).\n\nCorriger le test :\n${link}\n\nL'équipe e-Staf`,
+          html: renderEmailHtml({
+            title: "Nouveau test d'admission à corriger",
+            preheader: `${nom} vient de terminer son test`,
+            bodyHtml:
+              emailParagraph(`Bonjour ${formateur.prenom},`) +
+              emailParagraph(
+                `<strong>${nom}</strong> vient de terminer son test d'admission. Il attend une correction (mises en situation, vidéos, écrits).`
+              ) +
+              ctaButton("Corriger le test", link),
+          }),
+        });
+      }
+    } catch (err) {
+      this.logger.error(`Notification formateurs (test soumis) impossible : ${String(err)}`);
     }
   }
 
