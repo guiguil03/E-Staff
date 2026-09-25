@@ -6,12 +6,14 @@ interface MetierRowProps {
   metier: Metier;
   selected: boolean;
   onSelect: (slug: string) => void;
+  /** Nombre d'offres d'emploi ouvertes pour ce métier (vitrine). */
+  nbOffresOuvertes?: number;
 }
 
 // "Podium button" — a raised/beveled dark navy row: a lighter top-left edge
 // and a subtle inner highlight simulate a 3D button face on the obsidian
 // background, per the client reference (05-reference.png).
-export default function MetierRow({ metier, selected, onSelect }: MetierRowProps) {
+export default function MetierRow({ metier, selected, onSelect, nbOffresOuvertes = 0 }: MetierRowProps) {
   const Icon = metier.icon;
 
   return (
@@ -29,8 +31,13 @@ export default function MetierRow({ metier, selected, onSelect }: MetierRowProps
         <Icon className="h-5 w-5" />
       </span>
       <span className="flex-1">
-        <span className="block font-display text-base font-bold text-accent sm:text-lg">
-          {metier.title}
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="font-display text-base font-bold text-accent sm:text-lg">{metier.title}</span>
+          {nbOffresOuvertes > 0 && (
+            <span className="rounded-full border border-statusGreen/40 bg-statusGreen/10 px-2 py-0.5 font-sans text-[11px] font-semibold text-statusGreen">
+              {nbOffresOuvertes} offre{nbOffresOuvertes > 1 ? "s" : ""} ouverte{nbOffresOuvertes > 1 ? "s" : ""}
+            </span>
+          )}
         </span>
         <span className="mt-1 block font-sans text-sm leading-relaxed text-white/70">
           {metier.description}

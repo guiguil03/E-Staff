@@ -11,6 +11,7 @@ import { SendContractDto } from './send-contract.dto';
 import { PapiWebhookDto } from './papi-webhook.dto';
 import { generateRegistrationContractPdf } from './registration-contract-pdf';
 import { PapiService } from './papi.service';
+import { OffresEmploiService } from '../offres-emploi/offres-emploi.service';
 
 function safeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
@@ -33,16 +34,26 @@ export class RegistrationsService {
     private readonly storage: StorageService,
     private readonly email: EmailService,
     private readonly papi: PapiService,
+    private readonly offresEmploi: OffresEmploiService,
   ) {}
 
-  create(dto: CreateRegistrationDto) {
+  async create(dto: CreateRegistrationDto) {
+    // Candidature sur une offre précise : l'offre doit exister, être
+    // publiée et encore ouverte (sauf inscription en liste d'attente).
+    if (dto.offreEmploiId) {
+      await this.offresEmploi.verifierCandidature(dto.offreEmploiId, dto.listeAttente ?? false);
+    }
     return this.prisma.registration.create({ data: dto });
   }
 
   // Portail RH — toutes les inscriptions (tous funnels confondus), du plus
   // récent au plus ancien.
   list() {
-    return this.prisma.registration.findMany({ orderBy: { createdAt: 'desc' } });
+    return this.prisma.registration.findMany({
+      orderBy: { createdAt: 'desc' },
+      // Offre d'emploi visée (Studio Métier), affichée dans la liste RH.
+      include: { offreEmploi: { select: { id: true, titre: true } } },
+    });
   }
 
   private async getOrThrow(id: string) {

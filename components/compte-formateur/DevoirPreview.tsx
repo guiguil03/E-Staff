@@ -116,7 +116,7 @@ export function DevoirDownloadButton({
       disabled={etat === "loading"}
       title={fileName ?? "Télécharger le devoir"}
       className={`font-mono text-[10px] uppercase tracking-widest hover:underline ${
-        etat === "erreur" ? "text-red-400" : "text-white/50 hover:text-accent"
+        etat === "erreur" ? "text-statusRed" : "text-white/50 hover:text-accent"
       } ${className}`}
     >
       {etat === "loading" ? "…" : etat === "erreur" ? "échec" : "↓ fichier"}

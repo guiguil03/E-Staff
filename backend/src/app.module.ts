@@ -18,6 +18,7 @@ import { CockpitModule } from "./cockpit/cockpit.module";
 import { RhModule } from "./rh/rh.module";
 import { ProductionModule } from "./production/production.module";
 import { SupportCoursModule } from "./support-cours/support-cours.module";
+import { OffresEmploiModule } from "./offres-emploi/offres-emploi.module";
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { SupportCoursModule } from "./support-cours/support-cours.module";
     RhModule,
     ProductionModule,
     SupportCoursModule,
+    OffresEmploiModule,
   ],
   controllers: [AppController],
   providers: [AppService],
