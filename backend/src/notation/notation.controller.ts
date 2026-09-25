@@ -20,6 +20,11 @@ import { ApprenantGuard } from "../common/apprenant.guard";
 import { NotationService } from "./notation.service";
 import { GradeNotationDto } from "./dto/grade-notation.dto";
 
+// Devoirs apprenant : vidéo possible pour l'oral (exposé), d'où une limite
+// large — Multer bufférise en mémoire, sans limite un upload serait sans
+// borne (même logique que evaluation.controller.ts).
+const MAX_DEVOIR_UPLOAD_BYTES = 200 * 1024 * 1024; // 200 Mo
+
 @ApiTags("Notation")
 @Controller()
 export class NotationController {
@@ -115,7 +120,7 @@ export class NotationController {
 
   @UseGuards(ApprenantGuard)
   @Post("apprenants/:matricule/notations/:numero/:competence/devoir")
-  @UseInterceptors(FileInterceptor("fichier"))
+  @UseInterceptors(FileInterceptor("fichier", { limits: { fileSize: MAX_DEVOIR_UPLOAD_BYTES } }))
   uploadDevoir(
     @Param("matricule") matricule: string,
     @Param("numero", ParseIntPipe) numero: number,

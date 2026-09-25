@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { NotationService } from "./notation.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage.service";
@@ -273,7 +273,7 @@ describe("NotationService", () => {
     it("lève NotFoundException si la séance de l'apprenant n'existe pas", async () => {
       prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
       prisma.seance.findUnique.mockResolvedValue(null);
-      await expect(service.uploadDevoir("ETF-2026-0001", 99, "oral", file)).rejects.toThrow(
+      await expect(service.uploadDevoir("ETF-2026-0001", 99, "expression_orale", file)).rejects.toThrow(
         NotFoundException
       );
       expect(storage.uploadBuffer).not.toHaveBeenCalled();
@@ -284,8 +284,8 @@ describe("NotationService", () => {
       prisma.seance.findUnique.mockResolvedValue(SEANCE);
       prisma.notation.upsert.mockResolvedValue({
         id: "n-1",
-        competence: "oral",
-        fileKey: `devoirs/${APPRENANT.id}/${SEANCE.id}-oral.pdf`,
+        competence: "expression_orale",
+        fileKey: `devoirs/${APPRENANT.id}/${SEANCE.id}-expression_orale.pdf`,
         fileName: "devoir.pdf",
         soumisAt: new Date(),
         gridData: null,
@@ -295,10 +295,10 @@ describe("NotationService", () => {
         gradedAt: null,
       });
 
-      await service.uploadDevoir("ETF-2026-0001", 3, "oral", file);
+      await service.uploadDevoir("ETF-2026-0001", 3, "expression_orale", file);
 
       expect(storage.uploadBuffer).toHaveBeenCalledWith(
-        `devoirs/${APPRENANT.id}/${SEANCE.id}-oral.pdf`,
+        `devoirs/${APPRENANT.id}/${SEANCE.id}-expression_orale.pdf`,
         file.buffer,
         "application/pdf"
       );
@@ -306,6 +306,28 @@ describe("NotationService", () => {
       expect(call.update.scoreOn20).toBeNull();
       expect(call.update.gradedAt).toBeNull();
       expect(call.update.fileName).toBe("devoir.pdf");
+    });
+  
+    it("refuse le dépôt sur une séance pas encore planifiée (sans date)", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
+      prisma.seance.findUnique.mockResolvedValue({ ...SEANCE, startAt: null });
+      await expect(
+        service.uploadDevoir("ETF-2026-0001", 3, "expression_orale", file)
+      ).rejects.toThrow(BadRequestException);
+      expect(storage.uploadBuffer).not.toHaveBeenCalled();
+    });
+
+    it("refuse une compétence qui ne se dépose pas par l'apprenant", async () => {
+      await expect(
+        service.uploadDevoir("ETF-2026-0001", 3, "comprehension_orale", file)
+      ).rejects.toThrow(BadRequestException);
+      expect(storage.uploadBuffer).not.toHaveBeenCalled();
+    });
+
+    it("refuse une requête sans fichier", async () => {
+      await expect(
+        service.uploadDevoir("ETF-2026-0001", 3, "expression_orale", undefined as unknown as Express.Multer.File)
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

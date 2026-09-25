@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Reveal from "@/components/Reveal";
 import { apiGet } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
@@ -64,6 +64,14 @@ export default function MesNotationsTable({ className }: { className?: string } 
   const [matricule, setMatricule] = useState<string | null>(null);
   const [seances, setSeances] = useState<SeanceNotations[] | "loading" | "erreur">("loading");
   const [selected, setSelected] = useState<{ numero: number; competence: string } | null>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
+
+  // Le panneau de dépôt/lecture s'ouvre sous le tableau, souvent hors de
+  // l'écran : on le fait défiler jusqu'à lui, sinon le clic sur « à
+  // déposer » semblait ne rien faire (signalement du 2026-09-25).
+  useEffect(() => {
+    if (selected) detailRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [selected]);
 
   function refresh(m: string) {
     setSeances("loading");
@@ -131,28 +139,36 @@ export default function MesNotationsTable({ className }: { className?: string } 
                     <tr key={s.numero} className="border-b border-white/5">
                       <td className="py-2 pr-2 text-white">
                         n°{s.numero}
-                        {s.startAt && (
-                          <span className="block font-mono text-[10px] text-white/40">
-                            {new Date(s.startAt).toLocaleDateString("fr-FR")}
-                          </span>
-                        )}
+                        <span className="block font-mono text-[10px] text-white/40">
+                          {s.startAt ? new Date(s.startAt).toLocaleDateString("fr-FR") : "non planifiée"}
+                        </span>
                       </td>
                       {COMPETENCY_DEFS.map((c) => {
                         const n = s.notations.find((x) => x.competence === c.key);
                         const style = COMPETENCY_STYLE[c.key as keyof typeof COMPETENCY_STYLE];
+                        // Séance sans date = pas encore planifiée par le
+                        // formateur : rien à déposer ni à consulter (le
+                        // backend refuse aussi le dépôt, voir
+                        // NotationService.uploadDevoir).
+                        const planifiee = s.startAt !== null;
                         const label =
                           n?.scoreOn20 !== undefined && n?.scoreOn20 !== null
                             ? `${n.scoreOn20}/20`
                             : n?.fileName
                               ? "déposé"
-                              : GRID_COMPETENCIES.has(c.key)
+                              : GRID_COMPETENCIES.has(c.key) && planifiee
                                 ? "à déposer"
                                 : "—";
+                        const isSelected = selected?.numero === s.numero && selected?.competence === c.key;
                         return (
                           <td key={c.key} className="py-2 pr-2">
                             <button
                               onClick={() => setSelected({ numero: s.numero, competence: c.key })}
-                              className="rounded border px-2 py-1 font-mono text-xs transition-colors hover:opacity-80"
+                              disabled={!planifiee}
+                              title={planifiee ? undefined : "Séance pas encore planifiée par votre formateur"}
+                              className={`rounded border px-2 py-1 font-mono text-xs transition-colors hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-30 ${
+                                isSelected ? "bg-white/10" : ""
+                              }`}
                               style={{ borderColor: `${style.color}40`, color: style.color }}
                             >
                               {label}
@@ -173,10 +189,9 @@ export default function MesNotationsTable({ className }: { className?: string } 
             </table>
           </div>
         )}
-      </div>
 
       {selected && selectedDef && (
-        <div className="mt-4 rounded border border-accent/30 bg-obsidianCard p-6">
+        <div ref={detailRef} className="mt-4 rounded border border-accent/30 bg-obsidian p-6">
           <div className="flex items-center justify-between">
             <h3 className="font-display text-base font-semibold text-white">
               {selectedDef.label} — Séance n°{selected.numero}
@@ -243,6 +258,7 @@ export default function MesNotationsTable({ className }: { className?: string } 
           </div>
         </div>
       )}
+      </div>
     </Reveal>
   );
 }
