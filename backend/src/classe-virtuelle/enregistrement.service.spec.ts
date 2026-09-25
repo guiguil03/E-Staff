@@ -6,23 +6,26 @@ import { DailyService } from "./daily.service";
 describe("EnregistrementService", () => {
   let prisma: {
     seance: { findUnique: jest.Mock };
-    enregistrement: { upsert: jest.Mock; findMany: jest.Mock; findUnique: jest.Mock };
+    enregistrement: { upsert: jest.Mock; findMany: jest.Mock; findUnique: jest.Mock; delete: jest.Mock };
     apprenant: { findUnique: jest.Mock };
     groupe: { findUnique: jest.Mock };
     formateur: { findUnique: jest.Mock };
   };
-  let daily: { getRecordingAccessLink: jest.Mock };
+  let daily: { getRecordingAccessLink: jest.Mock; deleteRecording: jest.Mock };
   let service: EnregistrementService;
 
   beforeEach(() => {
     prisma = {
       seance: { findUnique: jest.fn() },
-      enregistrement: { upsert: jest.fn(), findMany: jest.fn(), findUnique: jest.fn() },
+      enregistrement: { upsert: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
       apprenant: { findUnique: jest.fn() },
       groupe: { findUnique: jest.fn() },
       formateur: { findUnique: jest.fn() },
     };
-    daily = { getRecordingAccessLink: jest.fn().mockResolvedValue({ url: "https://daily/rec.mp4", expires: 1 }) };
+    daily = {
+      getRecordingAccessLink: jest.fn().mockResolvedValue({ url: "https://daily/rec.mp4", expires: 1 }),
+      deleteRecording: jest.fn().mockResolvedValue(true),
+    };
     service = new EnregistrementService(prisma as unknown as PrismaService, daily as unknown as DailyService);
   });
 
@@ -71,5 +74,23 @@ describe("EnregistrementService", () => {
     prisma.groupe.findUnique.mockResolvedValue({ id: "g-A", formateurId: "f-1" });
     prisma.formateur.findUnique.mockResolvedValue({ id: "f-2" });
     await expect(service.listPourFormateur("A", 3, "ETF-FORM-2026-0002")).rejects.toThrow(ForbiddenException);
+  });
+
+  it("purge les enregistrements de plus de 90 jours, et ne garde en base que ceux dont la suppression Daily a échoué", async () => {
+    const maintenant = new Date("2026-12-31T00:00:00Z");
+    prisma.enregistrement.findMany.mockResolvedValue([
+      { id: "e-1", dailyRecordingId: "rec-1" },
+      { id: "e-2", dailyRecordingId: "rec-2" },
+    ]);
+    daily.deleteRecording.mockImplementation(async (id: string) => id === "rec-1");
+
+    await expect(service.purgerAnciens(maintenant)).resolves.toEqual({ supprimes: 1, total: 2 });
+
+    expect(prisma.enregistrement.findMany).toHaveBeenCalledWith({
+      where: { createdAt: { lt: new Date("2026-10-02T00:00:00Z") } },
+      select: { id: true, dailyRecordingId: true },
+    });
+    expect(prisma.enregistrement.delete).toHaveBeenCalledTimes(1);
+    expect(prisma.enregistrement.delete).toHaveBeenCalledWith({ where: { id: "e-1" } });
   });
 });

@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
+import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
 import { DailyService } from "./daily.service";
 
@@ -10,6 +11,10 @@ export interface RecordingReadyPayload {
   start_ts?: number;
   duration?: number;
 }
+
+// Durée de conservation des enregistrements (choix client du 2026-09-25) :
+// au-delà, la vidéo est supprimée chez Daily (stockage payant).
+export const CONSERVATION_ENREGISTREMENTS_JOURS = 90;
 
 // Enregistrements cloud des classes virtuelles, revisionnables par les
 // apprenants du groupe (demande cliente du 2026-09-25). La vidéo reste
@@ -44,6 +49,29 @@ export class EnregistrementService {
         debutAt: payload.start_ts ? new Date(payload.start_ts * 1000) : null,
       },
     });
+  }
+
+  // Purge quotidienne (3h, heure de Madagascar) des enregistrements plus
+  // vieux que la durée de conservation. La ligne n'est supprimée en base
+  // qu'une fois la vidéo supprimée chez Daily : un échec est retenté le
+  // lendemain au lieu de laisser une vidéo payante orpheline.
+  @Cron("0 3 * * *", { timeZone: "Indian/Antananarivo" })
+  async purgerAnciens(maintenant = new Date()) {
+    const limite = new Date(maintenant.getTime() - CONSERVATION_ENREGISTREMENTS_JOURS * 24 * 60 * 60 * 1000);
+    const anciens = await this.prisma.enregistrement.findMany({
+      where: { createdAt: { lt: limite } },
+      select: { id: true, dailyRecordingId: true },
+    });
+    let supprimes = 0;
+    for (const e of anciens) {
+      if (!(await this.daily.deleteRecording(e.dailyRecordingId))) continue;
+      await this.prisma.enregistrement.delete({ where: { id: e.id } });
+      supprimes++;
+    }
+    if (anciens.length) {
+      this.logger.log(`Enregistrements de plus de ${CONSERVATION_ENREGISTREMENTS_JOURS} jours supprimés : ${supprimes}/${anciens.length}`);
+    }
+    return { supprimes, total: anciens.length };
   }
 
   private serialize(e: { id: string; dureeSecondes: number | null; debutAt: Date | null; createdAt: Date }) {

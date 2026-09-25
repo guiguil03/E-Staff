@@ -39,6 +39,7 @@ yarn-error.log*
 next-env.d.ts
 .env*
 
-# Assets Excalidraw copiés au postinstall (scripts/copy-excalidraw-assets.mjs)
+# Assets Excalidraw et worker pdf.js copiés au postinstall (scripts/copy-vendor-assets.mjs)
 /public/excalidraw-assets
 /public/excalidraw-assets-dev
+/public/pdfjs

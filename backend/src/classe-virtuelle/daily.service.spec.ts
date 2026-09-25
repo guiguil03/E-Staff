@@ -62,4 +62,18 @@ describe("DailyService — enregistrement cloud", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("https://api.daily.co/v1/recordings/rec-1/access-link");
     expect(lien).toEqual({ url: "https://daily/rec.mp4", expires: 1700000000 });
   });
+
+  it("supprime un enregistrement ; un 404 compte comme déjà supprimé, une autre erreur non", async () => {
+    const service = new DailyService();
+    fetchMock.mockResolvedValueOnce({ ok: true });
+    await expect(service.deleteRecording("rec-1")).resolves.toBe(true);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.daily.co/v1/recordings/rec-1");
+    expect(fetchMock.mock.calls[0][1].method).toBe("DELETE");
+
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 404, text: async () => "" });
+    await expect(service.deleteRecording("rec-2")).resolves.toBe(true);
+
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 500, text: async () => "boom" });
+    await expect(service.deleteRecording("rec-3")).resolves.toBe(false);
+  });
 });

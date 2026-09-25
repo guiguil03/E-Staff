@@ -20,6 +20,14 @@ function formatDuree(s: number | null): string {
 // Le lien vidéo est temporaire : il n'est demandé qu'au clic, après
 // vérification des droits côté backend (EnregistrementService), puis lu
 // directement dans la page.
+// Les enregistrements sont supprimés 90 jours après la séance (voir
+// EnregistrementService.purgerAnciens côté backend).
+const CONSERVATION_JOURS = 90;
+function finConservation(debutAt: string): string {
+  const fin = new Date(new Date(debutAt).getTime() + CONSERVATION_JOURS * 24 * 60 * 60 * 1000);
+  return fin.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+}
+
 export default function EnregistrementsLecteur({
   enregistrements,
   lienPath,
@@ -70,6 +78,11 @@ export default function EnregistrementsLecteur({
           </button>
         ))}
       </div>
+      {enregistrements.length > 0 && (
+        <p className="mt-1 font-sans text-[11px] text-white/40">
+          Disponible jusqu&apos;au {finConservation(enregistrements[0].debutAt)}
+        </p>
+      )}
       {erreur && <p className="mt-2 font-sans text-xs text-accent">{erreur}</p>}
       {lecture && (
         <div className="mt-3">

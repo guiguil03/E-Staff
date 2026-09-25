@@ -30,7 +30,7 @@ interface NotationApi {
   gradedAt: string | null;
 }
 
-interface SeanceNotations {
+export interface SeanceNotations {
   numero: number;
   startAt: string | null;
   notations: NotationApi[];
@@ -40,6 +40,35 @@ interface SeanceNotations {
 // notation. comprehension_orale/ecrite restent gérées entièrement par le
 // formateur (dépôt de document externe + note directe), pas de dépôt ici.
 const GRID_COMPETENCIES = new Set(["expression_orale", "expression_ecrite", "posture_eloquence"]);
+
+// Événement émis par le raccourci « Rendre un exercice » des actions
+// rapides (QuickActions) : ouvre directement le dépôt attendu.
+export const RENDRE_EXERCICE_EVENT = "estaff:rendre-exercice";
+
+// Dépôt vers lequel mène « Rendre un exercice » : la séance déjà commencée
+// la plus récente qui attend encore un devoir, sinon la prochaine séance
+// planifiée qui en attend un. Null s'il n'y a rien à déposer.
+export function prochainDepotAttendu(
+  seances: SeanceNotations[],
+  maintenant = new Date()
+): { numero: number; competence: string } | null {
+  const enAttente = (s: SeanceNotations) =>
+    COMPETENCY_DEFS.map((c) => c.key).find((key) => {
+      if (!GRID_COMPETENCIES.has(key)) return false;
+      const n = s.notations.find((x) => x.competence === key);
+      return !n?.fileName && (n?.scoreOn20 === undefined || n?.scoreOn20 === null);
+    });
+  const planifiees = seances
+    .filter((s) => s.startAt !== null)
+    .sort((a, b) => new Date(a.startAt!).getTime() - new Date(b.startAt!).getTime());
+  const passees = planifiees.filter((s) => new Date(s.startAt!) <= maintenant).reverse();
+  const futures = planifiees.filter((s) => new Date(s.startAt!) > maintenant);
+  for (const s of [...passees, ...futures]) {
+    const competence = enAttente(s);
+    if (competence) return { numero: s.numero, competence };
+  }
+  return null;
+}
 
 function toGridEntry(n: NotationApi | undefined): GridCompetencyEntry | undefined {
   if (!n?.gridData) return undefined;
@@ -65,6 +94,8 @@ export default function MesNotationsTable({ className }: { className?: string } 
   const [seances, setSeances] = useState<SeanceNotations[] | "loading" | "erreur">("loading");
   const [selected, setSelected] = useState<{ numero: number; competence: string } | null>(null);
   const detailRef = useRef<HTMLDivElement>(null);
+  const tableauRef = useRef<HTMLDivElement>(null);
+  const [aucunDepot, setAucunDepot] = useState(false);
 
   // Le panneau de dépôt/lecture s'ouvre sous le tableau, souvent hors de
   // l'écran : on le fait défiler jusqu'à lui, sinon le clic sur « à
@@ -86,6 +117,23 @@ export default function MesNotationsTable({ className }: { className?: string } 
     if (m) refresh(m);
   }, []);
 
+  // Raccourci « Rendre un exercice » : ouvre le dépôt attendu (le panneau
+  // défile alors jusqu'à lui), ou signale qu'il n'y a rien à rendre.
+  useEffect(() => {
+    function ouvrirDepot() {
+      if (!Array.isArray(seances)) {
+        tableauRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      const cible = prochainDepotAttendu(seances);
+      setAucunDepot(!cible);
+      if (cible) setSelected(cible);
+      else tableauRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    window.addEventListener(RENDRE_EXERCICE_EVENT, ouvrirDepot);
+    return () => window.removeEventListener(RENDRE_EXERCICE_EVENT, ouvrirDepot);
+  }, [seances]);
+
   const selectedSeance = Array.isArray(seances)
     ? seances.find((s) => s.numero === selected?.numero)
     : undefined;
@@ -94,13 +142,18 @@ export default function MesNotationsTable({ className }: { className?: string } 
 
   return (
     <Reveal className={className}>
-      <div className="h-full rounded border border-white/10 bg-obsidianCard p-6">
+      <div ref={tableauRef} className="h-full rounded border border-white/10 bg-obsidianCard p-6">
         <h3 className="font-display text-base font-semibold text-white">
           Mes séances &amp; notation
         </h3>
         <p className="mt-1 font-sans text-xs text-white/50">
           Cliquez sur une compétence pour voir comment elle a été évaluée, ou déposer votre devoir.
         </p>
+        {aucunDepot && (
+          <p className="mt-2 rounded border border-white/15 px-3 py-2 font-sans text-xs text-white/70">
+            Aucun devoir à rendre pour le moment : tout est déposé ou noté.
+          </p>
+        )}
 
         {seances === "loading" && (
           <p className="mt-4 font-sans text-sm text-white/50">Chargement...</p>
@@ -163,7 +216,10 @@ export default function MesNotationsTable({ className }: { className?: string } 
                         return (
                           <td key={c.key} className="py-2 pr-2">
                             <button
-                              onClick={() => setSelected({ numero: s.numero, competence: c.key })}
+                              onClick={() => {
+                                setAucunDepot(false);
+                                setSelected({ numero: s.numero, competence: c.key });
+                              }}
                               disabled={!planifiee}
                               title={planifiee ? undefined : "Séance pas encore planifiée par votre formateur"}
                               className={`rounded border px-2 py-1 font-mono text-xs transition-colors hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-30 ${
