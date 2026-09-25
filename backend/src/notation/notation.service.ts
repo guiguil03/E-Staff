@@ -235,10 +235,31 @@ export class NotationService {
       where: { seanceId: seance.id },
       include: { apprenant: true },
     });
-    const parNotation: Record<string, Record<string, { scoreOn20: number | null }>> = {};
+    // Inclut le devoir déposé (id de notation pour le téléchargement, nom
+    // du fichier, dates) : le tableau Planning montre ainsi, par séance, ce
+    // que chaque apprenant a rendu et ce qui reste à corriger — noté ou non.
+    const parNotation: Record<
+      string,
+      Record<
+        string,
+        {
+          id: string;
+          scoreOn20: number | null;
+          fileName: string | null;
+          soumisAt: Date | null;
+          gradedAt: Date | null;
+        }
+      >
+    > = {};
     for (const n of notations) {
       parNotation[n.apprenant.matricule] ??= {};
-      parNotation[n.apprenant.matricule][n.competence] = { scoreOn20: n.scoreOn20 };
+      parNotation[n.apprenant.matricule][n.competence] = {
+        id: n.id,
+        scoreOn20: n.scoreOn20,
+        fileName: n.fileKey ? n.fileName : null,
+        soumisAt: n.soumisAt,
+        gradedAt: n.gradedAt,
+      };
     }
     return parNotation;
   }
@@ -520,7 +541,43 @@ export class NotationService {
         gradedAt: null,
       },
     });
+    await this.notifierFormateurNouveauRendu(apprenant, seance.groupeId, numero, competence, file.originalname);
     return this.serialize(notation);
+  }
+
+  // Prévient le formateur du groupe qu'un rendu l'attend — il n'a plus à
+  // aller vérifier "Évaluer & Corriger" de lui-même. Un échec d'envoi ne
+  // bloque jamais le dépôt (EmailService ne lève pas d'exception).
+  private async notifierFormateurNouveauRendu(
+    apprenant: { prenom: string; nom: string },
+    groupeId: string,
+    numero: number,
+    competence: string,
+    fileName: string
+  ) {
+    const groupe = await this.prisma.groupe.findUnique({
+      where: { id: groupeId },
+      include: { formateur: true },
+    });
+    if (!groupe?.formateur?.email) return;
+    const formateur = groupe.formateur;
+    const competenceLabel = COMPETENCY_LABELS[competence] ?? competence;
+    const link = `${APP_URL}/compte/formateur/corriger`;
+    await this.email.send({
+      to: formateur.email,
+      subject: `Nouveau rendu à corriger — ${apprenant.prenom} ${apprenant.nom} (${groupe.label}, séance ${numero})`,
+      text: `Bonjour ${formateur.prenom},\n\n${apprenant.prenom} ${apprenant.nom} (${groupe.label}) vient de déposer un devoir « ${competenceLabel} » pour la séance n°${numero} : ${fileName}.\n\nCorrigez-le ici :\n${link}\n\nL'équipe e-Staf`,
+      html: renderEmailHtml({
+        title: "Nouveau rendu à corriger",
+        preheader: `${apprenant.prenom} ${apprenant.nom} — ${competenceLabel}, séance ${numero}`,
+        bodyHtml:
+          emailParagraph(`Bonjour ${formateur.prenom},`) +
+          emailParagraph(
+            `<strong>${apprenant.prenom} ${apprenant.nom}</strong> (${groupe.label}) vient de déposer un devoir « ${competenceLabel} » pour la séance n°${numero} : ${fileName}.`
+          ) +
+          ctaButton("Corriger maintenant", link),
+      }),
+    });
   }
 
   // ---- File d'attente "Évaluer & Corriger" --------------------------------
@@ -529,17 +586,29 @@ export class NotationService {
   // — avant les comptes individuels, cette file montrait tout le monde à
   // tout le monde puisqu'il n'y avait qu'un seul compte formateur partagé.
   async listACorriger(formateurMatricule?: string) {
+    return this.listRendus(formateurMatricule, "a-corriger");
+  }
+
+  // Historique "Évaluer & Corriger" — rendus déjà notés, plus récents
+  // d'abord. Avant, un devoir noté disparaissait de toute l'interface
+  // formateur : impossible de le rouvrir pour relire ou revoir la note.
+  async listCorriges(formateurMatricule?: string) {
+    return this.listRendus(formateurMatricule, "corriges");
+  }
+
+  private async listRendus(formateurMatricule: string | undefined, etat: "a-corriger" | "corriges") {
     const formateur = formateurMatricule
       ? await this.findFormateurOrThrow(formateurMatricule)
       : null;
     const notations = await this.prisma.notation.findMany({
       where: {
         fileKey: { not: null },
-        gradedAt: null,
+        gradedAt: etat === "a-corriger" ? null : { not: null },
         ...(formateur ? { seance: { groupe: { formateurId: formateur.id } } } : {}),
       },
       include: { apprenant: true, seance: { include: { groupe: true } } },
-      orderBy: { soumisAt: "asc" },
+      orderBy: etat === "a-corriger" ? { soumisAt: "asc" } : { gradedAt: "desc" },
+      ...(etat === "corriges" ? { take: 200 } : {}),
     });
     return notations.map((n) => ({
       id: n.id,
@@ -552,6 +621,10 @@ export class NotationService {
       competence: n.competence,
       fileName: n.fileName,
       soumisAt: n.soumisAt,
+      gradedAt: n.gradedAt,
+      scoreOn20: n.scoreOn20,
+      gridData: parseGridData(n.gridData),
+      commentaires: n.commentaires,
     }));
   }
 

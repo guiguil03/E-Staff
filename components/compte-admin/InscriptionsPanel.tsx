@@ -15,6 +15,9 @@ interface RegistrationApi {
   email: string;
   phone: string;
   typeFormation: string | null;
+  // Offre d'emploi visée sur la vitrine Studio Métier (voir OffreEmploi).
+  offreEmploi: { id: string; titre: string } | null;
+  listeAttente: boolean;
   status: string;
   contractSentAt: string | null;
   paymentReference: string | null;
@@ -165,6 +168,12 @@ export default function InscriptionsPanel() {
                       </td>
                       <td className="py-2 pr-2 text-white/70">
                         {r.typeFormation ?? r.segment}
+                        {r.offreEmploi && (
+                          <span className="block font-mono text-[10px] text-accent">
+                            Offre : {r.offreEmploi.titre}
+                            {r.listeAttente && " — liste d'attente"}
+                          </span>
+                        )}
                       </td>
                       <td className={`py-2 pr-2 font-mono text-xs ${STATUS_TONE[r.status] ?? "text-white/60"}`}>
                         {STATUS_LABELS[r.status] ?? r.status}

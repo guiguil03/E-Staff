@@ -21,6 +21,7 @@ import type { CompetencyEntry, GridCompetencyEntry, UploadCompetencyEntry } from
 import DelfGrid from "./grids/DelfGrid";
 import PostureGrid from "./grids/PostureGrid";
 import UploadCompetencyForm from "./grids/UploadCompetencyForm";
+import DevoirPreview from "./DevoirPreview";
 
 interface NoterApprenantDashboardProps {
   apprenantId: string;
@@ -29,7 +30,10 @@ interface NoterApprenantDashboardProps {
 }
 
 interface NotationApi {
+  id: string;
   competence: string;
+  fileName: string | null;
+  gradedAt: string | null;
   gridData: { selections?: Record<string, number>; anomaly?: string; adjustments?: unknown } | null;
   note: number | null;
   commentaires: string | null;
@@ -198,11 +202,20 @@ export default function NoterApprenantDashboard({
                     onClick={() => setActiveCompetency(def.key)}
                     className="flex items-center justify-between rounded border border-white/10 bg-obsidian px-4 py-3 text-left transition-colors hover:border-accent/50"
                   >
-                    <span className="font-sans text-sm text-white">{def.label}</span>
+                    <span className="font-sans text-sm text-white">
+                      {def.label}
+                      {entry?.fileName && (
+                        <span className="block font-mono text-[10px] text-white/40">
+                          📎 {entry.fileName}
+                        </span>
+                      )}
+                    </span>
                     <span className="font-mono text-xs text-accent">
                       {entry?.scoreOn20 !== undefined && entry?.scoreOn20 !== null
                         ? `${entry.scoreOn20}/20`
-                        : "à noter"}
+                        : entry?.fileName
+                          ? "rendu à corriger"
+                          : "à noter"}
                     </span>
                   </button>
                 ))}
@@ -234,6 +247,20 @@ export default function NoterApprenantDashboard({
                   ← Compétences
                 </button>
               </div>
+
+              {/* Rendu déposé par l'apprenant pour cette compétence — consultable
+                  pendant la notation, sans passer par « Évaluer & Corriger ». */}
+              {activeEntry?.fileName ? (
+                <DevoirPreview notationId={activeEntry.id} fileName={activeEntry.fileName} />
+              ) : (
+                (activeDef.key === "expression_orale" ||
+                  activeDef.key === "expression_ecrite" ||
+                  activeDef.key === "posture_eloquence") && (
+                  <p className="mt-3 font-sans text-xs text-white/40">
+                    Aucun document déposé par l&apos;apprenant pour cette compétence.
+                  </p>
+                )
+              )}
 
               <div className="mt-4">
                 {activeDef.key === "expression_orale" && (

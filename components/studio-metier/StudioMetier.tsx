@@ -1,11 +1,14 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Reveal from "@/components/Reveal";
 import RegistrationForm from "@/components/RegistrationForm";
 import AccessNotice from "@/components/studio-metier/AccessNotice";
 import CircuitTexture from "@/components/studio-metier/CircuitTexture";
 import MetierColumn from "@/components/studio-metier/MetierColumn";
+import OffreCard from "@/components/studio-metier/OffreCard";
+import type { OffreEmploi } from "@/components/studio-metier/offres";
+import { apiGet } from "@/lib/api";
 import {
   ALL_METIERS,
   LONG_TERM_METIERS,
@@ -24,8 +27,37 @@ export default function StudioMetier() {
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const candidatureRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLDivElement>(null);
+
+  // Offres d'emploi réelles (Portail RH > Offres d'emploi). Une panne de
+  // l'API ne doit jamais casser la vitrine : on retombe alors sur la
+  // candidature par métier, comme avant.
+  const [offres, setOffres] = useState<OffreEmploi[]>([]);
+  // Offre choisie via « Postuler » / « Rejoindre la liste d'attente » ;
+  // "spontanee" = candidature au métier sans offre précise.
+  const [choix, setChoix] = useState<{ offreId: string; listeAttente: boolean } | "spontanee" | null>(null);
+
+  useEffect(() => {
+    apiGet<OffreEmploi[]>("/offres-emploi")
+      .then((data) => setOffres(Array.isArray(data) ? data : []))
+      .catch(() => setOffres([]));
+  }, []);
 
   const selected = ALL_METIERS.find((metier) => metier.slug === selectedSlug) ?? null;
+  const offresMetier = selected ? offres.filter((o) => o.metierSlug === selected.slug) : [];
+  const offreChoisie =
+    choix && choix !== "spontanee" ? offres.find((o) => o.id === choix.offreId) ?? null : null;
+  const offresOuvertesParMetier = offres.reduce<Record<string, number>>((acc, o) => {
+    if (o.statut !== "cloture") acc[o.metierSlug] = (acc[o.metierSlug] ?? 0) + 1;
+    return acc;
+  }, {});
+  // Sans offre publiée pour ce métier, on garde la candidature directe.
+  const afficherFormulaire = !!selected && (offresMetier.length === 0 || choix !== null);
+
+  function choisir(nouveauChoix: { offreId: string; listeAttente: boolean } | "spontanee") {
+    setChoix(nouveauChoix);
+    requestAnimationFrame(() => scrollTo(formRef));
+  }
 
   function scrollTo(ref: React.RefObject<HTMLElement>) {
     ref.current?.scrollIntoView({
@@ -36,6 +68,7 @@ export default function StudioMetier() {
 
   function handleSelect(slug: string) {
     setSelectedSlug(slug);
+    setChoix(null);
     // Wait a tick so the registration section has re-rendered before scrolling.
     requestAnimationFrame(() => scrollTo(candidatureRef));
   }
@@ -97,6 +130,7 @@ export default function StudioMetier() {
                 title="Vos missions à long terme"
                 intro="Vous recherchez un engagement pérenne, une montée en compétences, et une intégration de fond ? C'est ici que vous construisez votre carrière."
                 metiers={LONG_TERM_METIERS}
+                offresOuvertesParMetier={offresOuvertesParMetier}
                 selectedSlug={selectedSlug}
                 onSelect={handleSelect}
                 delayBase={0}
@@ -111,6 +145,7 @@ export default function StudioMetier() {
                 title="Vos missions à court terme"
                 intro="Vous préférez l'émulation des projets rythmés, la polyvalence, et l'expression de vos expertises créatives ? Exprimez votre talent ici."
                 metiers={SHORT_TERM_METIERS}
+                offresOuvertesParMetier={offresOuvertesParMetier}
                 selectedSlug={selectedSlug}
                 onSelect={handleSelect}
                 delayBase={80}
@@ -119,9 +154,9 @@ export default function StudioMetier() {
           </div>
         </section>
 
-        {/* Registration */}
+        {/* Offres du métier + candidature */}
         <section ref={candidatureRef} className="px-4 pb-20 sm:px-6">
-          <div className="mx-auto max-w-2xl">
+          <div className={`mx-auto ${selected && offresMetier.length > 0 ? "max-w-4xl" : "max-w-2xl"}`}>
             <Reveal>
               {selected ? (
                 <>
@@ -134,19 +169,80 @@ export default function StudioMetier() {
                   <p className="mt-2 text-center">
                     <button
                       type="button"
-                      onClick={() => setSelectedSlug(null)}
+                      onClick={() => {
+                        setSelectedSlug(null);
+                        setChoix(null);
+                      }}
                       className="font-sans text-sm text-white/60 underline decoration-accent/40 underline-offset-4 hover:text-accent"
                     >
                       Choisir un autre métier
                     </button>
                   </p>
-                  <div className="mt-6">
-                    <RegistrationForm
-                      segment={selected.slug}
-                      tone="dark"
-                      ctaLabel="Envoyer ma candidature"
-                    />
-                  </div>
+
+                  {offresMetier.length > 0 && (
+                    <div className="mt-8">
+                      <p className="text-center font-sans text-sm text-white/70">
+                        {offresMetier.length} offre{offresMetier.length > 1 ? "s" : ""} d&apos;emploi pour ce
+                        métier — choisissez celle qui vous correspond.
+                      </p>
+                      <div className="mt-6 grid gap-5 md:grid-cols-2">
+                        {offresMetier.map((offre) => (
+                          <OffreCard
+                            key={offre.id}
+                            offre={offre}
+                            selected={offreChoisie?.id === offre.id}
+                            onPostuler={(o) => choisir({ offreId: o.id, listeAttente: false })}
+                            onListeAttente={(o) => choisir({ offreId: o.id, listeAttente: true })}
+                          />
+                        ))}
+                      </div>
+                      {choix === null && (
+                        <p className="mt-6 text-center">
+                          <button
+                            type="button"
+                            onClick={() => choisir("spontanee")}
+                            className="font-sans text-sm text-white/60 underline decoration-accent/40 underline-offset-4 hover:text-accent"
+                          >
+                            Aucune offre ne vous correspond ? Envoyer une candidature spontanée
+                          </button>
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {afficherFormulaire && (
+                    <div ref={formRef} className="mx-auto mt-8 max-w-2xl scroll-mt-24">
+                      {offreChoisie ? (
+                        <p className="mb-4 text-center font-sans text-sm text-white/70">
+                          {choix !== "spontanee" && choix?.listeAttente
+                            ? "Inscription en liste d'attente pour : "
+                            : "Candidature pour : "}
+                          <span className="font-semibold text-white">
+                            {offreChoisie.drapeau ? `${offreChoisie.drapeau} ` : ""}
+                            {offreChoisie.titre}
+                          </span>
+                        </p>
+                      ) : (
+                        offresMetier.length > 0 && (
+                          <p className="mb-4 text-center font-sans text-sm text-white/70">
+                            Candidature spontanée — {selected.title}
+                          </p>
+                        )
+                      )}
+                      <RegistrationForm
+                        key={offreChoisie ? `${offreChoisie.id}-${choix !== "spontanee" && choix?.listeAttente}` : selected.slug}
+                        segment={selected.slug}
+                        tone="dark"
+                        ctaLabel={
+                          choix !== "spontanee" && choix?.listeAttente
+                            ? "Rejoindre la liste d'attente"
+                            : "Envoyer ma candidature"
+                        }
+                        offreEmploiId={offreChoisie?.id}
+                        listeAttente={choix !== null && choix !== "spontanee" && choix.listeAttente}
+                      />
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="rounded border border-white/10 bg-obsidianCard px-6 py-10 text-center">
@@ -154,8 +250,8 @@ export default function StudioMetier() {
                     Choisissez d&apos;abord votre voie
                   </p>
                   <p className="mt-2 font-sans text-sm text-white/60">
-                    Sélectionnez un métier ci-dessus pour démarrer votre
-                    candidature.
+                    Sélectionnez un métier ci-dessus pour découvrir les offres
+                    d&apos;emploi et démarrer votre candidature.
                   </p>
                 </div>
               )}

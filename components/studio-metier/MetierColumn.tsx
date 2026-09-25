@@ -9,6 +9,8 @@ interface MetierColumnProps {
   selectedSlug: string | null;
   onSelect: (slug: string) => void;
   delayBase?: number;
+  /** Offres ouvertes par slug de métier. */
+  offresOuvertesParMetier?: Record<string, number>;
 }
 
 export default function MetierColumn({
@@ -18,6 +20,7 @@ export default function MetierColumn({
   selectedSlug,
   onSelect,
   delayBase = 0,
+  offresOuvertesParMetier = {},
 }: MetierColumnProps) {
   return (
     <div>
@@ -37,6 +40,7 @@ export default function MetierColumn({
               metier={metier}
               selected={selectedSlug === metier.slug}
               onSelect={onSelect}
+              nbOffresOuvertes={offresOuvertesParMetier[metier.slug] ?? 0}
             />
           </Reveal>
         ))}

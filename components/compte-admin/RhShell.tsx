@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { href: "/compte/admin/cycle", label: "Cycle complet", icon: "⟲", roles: ["rh"] },
   { href: "/compte/admin/coordonnees", label: "Coordonnées", icon: "☎", roles: ["rh"] },
   { href: "/compte/admin/recrutement", label: "Recrutement", icon: "✦", roles: ["rh"] },
+  { href: "/compte/admin/offres-emploi", label: "Offres d'emploi", icon: "☷", roles: ["rh"] },
   { href: "/compte/admin/inscriptions", label: "Inscriptions", icon: "✎", roles: ["rh"] },
   { href: "/compte/admin/academie", label: "Académie & Vagues", icon: "❖", roles: ["admin"] },
   { href: "/compte/admin/production", label: "Production", icon: "▲", roles: ["rh"] },

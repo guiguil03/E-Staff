@@ -143,6 +143,14 @@ model Registration {
   // au moment de la soumission de la référence de paiement — voir
   // /conditions-generales et submitPaymentReferencePublic.
   cguAcceptedAt DateTime?
+
+  // Offre d'emploi précise choisie sur la vitrine Studio Métier (voir
+  // OffreEmploi) — null pour les autres funnels et les candidatures
+  // spontanées. listeAttente : candidature déposée alors que l'offre était
+  // clôturée (bouton « Rejoindre la liste d'attente »).
+  offreEmploiId String?
+  offreEmploi   OffreEmploi? @relation(fields: [offreEmploiId], references: [id], onDelete: SetNull)
+  listeAttente  Boolean      @default(false)
 }
 
 // ---------------------------------------------------------------------------
@@ -1310,4 +1318,44 @@ model ChargeInfrastructure {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Offres d'emploi réelles affichées sur la vitrine Studio Métier
+// (/offres/carrieres) — gérées par la RH depuis le Portail RH, sans toucher
+// au code (demande cliente du 2026-09-19). Le statut affiché (places
+// disponibles / dernières places / complète) est calculé automatiquement à
+// partir des places et de la date limite, voir offres-emploi/statut.ts.
+model OffreEmploi {
+  id String @id @default(cuid())
+
+  // Métier Studio Métier auquel l'offre est rattachée (slug de
+  // components/studio-metier/data.ts, ex. "teleconseiller", "closer").
+  metierSlug String
+
+  titre        String // ex. "Téléprospecteur PAC — Marché Canadien"
+  drapeau      String? // emoji affiché devant le titre, ex. "🇨🇦"
+  // Étiquettes courtes affichées sous le titre, ex. ["Télétravail",
+  // "Temps plein", "GMT-5", "Niveau C1"].
+  modalites    String[] @default([])
+  projet       String?
+  remuneration String?
+  prerequis    String?
+
+  placesTotal    Int
+  placesPourvues Int       @default(0)
+  // Fermeture automatique de l'offre passé cette date.
+  dateLimite     DateTime?
+  // Fermeture manuelle par la RH, indépendamment des places.
+  cloturee       Boolean   @default(false)
+  // Masquée de la vitrine (brouillon / archivée) sans être supprimée.
+  publiee        Boolean   @default(true)
+  // Si renseigné, « Postuler » ouvre WhatsApp au lieu du formulaire.
+  lienWhatsapp   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  candidatures Registration[]
+
+  @@index([metierSlug])
 }

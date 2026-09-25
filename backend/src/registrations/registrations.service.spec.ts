@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../common/storage.service';
 import { EmailService } from '../common/email.service';
 import { PapiService } from './papi.service';
+import { OffresEmploiService } from '../offres-emploi/offres-emploi.service';
 
 // Se concentre sur la logique de paiement (lien Papi + webhook) — la partie
 // la plus sensible du module car elle décide seule de basculer une
@@ -14,6 +15,7 @@ function makePrismaMock() {
     registration: {
       findUnique: jest.fn(),
       update: jest.fn(),
+      create: jest.fn(),
     },
   };
 }
@@ -39,18 +41,44 @@ describe('RegistrationsService — paiement', () => {
   let prisma: ReturnType<typeof makePrismaMock>;
   let storage: { uploadBuffer: jest.Mock };
   let papi: { createPaymentLink: jest.Mock };
+  let offresEmploi: { verifierCandidature: jest.Mock };
   let service: RegistrationsService;
 
   beforeEach(() => {
     prisma = makePrismaMock();
     storage = { uploadBuffer: jest.fn().mockResolvedValue(undefined) };
     papi = { createPaymentLink: jest.fn() };
+    offresEmploi = { verifierCandidature: jest.fn().mockResolvedValue({}) };
     service = new RegistrationsService(
       prisma as unknown as PrismaService,
       storage as unknown as StorageService,
       {} as unknown as EmailService,
       papi as unknown as PapiService,
+      offresEmploi as unknown as OffresEmploiService,
     );
+  });
+
+  describe('create', () => {
+    const base = { segment: 'setter', firstName: 'Awa', email: 'awa@example.com', phone: '0340000000' };
+
+    it("vérifie l'offre choisie avant d'enregistrer la candidature", async () => {
+      prisma.registration.create.mockResolvedValue({ id: 'reg-9' });
+      await service.create({ ...base, offreEmploiId: 'o-1' });
+      expect(offresEmploi.verifierCandidature).toHaveBeenCalledWith('o-1', false);
+      expect(prisma.registration.create).toHaveBeenCalled();
+    });
+
+    it("n'enregistre rien si l'offre est refusée (clôturée)", async () => {
+      offresEmploi.verifierCandidature.mockRejectedValue(new BadRequestException('clôturée'));
+      await expect(service.create({ ...base, offreEmploiId: 'o-1' })).rejects.toThrow(BadRequestException);
+      expect(prisma.registration.create).not.toHaveBeenCalled();
+    });
+
+    it('ne vérifie aucune offre pour une candidature spontanée', async () => {
+      prisma.registration.create.mockResolvedValue({ id: 'reg-10' });
+      await service.create(base);
+      expect(offresEmploi.verifierCandidature).not.toHaveBeenCalled();
+    });
   });
 
   describe('createPaymentLinkPublic', () => {
