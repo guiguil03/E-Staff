@@ -1,5 +1,5 @@
 import * as path from "path";
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage.service";
 import { EmailService } from "../common/email.service";
@@ -469,12 +469,34 @@ export class NotationService {
   // Dépôt de devoir — remet la notation à zéro si un devoir précédent avait
   // déjà été corrigé (redépôt après retour du formateur), même logique que
   // EvaluationService.saveSituationAudio.
+  // Compétences pour lesquelles l'apprenant dépose lui-même un devoir (grille
+  // notée ensuite par le formateur) — même liste que GRID_COMPETENCIES côté
+  // front (MesNotationsTable.tsx). Les compréhensions orale/écrite sont
+  // déposées et notées directement par le formateur.
+  private static readonly DEVOIR_COMPETENCES = new Set([
+    "expression_orale",
+    "expression_ecrite",
+    "posture_eloquence",
+  ]);
+
   async uploadDevoir(matricule: string, numero: number, competence: string, file: Express.Multer.File) {
+    if (!file) throw new BadRequestException("Aucun fichier reçu (ou fichier trop volumineux, 200 Mo max).");
+    if (!NotationService.DEVOIR_COMPETENCES.has(competence)) {
+      throw new BadRequestException("Cette compétence ne se dépose pas par l'apprenant.");
+    }
     const apprenant = await this.findApprenantOrThrow(matricule);
     const seance = await this.prisma.seance.findUnique({
       where: { groupeId_numero: { groupeId: apprenant.groupeId, numero } },
     });
     if (!seance) throw new NotFoundException(`Séance n°${numero} introuvable.`);
+    // Le dépôt s'ouvre dès que le formateur a planifié la séance (date
+    // fixée) — pas sur les créneaux vides, sans date (signalement du
+    // 2026-09-25 : "à déposer" affiché sur des séances non planifiées).
+    if (!seance.startAt) {
+      throw new BadRequestException(
+        `La séance n°${numero} n'est pas encore planifiée par votre formateur — le dépôt n'est pas encore ouvert.`
+      );
+    }
 
     const extension = path.extname(file.originalname) || "";
     const key = `devoirs/${apprenant.id}/${seance.id}-${competence}${extension}`;

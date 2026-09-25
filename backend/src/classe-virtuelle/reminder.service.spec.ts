@@ -1,4 +1,4 @@
-import { ClasseVirtuelleReminderService } from "./reminder.service";
+import { ClasseVirtuelleReminderService, jourRelatif } from "./reminder.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../common/email.service";
 
@@ -108,5 +108,51 @@ describe("ClasseVirtuelleReminderService", () => {
       where: { id: "seance-1" },
       data: { rappelJ1EnvoyeAt: expect.any(Date) },
     });
+  });
+
+  it("dit « aujourd'hui » (et pas « demain ») pour une séance planifiée le jour même", async () => {
+    // now = 2026-09-21 11:00 à Madagascar ; séance à 16:15 le même jour.
+    prisma.seance.findMany
+      .mockResolvedValueOnce([seance({ startAt: new Date("2026-09-21T13:15:00.000Z") })])
+      .mockResolvedValueOnce([]);
+
+    await service.handleReminders();
+
+    const mail = email.send.mock.calls[0][0];
+    expect(mail.subject).toBe("Rappel — votre séance d'aujourd'hui (Groupe A)");
+    expect(mail.text).toContain("a lieu aujourd'hui");
+    expect(mail.text).not.toContain("demain");
+    expect(mail.html).not.toContain("demain");
+  });
+
+  it("dit « demain » pour une séance du lendemain", async () => {
+    prisma.seance.findMany
+      .mockResolvedValueOnce([seance({ startAt: new Date("2026-09-22T06:00:00.000Z") })])
+      .mockResolvedValueOnce([]);
+
+    await service.handleReminders();
+
+    const mail = email.send.mock.calls[0][0];
+    expect(mail.subject).toBe("Rappel — votre séance de demain (Groupe A)");
+    expect(mail.text).toContain("a lieu demain");
+  });
+  it("rappel 15 min : indique les minutes réellement restantes et le fuseau horaire", async () => {
+    // séance dans 10 minutes (voir seance()) — planifiée tardivement.
+    prisma.seance.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([seance()]);
+
+    await service.handleReminders();
+
+    const mail = email.send.mock.calls[0][0];
+    expect(mail.text).toContain("commence dans 10 minutes, le ");
+    expect(mail.text).toContain("(heure de Madagascar)");
+  });
+});
+
+describe("jourRelatif", () => {
+  it("se base sur le jour calendaire à Madagascar, pas sur l'écart de 24h", () => {
+    // 23:30 à Madagascar (20:30 UTC) -> séance le lendemain à 00:30 : "demain".
+    const now = new Date("2026-09-21T20:30:00.000Z");
+    expect(jourRelatif(new Date("2026-09-21T21:30:00.000Z"), now).libelle).toBe("demain");
+    expect(jourRelatif(new Date("2026-09-21T20:45:00.000Z"), now).libelle).toBe("aujourd'hui");
   });
 });

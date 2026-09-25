@@ -6,7 +6,7 @@
 // Contenu réel fourni par la cliente, 2e version le 2026-08-25 (remplace un
 // premier jeu de 10 questions envoyé plus tôt le même jour, jugé pas encore
 // au niveau souhaité). ORAL_QUESTIONS (Bloc 4) : contenu réel fourni le
-// 2026-09-24, sur la vidéo ORAL_MEDIA_KEY.
+// 2026-09-24, sur l'extrait audio ORAL_AUDIO_KEY.
 export interface QcmQuestion {
   id: string;
   prompt: string;
@@ -101,18 +101,17 @@ export const LEXIQUE_QUESTIONS: QcmQuestion[] = [
   },
 ];
 
-// Support du Bloc 4 : vidéo fournie par la cliente le 2026-09-24, visionnée
-// par le candidat AVANT les questions. Hébergée sur notre bucket (comme les
-// vidéos de référence du Bloc 5, voir video-tasks.ts) — l'intégration du
-// reel Facebook d'origine ne s'affichait pas. Clé de stockage interne, jamais
-// renvoyée au front : diffusée via GET /evaluation/oral-video. sourceUrl
-// reste un lien de secours vers l'original.
-export const ORAL_MEDIA_KEY = "evaluation-references/bloc4-comprehension-orale.mp4";
-export const ORAL_MEDIA_SOURCE_URL = "https://www.facebook.com/share/r/14qVtgydwGR/";
+// Support du Bloc 4 : extrait AUDIO uniquement (bande son de la vidéo
+// fournie par la cliente le 2026-09-24 — décision du même jour : épreuve
+// purement auditive, pas de vidéo). Écouté par le candidat AVANT les
+// questions. Hébergé sur notre bucket (comme les vidéos de référence du
+// Bloc 5, voir video-tasks.ts). Clé de stockage interne, jamais renvoyée au
+// front : diffusé via GET /evaluation/oral-audio.
+export const ORAL_AUDIO_KEY = "evaluation-references/bloc4-comprehension-orale.mp3";
 
 // Questions réelles du Bloc 4, fournies par la cliente le 2026-09-24
 // (remplacent le placeholder "[Extrait audio à intégrer]"), portant sur la
-// vidéo ORAL_MEDIA_KEY ci-dessus.
+// l'extrait audio ORAL_AUDIO_KEY ci-dessus.
 export const ORAL_QUESTIONS: QcmQuestion[] = [
   {
     id: "oral-1",

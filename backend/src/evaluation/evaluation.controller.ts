@@ -78,12 +78,12 @@ export class EvaluationController {
     stream.pipe(res);
   }
 
-  // Vidéo support du Bloc 4 (compréhension orale), visionnée avant le QCM —
-  // publique pour la même raison que reference-video ci-dessus.
-  @Get("oral-video")
-  async streamOralVideo(@Res() res: Response) {
-    const { stream, contentType } = await this.service.getOralVideoStream();
-    if (contentType) res.set("Content-Type", contentType);
+  // Extrait audio du Bloc 4 (compréhension orale), écouté avant le QCM —
+  // public pour la même raison que reference-video ci-dessus.
+  @Get("oral-audio")
+  async streamOralAudio(@Res() res: Response) {
+    const { stream, contentType } = await this.service.getOralAudioStream();
+    res.set("Content-Type", contentType ?? "audio/mpeg");
     stream.pipe(res);
   }
 
