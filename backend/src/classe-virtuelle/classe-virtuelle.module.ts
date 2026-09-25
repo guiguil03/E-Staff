@@ -5,6 +5,7 @@ import { ClasseVirtuelleReminderService } from "./reminder.service";
 import { DailyService } from "./daily.service";
 import { DailyWebhookController } from "./daily-webhook.controller";
 import { PresenceService } from "./presence.service";
+import { EnregistrementService } from "./enregistrement.service";
 import { EmailService } from "../common/email.service";
 
 @Module({
@@ -14,6 +15,7 @@ import { EmailService } from "../common/email.service";
     ClasseVirtuelleReminderService,
     DailyService,
     PresenceService,
+    EnregistrementService,
     EmailService,
   ],
 })

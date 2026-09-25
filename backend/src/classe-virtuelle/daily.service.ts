@@ -10,6 +10,23 @@ interface CreateRoomResult {
 // même logique que EmailService/CalendarEmbed : on ne fait jamais planter le
 // flux de planification faute de fournisseur configuré, on renvoie un état
 // "non configuré" que le front affiche honnêtement ("Bientôt disponible").
+// Événements reçus sur /webhooks/daily : présence (PresenceService) et
+// enregistrements cloud (EnregistrementService).
+export const DAILY_WEBHOOK_EVENT_TYPES = [
+  "participant.joined",
+  "participant.left",
+  "recording.ready-to-download",
+  "recording.error",
+];
+
+// Enregistrement cloud des classes virtuelles — option payante du compte
+// Daily, activée explicitement (DAILY_RECORDING_ENABLED=true) pour ne jamais
+// créer de salle qui échouerait ou facturerait sans que la cliente l'ait
+// décidé.
+export function recordingEnabled(): boolean {
+  return process.env.DAILY_RECORDING_ENABLED === "true";
+}
+
 @Injectable()
 export class DailyService {
   private readonly logger = new Logger(DailyService.name);
@@ -41,6 +58,9 @@ export class DailyService {
           exp: expUnixSeconds,
           enable_prejoin_ui: true,
           ...(broadcastOnly ? { owner_only_broadcast: true } : {}),
+          // Classes virtuelles uniquement (pas les Lives du Forum, créés
+          // en broadcastOnly).
+          ...(recordingEnabled() && !broadcastOnly ? { enable_recording: "cloud" } : {}),
         },
       }),
     });
@@ -85,6 +105,8 @@ export class DailyService {
     userId: string;
     userName: string;
     isOwner: boolean;
+    /** Démarre l'enregistrement cloud dès que ce participant rejoint. */
+    startRecording?: boolean;
   }): Promise<string | null> {
     const apiKey = process.env.DAILY_API_KEY;
     if (!apiKey) return null;
@@ -101,6 +123,7 @@ export class DailyService {
           user_id: params.userId,
           user_name: params.userName,
           is_owner: params.isOwner,
+          ...(params.startRecording ? { enable_recording: "cloud", start_cloud_recording: true } : {}),
         },
       }),
     });
@@ -132,7 +155,7 @@ export class DailyService {
       },
       body: JSON.stringify({
         url: targetUrl,
-        eventTypes: ["participant.joined", "participant.left"],
+        eventTypes: DAILY_WEBHOOK_EVENT_TYPES,
       }),
     });
 
@@ -144,5 +167,51 @@ export class DailyService {
 
     const data = (await res.json()) as { uuid: string; hmac: string };
     return data;
+  }
+
+  // Ajoute les événements d'enregistrement au webhook déjà en place (créé
+  // avant cette fonctionnalité avec seulement participant.*) sans le
+  // recréer — le secret HMAC (DAILY_WEBHOOK_SECRET) reste donc valable.
+  async ensureWebhookEventTypes(targetUrl: string): Promise<{ updated: number } | null> {
+    const apiKey = process.env.DAILY_API_KEY;
+    if (!apiKey) return null;
+
+    const res = await fetch("https://api.daily.co/v1/webhooks", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok) {
+      this.logger.error(`Échec de lecture des webhooks Daily: ${res.status}`);
+      return null;
+    }
+    const webhooks = (await res.json()) as { uuid: string; url: string }[];
+    let updated = 0;
+    for (const hook of webhooks.filter((w) => w.url === targetUrl)) {
+      const upd = await fetch(`https://api.daily.co/v1/webhooks/${hook.uuid}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ url: targetUrl, eventTypes: DAILY_WEBHOOK_EVENT_TYPES }),
+      });
+      if (upd.ok) updated += 1;
+      else this.logger.error(`Échec de mise à jour du webhook Daily ${hook.uuid}: ${upd.status}`);
+    }
+    return { updated };
+  }
+
+  // Lien de lecture/téléchargement temporaire d'un enregistrement cloud
+  // (la vidéo reste chez Daily ; le lien expire après quelques heures).
+  async getRecordingAccessLink(recordingId: string): Promise<{ url: string; expires: number | null } | null> {
+    const apiKey = process.env.DAILY_API_KEY;
+    if (!apiKey) return null;
+
+    const res = await fetch(`https://api.daily.co/v1/recordings/${recordingId}/access-link`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      this.logger.error(`Échec du lien d'accès à l'enregistrement ${recordingId}: ${res.status} ${body}`);
+      return null;
+    }
+    const data = (await res.json()) as { download_link: string; expires?: number };
+    return { url: data.download_link, expires: data.expires ?? null };
   }
 }

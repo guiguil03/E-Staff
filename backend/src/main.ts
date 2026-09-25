@@ -43,6 +43,11 @@ async function bootstrap() {
   if (!process.env.AWS_S3_BUCKET_NAME) {
     missingIntegrations.push("AWS_S3_BUCKET_NAME (upload CV/audio/vidéo indisponible)");
   }
+  if (process.env.DAILY_RECORDING_ENABLED === "true" && !process.env.DAILY_WEBHOOK_SECRET) {
+    missingIntegrations.push(
+      "DAILY_WEBHOOK_SECRET (enregistrement activé mais webhook Daily non configuré : les vidéos ne seront jamais rattachées aux séances)"
+    );
+  }
   if (!process.env.RH_NOTIFICATION_EMAIL) {
     missingIntegrations.push(
       "RH_NOTIFICATION_EMAIL (la RH n'est jamais prévenue par e-mail des tests corrigés à valider)"

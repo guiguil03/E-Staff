@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { DailyService } from "./daily.service";
+import { DailyService, recordingEnabled } from "./daily.service";
 import { EmailService } from "../common/email.service";
 import { UpsertSeanceDto } from "./dto/upsert-seance.dto";
 import { renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
@@ -317,6 +317,9 @@ export class ClasseVirtuelleService {
         userId: joiner.userId,
         userName: joiner.userName,
         isOwner: joiner.isOwner,
+        // L'arrivée du formateur (propriétaire) lance l'enregistrement cloud
+        // de la séance, si l'option est activée (DAILY_RECORDING_ENABLED).
+        startRecording: joiner.isOwner && recordingEnabled(),
       });
       if (token) roomUrl = `${roomUrl}?t=${token}`;
     }

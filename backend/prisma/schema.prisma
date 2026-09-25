@@ -787,6 +787,10 @@ model Seance {
   presences Presence[]
   notations Notation[]
 
+  // Enregistrements cloud Daily de la classe virtuelle (revisionnables par
+  // les apprenants du groupe) — voir model Enregistrement.
+  enregistrements Enregistrement[]
+
   @@unique([groupeId, numero])
 }
 
@@ -1368,4 +1372,22 @@ model OffreEmploi {
   candidatures Registration[]
 
   @@index([metierSlug])
+}
+
+// Enregistrement cloud d'une classe virtuelle (Daily « cloud recording »),
+// démarré automatiquement à l'arrivée du formateur quand
+// DAILY_RECORDING_ENABLED=true. Créé à la réception du webhook
+// recording.ready-to-download ; la vidéo reste stockée chez Daily, la
+// lecture passe par un lien d'accès temporaire demandé à la volée (GET
+// /recordings/:id/access-link) — jamais d'URL permanente stockée ici.
+model Enregistrement {
+  id               String    @id @default(cuid())
+  seanceId         String
+  seance           Seance    @relation(fields: [seanceId], references: [id], onDelete: Cascade)
+  dailyRecordingId String    @unique
+  dureeSecondes    Int?
+  debutAt          DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([seanceId])
 }
