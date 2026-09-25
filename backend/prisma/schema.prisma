@@ -352,6 +352,14 @@ model EvaluationAttempt {
   essayResponse       EssayResponse?
   ecritOuvertResponse EcritOuvertResponse?
 
+  // Formateur qui a commencé la correction (première note posée) — la file
+  // des tests est commune à tous les formateurs : affiché « en cours de
+  // correction par X » pour éviter que deux formateurs corrigent le même
+  // test. Indicatif, jamais bloquant (voir EvaluationService.prendreCorrection).
+  correcteurId      String?
+  correcteur        Formateur? @relation("CorrecteurTests", fields: [correcteurId], references: [id], onDelete: SetNull)
+  correctionPriseAt DateTime?
+
   @@index([candidatId])
 }
 
@@ -532,12 +540,14 @@ model Formateur {
   // que la RH ne l'a pas renseigné.
   tarifFixe Float?
 
-  groupes       Groupe[]
-  paiements     PaiementFormateur[]
-  documents     FormateurDocument[]
-  bilans        BilanFormateur[]
-  diffusions    Diffusion[]
-  supportsCours SupportCours[]
+  groupes           Groupe[]
+  paiements         PaiementFormateur[]
+  documents         FormateurDocument[]
+  bilans            BilanFormateur[]
+  diffusions        Diffusion[]
+  supportsCours     SupportCours[]
+  // Tests d'admission dont ce formateur a commencé la correction.
+  testsEnCorrection EvaluationAttempt[] @relation("CorrecteurTests")
 }
 
 // Support de cours partagé par un formateur aux apprenants d'un groupe —

@@ -229,6 +229,7 @@ export class EvaluationService {
         ecritOuvertResponse: true,
         candidat: true,
         apprenant: true,
+        correcteur: { select: { prenom: true, nom: true, matricule: true } },
       },
     });
     if (!attempt) throw new NotFoundException("Tentative introuvable.");
@@ -480,7 +481,11 @@ export class EvaluationService {
     return response;
   }
 
-  async gradeEssayResponse(essayResponseId: string, criteria: Record<string, number>) {
+  async gradeEssayResponse(
+    essayResponseId: string,
+    criteria: Record<string, number>,
+    formateurMatricule?: string
+  ) {
     const response = await this.prisma.essayResponse.findUnique({
       where: { id: essayResponseId },
     });
@@ -506,6 +511,7 @@ export class EvaluationService {
       },
     });
 
+    await this.prendreCorrection(response.attemptId, formateurMatricule);
     await this.recomputeAttemptIfComplete(response.attemptId);
 
     return this.prisma.essayResponse.findUnique({ where: { id: essayResponseId } });
@@ -548,7 +554,11 @@ export class EvaluationService {
     return response;
   }
 
-  async gradePartieOuverte(ecritOuvertResponseId: string, criteria: Record<string, number>) {
+  async gradePartieOuverte(
+    ecritOuvertResponseId: string,
+    criteria: Record<string, number>,
+    formateurMatricule?: string
+  ) {
     const response = await this.prisma.ecritOuvertResponse.findUnique({
       where: { id: ecritOuvertResponseId },
     });
@@ -575,6 +585,7 @@ export class EvaluationService {
       },
     });
 
+    await this.prendreCorrection(response.attemptId, formateurMatricule);
     await this.recomputeAttemptIfComplete(response.attemptId);
 
     return this.prisma.ecritOuvertResponse.findUnique({ where: { id: ecritOuvertResponseId } });
@@ -587,6 +598,7 @@ export class EvaluationService {
       where: { status: { in: ["soumis", "en_correction"] } },
       include: {
         candidat: true,
+        correcteur: { select: { prenom: true, nom: true, matricule: true } },
         situationResponses: true,
         videoResponses: true,
         essayResponse: true,
@@ -614,7 +626,8 @@ export class EvaluationService {
 
   async gradeSituationResponse(
     situationResponseId: string,
-    criteria: Record<string, number>
+    criteria: Record<string, number>,
+    formateurMatricule?: string
   ) {
     const response = await this.prisma.situationResponse.findUnique({
       where: { id: situationResponseId },
@@ -644,6 +657,7 @@ export class EvaluationService {
       },
     });
 
+    await this.prendreCorrection(response.attemptId, formateurMatricule);
     await this.recomputeAttemptIfComplete(response.attemptId);
 
     return this.prisma.situationResponse.findUnique({
@@ -653,7 +667,8 @@ export class EvaluationService {
 
   async gradeVideoResponse(
     videoResponseId: string,
-    criteria: Record<string, number>
+    criteria: Record<string, number>,
+    formateurMatricule?: string
   ) {
     const response = await this.prisma.videoResponse.findUnique({
       where: { id: videoResponseId },
@@ -683,10 +698,29 @@ export class EvaluationService {
       },
     });
 
+    await this.prendreCorrection(response.attemptId, formateurMatricule);
     await this.recomputeAttemptIfComplete(response.attemptId);
 
     return this.prisma.videoResponse.findUnique({
       where: { id: videoResponseId },
+    });
+  }
+
+  // Le premier formateur qui pose une note sur un test en devient le
+  // correcteur (affiché « en cours de correction par X » dans la file
+  // commune). updateMany conditionné sur correcteurId = null : si deux
+  // formateurs notent en même temps, seul le premier est retenu. Purement
+  // indicatif — un autre formateur peut toujours noter ce test.
+  private async prendreCorrection(attemptId: string, formateurMatricule?: string) {
+    if (!formateurMatricule) return;
+    const formateur = await this.prisma.formateur.findUnique({
+      where: { matricule: formateurMatricule },
+      select: { id: true },
+    });
+    if (!formateur) return;
+    await this.prisma.evaluationAttempt.updateMany({
+      where: { id: attemptId, correcteurId: null },
+      data: { correcteurId: formateur.id, correctionPriseAt: new Date() },
     });
   }
 

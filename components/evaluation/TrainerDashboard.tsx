@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Button from "@/components/ui/Button";
 import { apiGet, apiGetBlob, apiPost } from "@/lib/api";
+import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 
 interface Candidat {
   id: string;
@@ -74,6 +75,9 @@ interface Attempt {
   tier: string | null;
   submittedAt: string | null;
   rhNotifiedAt: string | null;
+  // Formateur qui a commencé la correction (file commune — voir
+  // EvaluationService.prendreCorrection). Indicatif, jamais bloquant.
+  correcteur: { prenom: string; nom: string; matricule: string } | null;
   candidat: Candidat;
   situationResponses: SituationResponse[];
   videoResponses: VideoResponse[];
@@ -236,6 +240,8 @@ export default function TrainerDashboard() {
     null
   );
   const [listError, setListError] = useState<string | null>(null);
+  const [monMatricule, setMonMatricule] = useState<string | null>(null);
+  useEffect(() => setMonMatricule(sessionStorage.getItem(ACCOUNT_MATRICULE_KEY)), []);
 
   useEffect(() => {
     refreshList();
@@ -324,6 +330,13 @@ export default function TrainerDashboard() {
                   <span className="block text-xs text-white/50">
                     {STATUS_LABELS[a.status] ?? a.status} — {graded}/{total} notées
                   </span>
+                  {a.correcteur && (
+                    <span className="block text-xs text-accent">
+                      {a.correcteur.matricule === monMatricule
+                        ? "Vous corrigez ce test"
+                        : `En cours de correction par ${a.correcteur.prenom} ${a.correcteur.nom}`}
+                    </span>
+                  )}
                 </button>
               </li>
             );
@@ -494,6 +507,14 @@ function AttemptDetail({
               <span>{attempt.candidat.email}</span>
               <span>{attempt.candidat.phone}</span>
             </div>
+            {attempt.correcteur &&
+              attempt.correcteur.matricule !==
+                (typeof window !== "undefined" ? sessionStorage.getItem(ACCOUNT_MATRICULE_KEY) : null) && (
+                <p className="mt-2 rounded border border-accent/40 bg-accent/10 px-3 py-1.5 font-sans text-xs text-accent">
+                  {attempt.correcteur.prenom} {attempt.correcteur.nom} a déjà commencé la correction de ce
+                  test — vous pouvez quand même noter, mais coordonnez-vous pour éviter un doublon.
+                </p>
+              )}
           </div>
           <div className="text-right">
             <span className="rounded-full border border-accent/40 px-2.5 py-1 font-mono text-[11px] uppercase tracking-widest text-accent">

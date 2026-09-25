@@ -12,14 +12,20 @@ import { PARTIE_OUVERTE_GRADING_CRITERIA } from "./partie-ouverte";
 
 function makePrismaMock() {
   return {
-    evaluationAttempt: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), count: jest.fn() },
+    evaluationAttempt: {
+      findUnique: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+    },
     situationResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     videoResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     essayResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     ecritOuvertResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     apprenant: { findMany: jest.fn(), create: jest.fn() },
     groupe: { findUnique: jest.fn() },
-    formateur: { findMany: jest.fn().mockResolvedValue([]) },
+    formateur: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
   };
 }
 
@@ -224,6 +230,22 @@ describe("EvaluationService", () => {
       expect(prisma.evaluationAttempt.update).toHaveBeenCalledWith({
         where: { id: "attempt-1" },
         data: { status: "en_correction" },
+      });
+    });
+
+    it("enregistre le premier formateur qui note comme correcteur (sans écraser un correcteur existant)", async () => {
+      prisma.videoResponse.findUnique.mockResolvedValue({ id: "v-1", attemptId: "attempt-1" });
+      prisma.videoResponse.update.mockResolvedValue({});
+      prisma.formateur.findUnique.mockResolvedValue({ id: "form-1" });
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({ status: "en_correction", situationResponses: [], videoResponses: [] })
+      );
+
+      await service.gradeVideoResponse("v-1", maxVideoCriteria(), "ETF-FORM-2026-0001");
+
+      expect(prisma.evaluationAttempt.updateMany).toHaveBeenCalledWith({
+        where: { id: "attempt-1", correcteurId: null },
+        data: { correcteurId: "form-1", correctionPriseAt: expect.any(Date) },
       });
     });
 
