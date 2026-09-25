@@ -23,20 +23,27 @@ export class ClasseVirtuelleReminderService {
 
   @Cron("*/5 * * * *")
   async handleReminders() {
+    // Le rappel "J-1" part dès que la séance est à moins de 24h — donc
+    // immédiatement pour une séance planifiée le jour même. Le libellé
+    // ("aujourd'hui" / "demain") est calculé sur le jour calendaire réel, en
+    // heure de Madagascar comme le reste des e-mails, au lieu d'un "demain"
+    // codé en dur (bug relevé le 2026-09-25 : séance du jour annoncée pour
+    // "demain").
     await this.sendDueReminders({
       thresholdMs: 24 * 60 * 60 * 1000,
       flagField: "rappelJ1EnvoyeAt",
-      subject: (groupeLabel: string) => `Rappel — votre séance de demain (${groupeLabel})`,
+      subject: (groupeLabel: string, startAt: Date) =>
+        `Rappel — votre séance ${jourRelatif(startAt).deLibelle} (${groupeLabel})`,
       buildText: (prenom: string, groupeLabel: string, startAt: Date, link: string) =>
-        `Bonjour ${prenom},\n\nPetit rappel : votre prochaine séance (${groupeLabel}) a lieu demain, le ${formatDateTime(startAt)}.\n\nVous pourrez rejoindre la classe virtuelle ici, 10 minutes avant le début :\n${link}\n\nÀ bientôt,\nL'équipe e-Staf`,
+        `Bonjour ${prenom},\n\nPetit rappel : votre prochaine séance (${groupeLabel}) a lieu ${jourRelatif(startAt).libelle}, le ${formatDateTime(startAt)}.\n\nVous pourrez rejoindre la classe virtuelle ici, 10 minutes avant le début :\n${link}\n\nÀ bientôt,\nL'équipe e-Staf`,
       buildHtml: (prenom: string, groupeLabel: string, startAt: Date, link: string) =>
         renderEmailHtml({
-          title: "Rappel — séance de demain",
+          title: `Rappel — séance ${jourRelatif(startAt).deLibelle}`,
           preheader: `${groupeLabel} — ${formatDateTime(startAt)}`,
           bodyHtml:
             emailParagraph(`Bonjour ${prenom},`) +
             emailParagraph(
-              `Petit rappel : votre prochaine séance (${groupeLabel}) a lieu demain, le ${formatDateTime(startAt)}.`
+              `Petit rappel : votre prochaine séance (${groupeLabel}) a lieu ${jourRelatif(startAt).libelle}, le ${formatDateTime(startAt)}.`
             ) +
             emailParagraph("Vous pourrez rejoindre la classe virtuelle 10 minutes avant le début.") +
             ctaButton("Accéder à la classe virtuelle", link),
@@ -66,7 +73,7 @@ export class ClasseVirtuelleReminderService {
   private async sendDueReminders(params: {
     thresholdMs: number;
     flagField: "rappelJ1EnvoyeAt" | "rappel15minEnvoyeAt";
-    subject: (groupeLabel: string) => string;
+    subject: (groupeLabel: string, startAt: Date) => string;
     buildText: (prenom: string, groupeLabel: string, startAt: Date, link: string) => string;
     buildHtml: (prenom: string, groupeLabel: string, startAt: Date, link: string) => string;
   }) {
@@ -96,7 +103,7 @@ export class ClasseVirtuelleReminderService {
       for (const apprenant of seance.groupe.apprenants) {
         const result = await this.email.send({
           to: apprenant.email,
-          subject: params.subject(seance.groupe.label),
+          subject: params.subject(seance.groupe.label, seance.startAt),
           text: params.buildText(apprenant.prenom, seance.groupe.label, seance.startAt, link),
           html: params.buildHtml(apprenant.prenom, seance.groupe.label, seance.startAt, link),
         });
@@ -126,6 +133,25 @@ function formatDateTime(date: Date): string {
   return date.toLocaleString("fr-FR", {
     dateStyle: "full",
     timeStyle: "short",
-    timeZone: "Indian/Antananarivo",
+    timeZone: TIME_ZONE,
   });
+}
+
+const TIME_ZONE = "Indian/Antananarivo";
+
+// Jour calendaire (AAAA-MM-JJ) d'une date en heure de Madagascar.
+function jourCalendaire(date: Date): string {
+  return date.toLocaleDateString("en-CA", { timeZone: TIME_ZONE });
+}
+
+// "aujourd'hui" / "demain" selon le jour calendaire réel de la séance par
+// rapport à maintenant ; au-delà (ne devrait pas arriver avec le seuil de
+// 24h), la date seule suffit.
+export function jourRelatif(startAt: Date, now: Date = new Date()): { libelle: string; deLibelle: string } {
+  const jour = jourCalendaire(startAt);
+  if (jour === jourCalendaire(now)) return { libelle: "aujourd'hui", deLibelle: "d'aujourd'hui" };
+  if (jour === jourCalendaire(new Date(now.getTime() + 24 * 60 * 60 * 1000))) {
+    return { libelle: "demain", deLibelle: "de demain" };
+  }
+  return { libelle: "prochainement", deLibelle: "à venir" };
 }
