@@ -6,6 +6,7 @@ import { useRequireRole } from "@/lib/useRequireRole";
 import { apiGet, ApiError } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 import DocumentsSeancePanel from "./DocumentsSeancePanel";
+import TableauBlanc from "@/components/classe-virtuelle/TableauBlanc";
 
 interface RoomStatus {
   groupeCle: string;
@@ -41,6 +42,9 @@ export default function ClasseVirtuelleApprenantPage() {
   const [status, setStatus] = useState<RoomStatus | null | "loading" | "erreur">("loading");
   const [erreurDetail, setErreurDetail] = useState<string | null>(null);
   const [panneauDocs, setPanneauDocs] = useState(true);
+  // Onglet du panneau : documents ou tableau blanc du formateur.
+  const [ongletApprenant, setOngletApprenant] = useState<"documents" | "tableau">("documents");
+  const [tableauModifie, setTableauModifie] = useState(false);
   const [nbNouveauxDocs, setNbNouveauxDocs] = useState(0);
 
   // Une 401/403 (session expirée, matricule qui ne correspond plus à la
@@ -134,11 +138,50 @@ export default function ClasseVirtuelleApprenantPage() {
             <aside
               className={`${
                 panneauDocs ? "flex" : "hidden"
-              } max-h-[40vh] w-full shrink-0 flex-col overflow-y-auto border-t border-white/10 bg-obsidianCard p-4 md:max-h-none md:w-[340px] md:border-l md:border-t-0`}
+              } max-h-[45vh] w-full shrink-0 flex-col border-t border-white/10 bg-obsidianCard md:max-h-none md:border-l md:border-t-0 ${
+                ongletApprenant === "tableau" ? "md:w-[60%]" : "md:w-[340px]"
+              }`}
             >
-              <h2 className="font-display text-base font-semibold text-white">Documents de la séance</h2>
-              <div className="mt-2">
-                <DocumentsSeancePanel matricule={matricule} numero={status.numero} onCount={setNbNouveauxDocs} />
+              <div className="flex border-b border-white/10">
+                {(
+                  [
+                    ["documents", "Documents"],
+                    ["tableau", "Tableau"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setOngletApprenant(key);
+                      if (key === "tableau") setTableauModifie(false);
+                    }}
+                    className={`flex-1 px-4 py-3 font-mono text-xs uppercase tracking-widest transition-colors ${
+                      ongletApprenant === key ? "border-b-2 border-accent text-accent" : "text-white/50 hover:text-white"
+                    }`}
+                  >
+                    {label}
+                    {key === "tableau" && tableauModifie && ongletApprenant !== "tableau" && (
+                      <span className="ml-2 inline-block h-2 w-2 rounded-full bg-accent align-middle" />
+                    )}
+                  </button>
+                ))}
+              </div>
+              {/* Les deux onglets restent montés (masqués) : la liste des
+                  documents continue de détecter les nouveautés, et le
+                  tableau de suivre le formateur. */}
+              <div className={`${ongletApprenant === "documents" ? "block" : "hidden"} min-h-0 flex-1 overflow-y-auto p-4`}>
+                <h2 className="font-display text-base font-semibold text-white">Documents de la séance</h2>
+                <div className="mt-2">
+                  <DocumentsSeancePanel matricule={matricule} numero={status.numero} onCount={setNbNouveauxDocs} />
+                </div>
+              </div>
+              <div className={`${ongletApprenant === "tableau" ? "flex" : "hidden"} min-h-0 flex-1 flex-col p-3`}>
+                <TableauBlanc
+                  mode="lecture"
+                  basePath={`/apprenants/${matricule}/seances/${status.numero}/tableau`}
+                  onNouveaute={() => setTableauModifie(true)}
+                  visible={panneauDocs && ongletApprenant === "tableau"}
+                />
               </div>
             </aside>
           )}

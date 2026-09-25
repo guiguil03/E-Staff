@@ -6,16 +6,21 @@ import { DailyService } from "./daily.service";
 import { DailyWebhookController } from "./daily-webhook.controller";
 import { PresenceService } from "./presence.service";
 import { EnregistrementService } from "./enregistrement.service";
+import { SeanceLiveService } from "./seance-live.service";
+import { SeanceLiveController } from "./seance-live.controller";
+import { StorageService } from "../common/storage.service";
 import { EmailService } from "../common/email.service";
 
 @Module({
-  controllers: [ClasseVirtuelleController, DailyWebhookController],
+  controllers: [ClasseVirtuelleController, DailyWebhookController, SeanceLiveController],
   providers: [
     ClasseVirtuelleService,
     ClasseVirtuelleReminderService,
     DailyService,
     PresenceService,
     EnregistrementService,
+    SeanceLiveService,
+    StorageService,
     EmailService,
   ],
 })

@@ -9,6 +9,8 @@ import { apiGet } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 import NotationCompetencesPanel from "./NotationCompetencesPanel";
 import SupportsCoursCard from "./SupportsCoursCard";
+import NotesFormateurPanel from "./NotesFormateurPanel";
+import TableauBlanc from "@/components/classe-virtuelle/TableauBlanc";
 
 interface ApprenantListApi {
   matricule: string;
@@ -62,7 +64,7 @@ export default function ClasseVirtuelleFormateurPage({
   const [status, setStatus] = useState<RoomStatus | "loading" | "erreur">("loading");
   const [launched, setLaunched] = useState(false);
   // Panneau latéral pendant le cours : notation en direct ou supports.
-  const [panneau, setPanneau] = useState<"noter" | "supports" | null>("noter");
+  const [panneau, setPanneau] = useState<"noter" | "supports" | "notes" | "tableau" | null>("noter");
   const [apprenantNote, setApprenantNote] = useState<string | null>(null);
   const [apprenants, setApprenants] = useState<ApprenantListApi[]>([]);
 
@@ -100,7 +102,7 @@ export default function ClasseVirtuelleFormateurPage({
               onClick={() => setPanneau((p) => (p ? null : "noter"))}
               className="font-mono text-xs uppercase tracking-widest text-white/60 hover:text-accent"
             >
-              {panneau ? "Masquer le panneau" : "Noter / Supports"}
+              {panneau ? "Masquer le panneau" : "Outils du cours"}
             </button>
             <button
               onClick={() => setLaunched(false)}
@@ -121,12 +123,20 @@ export default function ClasseVirtuelleFormateurPage({
             className="min-w-0 flex-1 border-0"
           />
           {panneau && (
-            <aside className="flex w-full max-w-[420px] shrink-0 flex-col border-l border-white/10 bg-obsidianCard">
+            // Onglet Tableau : le panneau s'élargit (la visio rétrécit sans
+            // être rechargée) pour laisser de la place au dessin.
+            <aside
+              className={`flex shrink-0 flex-col border-l border-white/10 bg-obsidianCard ${
+                panneau === "tableau" ? "w-[62%]" : "w-full max-w-[420px]"
+              }`}
+            >
               <div className="flex border-b border-white/10">
                 {(
                   [
                     ["noter", "Noter"],
                     ["supports", "Supports"],
+                    ["notes", "Notes"],
+                    ["tableau", "Tableau"],
                   ] as const
                 ).map(([key, label]) => (
                   <button
@@ -175,6 +185,18 @@ export default function ClasseVirtuelleFormateurPage({
                       )}
                     </div>
                   </>
+                )}
+                {panneau === "notes" && (
+                  <NotesFormateurPanel groupe={groupeCle} seance={numero} apprenants={apprenantsDuGroupe} />
+                )}
+                {panneau === "tableau" && (
+                  <div className="h-full">
+                    <TableauBlanc
+                      mode="edition"
+                      basePath={`/seances/${groupeCle}/${numero}/tableau`}
+                      headers={formateurHeaders()}
+                    />
+                  </div>
                 )}
                 {panneau === "supports" && (
                   <>

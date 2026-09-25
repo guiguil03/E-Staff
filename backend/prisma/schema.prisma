@@ -742,6 +742,9 @@ model Apprenant {
   // commission de l'agent d'acquisition (voir RhService.renouvelerAbonnement).
   reinscriptions Reinscription[]
 
+  // Notes privées du formateur sur cet apprenant, par séance.
+  notesFormateur NoteFormateur[]
+
   @@index([groupeId])
   @@index([connecteurId])
   @@index([agentAcquisitionId])
@@ -790,6 +793,8 @@ model Seance {
   // Enregistrements cloud Daily de la classe virtuelle (revisionnables par
   // les apprenants du groupe) — voir model Enregistrement.
   enregistrements Enregistrement[]
+  notesFormateur  NoteFormateur[]
+  tableauBlanc    TableauBlanc?
 
   @@unique([groupeId, numero])
 }
@@ -1390,4 +1395,48 @@ model Enregistrement {
   createdAt        DateTime  @default(now())
 
   @@index([seanceId])
+}
+
+// Notes privées prises par le formateur pendant/après une classe virtuelle
+// (panneau « Notes ») : une par apprenant et par séance, plus une note de
+// séance générale (apprenantId null). Jamais visibles des apprenants.
+model NoteFormateur {
+  id          String     @id @default(cuid())
+  seanceId    String
+  seance      Seance     @relation(fields: [seanceId], references: [id], onDelete: Cascade)
+  apprenantId String?
+  apprenant   Apprenant? @relation(fields: [apprenantId], references: [id], onDelete: Cascade)
+  contenu     String
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([seanceId, apprenantId])
+}
+
+// Tableau blanc partagé d'une classe virtuelle (Excalidraw) : le formateur
+// dessine/annote, les apprenants le voient en direct en lecture seule.
+// `elements` = scène Excalidraw sérialisée ; `version` incrémentée à chaque
+// sauvegarde pour que les apprenants ne rechargent que si elle a changé.
+// Les images (documents à annoter) sont stockées à part, voir
+// TableauFichier.
+model TableauBlanc {
+  seanceId  String   @id
+  seance    Seance   @relation(fields: [seanceId], references: [id], onDelete: Cascade)
+  elements  String   @default("[]")
+  version   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  fichiers TableauFichier[]
+}
+
+// Image posée sur le tableau blanc (id = identifiant de fichier Excalidraw),
+// stockée sur le bucket.
+model TableauFichier {
+  seanceId   String
+  tableau    TableauBlanc @relation(fields: [seanceId], references: [seanceId], onDelete: Cascade)
+  fileId     String
+  storageKey String
+  mimeType   String
+  createdAt  DateTime     @default(now())
+
+  @@id([seanceId, fileId])
 }
