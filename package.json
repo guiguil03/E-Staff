@@ -9,13 +9,14 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "postinstall": "node scripts/copy-excalidraw-assets.mjs"
+    "postinstall": "node scripts/copy-vendor-assets.mjs"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "0.17.6",
     "@tailwindcss/typography": "^0.5.20",
     "@vercel/analytics": "^2.0.1",
     "next": "14.2.35",
+    "pdfjs-dist": "4.10.38",
     "react": "^18",
     "react-dom": "^18"
   },

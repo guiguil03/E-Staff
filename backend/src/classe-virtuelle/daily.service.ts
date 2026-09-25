@@ -197,6 +197,26 @@ export class DailyService {
     return { updated };
   }
 
+  // Suppression définitive d'un enregistrement cloud (purge après la durée
+  // de conservation, voir EnregistrementService.purgerAnciens). Vrai si
+  // l'enregistrement n'existe plus chez Daily (supprimé ou déjà absent) ;
+  // faux si non configuré ou en échec, pour réessayer au prochain passage.
+  async deleteRecording(recordingId: string): Promise<boolean> {
+    const apiKey = process.env.DAILY_API_KEY;
+    if (!apiKey) return false;
+
+    const res = await fetch(`https://api.daily.co/v1/recordings/${recordingId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok && res.status !== 404) {
+      const body = await res.text().catch(() => "");
+      this.logger.error(`Échec de suppression de l'enregistrement ${recordingId}: ${res.status} ${body}`);
+      return false;
+    }
+    return true;
+  }
+
   // Lien de lecture/téléchargement temporaire d'un enregistrement cloud
   // (la vidéo reste chez Daily ; le lien expire après quelques heures).
   async getRecordingAccessLink(recordingId: string): Promise<{ url: string; expires: number | null } | null> {
