@@ -136,6 +136,16 @@ describe("ClasseVirtuelleReminderService", () => {
     expect(mail.subject).toBe("Rappel — votre séance de demain (Groupe A)");
     expect(mail.text).toContain("a lieu demain");
   });
+  it("rappel 15 min : indique les minutes réellement restantes et le fuseau horaire", async () => {
+    // séance dans 10 minutes (voir seance()) — planifiée tardivement.
+    prisma.seance.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([seance()]);
+
+    await service.handleReminders();
+
+    const mail = email.send.mock.calls[0][0];
+    expect(mail.text).toContain("commence dans 10 minutes, le ");
+    expect(mail.text).toContain("(heure de Madagascar)");
+  });
 });
 
 describe("jourRelatif", () => {

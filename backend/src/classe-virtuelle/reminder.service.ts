@@ -21,7 +21,9 @@ export class ClasseVirtuelleReminderService {
     private readonly email: EmailService
   ) {}
 
-  @Cron("*/5 * * * *")
+  // Toutes les minutes (au lieu de 5) : le rappel "15 min" pouvait partir
+  // jusqu'à 5 min en retard, soit ~10 min avant le début.
+  @Cron("* * * * *")
   async handleReminders() {
     // Le rappel "J-1" part dès que la séance est à moins de 24h — donc
     // immédiatement pour une séance planifiée le jour même. Le libellé
@@ -55,15 +57,15 @@ export class ClasseVirtuelleReminderService {
       flagField: "rappel15minEnvoyeAt",
       subject: (groupeLabel: string) => `Votre classe virtuelle commence bientôt (${groupeLabel})`,
       buildText: (prenom: string, groupeLabel: string, startAt: Date, link: string) =>
-        `Bonjour ${prenom},\n\nVotre séance (${groupeLabel}) commence dans 15 minutes, à ${formatDateTime(startAt)}.\n\nRejoignez la classe virtuelle ici :\n${link}\n\nÀ tout de suite,\nL'équipe e-Staf`,
+        `Bonjour ${prenom},\n\nVotre séance (${groupeLabel}) commence dans ${minutesAvant(startAt)} minutes, le ${formatDateTime(startAt)}.\n\nRejoignez la classe virtuelle ici :\n${link}\n\nÀ tout de suite,\nL'équipe e-Staf`,
       buildHtml: (prenom: string, groupeLabel: string, startAt: Date, link: string) =>
         renderEmailHtml({
           title: "Votre classe virtuelle commence bientôt",
-          preheader: `${groupeLabel} — dans 15 minutes`,
+          preheader: `${groupeLabel} — dans ${minutesAvant(startAt)} minutes`,
           bodyHtml:
             emailParagraph(`Bonjour ${prenom},`) +
             emailParagraph(
-              `Votre séance (${groupeLabel}) commence dans 15 minutes, à ${formatDateTime(startAt)}.`
+              `Votre séance (${groupeLabel}) commence dans ${minutesAvant(startAt)} minutes, le ${formatDateTime(startAt)}.`
             ) +
             ctaButton("Rejoindre la classe virtuelle", link),
         }),
@@ -129,12 +131,20 @@ export class ClasseVirtuelleReminderService {
   }
 }
 
+// Fuseau précisé dans le texte (voir classe-virtuelle.service.ts).
 function formatDateTime(date: Date): string {
-  return date.toLocaleString("fr-FR", {
+  return `${date.toLocaleString("fr-FR", {
     dateStyle: "full",
     timeStyle: "short",
     timeZone: TIME_ZONE,
-  });
+  })} (heure de Madagascar)`;
+}
+
+// Minutes restantes avant le début, arrondies — le rappel "15 min" peut
+// partir plus tard (séance planifiée moins de 15 min avant), le texte doit
+// alors dire la vérité plutôt qu'un "15 minutes" figé.
+function minutesAvant(startAt: Date): number {
+  return Math.max(1, Math.round((startAt.getTime() - Date.now()) / 60_000));
 }
 
 const TIME_ZONE = "Indian/Antananarivo";

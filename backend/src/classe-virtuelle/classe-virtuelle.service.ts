@@ -10,12 +10,15 @@ import { renderEmailHtml, emailParagraph, ctaButton } from "../common/email-temp
 const JOIN_WINDOW_BEFORE_MINUTES = 10;
 const APP_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
+// Fuseau précisé dans le texte : les apprenants sont à Madagascar, mais un
+// destinataire ailleurs (ex. équipe en France, UTC+2) lisait sinon l'heure
+// comme la sienne, décalée d'une heure (signalement du 2026-09-25).
 function formatDateTime(date: Date): string {
-  return date.toLocaleString("fr-FR", {
+  return `${date.toLocaleString("fr-FR", {
     dateStyle: "full",
     timeStyle: "short",
     timeZone: "Indian/Antananarivo",
-  });
+  })} (heure de Madagascar)`;
 }
 
 export interface RoomStatus {
