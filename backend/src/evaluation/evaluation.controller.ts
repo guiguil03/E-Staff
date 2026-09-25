@@ -9,6 +9,7 @@ import {
   UploadedFile,
   UseGuards,
   UseInterceptors,
+  Headers,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiTags } from "@nestjs/swagger";
@@ -285,27 +286,40 @@ export class EvaluationController {
   @Post("situation-responses/:id/grade")
   gradeSituationResponse(
     @Param("id") id: string,
-    @Body() dto: GradeSituationDto
+    @Body() dto: GradeSituationDto,
+    @Headers("x-formateur-matricule") formateurMatricule: string
   ) {
-    return this.service.gradeSituationResponse(id, dto.criteria);
+    return this.service.gradeSituationResponse(id, dto.criteria, formateurMatricule);
   }
 
   @UseGuards(FormateurGuard)
   @Post("video-responses/:id/grade")
-  gradeVideoResponse(@Param("id") id: string, @Body() dto: GradeVideoDto) {
-    return this.service.gradeVideoResponse(id, dto.criteria);
+  gradeVideoResponse(
+    @Param("id") id: string,
+    @Body() dto: GradeVideoDto,
+    @Headers("x-formateur-matricule") formateurMatricule: string
+  ) {
+    return this.service.gradeVideoResponse(id, dto.criteria, formateurMatricule);
   }
 
   @UseGuards(FormateurGuard)
   @Post("essay-responses/:id/grade")
-  gradeEssayResponse(@Param("id") id: string, @Body() dto: GradeEssayDto) {
-    return this.service.gradeEssayResponse(id, dto.criteria);
+  gradeEssayResponse(
+    @Param("id") id: string,
+    @Body() dto: GradeEssayDto,
+    @Headers("x-formateur-matricule") formateurMatricule: string
+  ) {
+    return this.service.gradeEssayResponse(id, dto.criteria, formateurMatricule);
   }
 
   @UseGuards(FormateurGuard)
   @Post("partie-ouverte-responses/:id/grade")
-  gradePartieOuverte(@Param("id") id: string, @Body() dto: GradePartieOuverteDto) {
-    return this.service.gradePartieOuverte(id, dto.criteria);
+  gradePartieOuverte(
+    @Param("id") id: string,
+    @Body() dto: GradePartieOuverteDto,
+    @Headers("x-formateur-matricule") formateurMatricule: string
+  ) {
+    return this.service.gradePartieOuverte(id, dto.criteria, formateurMatricule);
   }
 
   @UseGuards(FormateurGuard)

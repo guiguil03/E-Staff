@@ -352,6 +352,14 @@ model EvaluationAttempt {
   essayResponse       EssayResponse?
   ecritOuvertResponse EcritOuvertResponse?
 
+  // Formateur qui a commencé la correction (première note posée) — la file
+  // des tests est commune à tous les formateurs : affiché « en cours de
+  // correction par X » pour éviter que deux formateurs corrigent le même
+  // test. Indicatif, jamais bloquant (voir EvaluationService.prendreCorrection).
+  correcteurId      String?
+  correcteur        Formateur? @relation("CorrecteurTests", fields: [correcteurId], references: [id], onDelete: SetNull)
+  correctionPriseAt DateTime?
+
   @@index([candidatId])
 }
 
@@ -532,12 +540,14 @@ model Formateur {
   // que la RH ne l'a pas renseigné.
   tarifFixe Float?
 
-  groupes       Groupe[]
-  paiements     PaiementFormateur[]
-  documents     FormateurDocument[]
-  bilans        BilanFormateur[]
-  diffusions    Diffusion[]
-  supportsCours SupportCours[]
+  groupes           Groupe[]
+  paiements         PaiementFormateur[]
+  documents         FormateurDocument[]
+  bilans            BilanFormateur[]
+  diffusions        Diffusion[]
+  supportsCours     SupportCours[]
+  // Tests d'admission dont ce formateur a commencé la correction.
+  testsEnCorrection EvaluationAttempt[] @relation("CorrecteurTests")
 }
 
 // Support de cours partagé par un formateur aux apprenants d'un groupe —
@@ -732,6 +742,9 @@ model Apprenant {
   // commission de l'agent d'acquisition (voir RhService.renouvelerAbonnement).
   reinscriptions Reinscription[]
 
+  // Notes privées du formateur sur cet apprenant, par séance.
+  notesFormateur NoteFormateur[]
+
   @@index([groupeId])
   @@index([connecteurId])
   @@index([agentAcquisitionId])
@@ -776,6 +789,12 @@ model Seance {
 
   presences Presence[]
   notations Notation[]
+
+  // Enregistrements cloud Daily de la classe virtuelle (revisionnables par
+  // les apprenants du groupe) — voir model Enregistrement.
+  enregistrements Enregistrement[]
+  notesFormateur  NoteFormateur[]
+  tableauBlanc    TableauBlanc?
 
   @@unique([groupeId, numero])
 }
@@ -1358,4 +1377,66 @@ model OffreEmploi {
   candidatures Registration[]
 
   @@index([metierSlug])
+}
+
+// Enregistrement cloud d'une classe virtuelle (Daily « cloud recording »),
+// démarré automatiquement à l'arrivée du formateur quand
+// DAILY_RECORDING_ENABLED=true. Créé à la réception du webhook
+// recording.ready-to-download ; la vidéo reste stockée chez Daily, la
+// lecture passe par un lien d'accès temporaire demandé à la volée (GET
+// /recordings/:id/access-link) — jamais d'URL permanente stockée ici.
+model Enregistrement {
+  id               String    @id @default(cuid())
+  seanceId         String
+  seance           Seance    @relation(fields: [seanceId], references: [id], onDelete: Cascade)
+  dailyRecordingId String    @unique
+  dureeSecondes    Int?
+  debutAt          DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([seanceId])
+}
+
+// Notes privées prises par le formateur pendant/après une classe virtuelle
+// (panneau « Notes ») : une par apprenant et par séance, plus une note de
+// séance générale (apprenantId null). Jamais visibles des apprenants.
+model NoteFormateur {
+  id          String     @id @default(cuid())
+  seanceId    String
+  seance      Seance     @relation(fields: [seanceId], references: [id], onDelete: Cascade)
+  apprenantId String?
+  apprenant   Apprenant? @relation(fields: [apprenantId], references: [id], onDelete: Cascade)
+  contenu     String
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([seanceId, apprenantId])
+}
+
+// Tableau blanc partagé d'une classe virtuelle (Excalidraw) : le formateur
+// dessine/annote, les apprenants le voient en direct en lecture seule.
+// `elements` = scène Excalidraw sérialisée ; `version` incrémentée à chaque
+// sauvegarde pour que les apprenants ne rechargent que si elle a changé.
+// Les images (documents à annoter) sont stockées à part, voir
+// TableauFichier.
+model TableauBlanc {
+  seanceId  String   @id
+  seance    Seance   @relation(fields: [seanceId], references: [id], onDelete: Cascade)
+  elements  String   @default("[]")
+  version   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  fichiers TableauFichier[]
+}
+
+// Image posée sur le tableau blanc (id = identifiant de fichier Excalidraw),
+// stockée sur le bucket.
+model TableauFichier {
+  seanceId   String
+  tableau    TableauBlanc @relation(fields: [seanceId], references: [seanceId], onDelete: Cascade)
+  fileId     String
+  storageKey String
+  mimeType   String
+  createdAt  DateTime     @default(now())
+
+  @@id([seanceId, fileId])
 }

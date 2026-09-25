@@ -38,3 +38,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env*
+
+# Assets Excalidraw copiés au postinstall (scripts/copy-excalidraw-assets.mjs)
+/public/excalidraw-assets
+/public/excalidraw-assets-dev

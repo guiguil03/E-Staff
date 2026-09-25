@@ -16,6 +16,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { FormateurGuard } from "../common/formateur.guard";
+import { ApprenantGuard } from "../common/apprenant.guard";
 import { SupportCoursService } from "./support-cours.service";
 
 const MAX_SUPPORT_UPLOAD_BYTES = 100 * 1024 * 1024; // 100 Mo (documents + audio/vidéo)
@@ -102,14 +103,19 @@ export class SupportCoursController {
     return this.service.deleteSupport(formateurMatricule, id);
   }
 
-  // ---- Apprenant (pas de guard — même niveau de protection stopgap que le
-  // reste du Compte Apprenant, matricule comme identifiant) ------------------
+  // ---- Apprenant — gardé par ApprenantGuard : la session doit correspondre
+  // exactement au matricule de l'URL (voir apprenant.guard.ts). Ces routes
+  // n'avaient aucune garde : n'importe qui devinant un matricule (séquentiel,
+  // ETF-2026-0001...) pouvait lister et télécharger les supports d'un
+  // groupe (corrigé le 2026-09-25). ------------------------------------------
 
+  @UseGuards(ApprenantGuard)
   @Get("apprenants/:matricule/supports-cours")
   listSupportsForApprenant(@Param("matricule") matricule: string) {
     return this.service.listSupportsForApprenant(matricule);
   }
 
+  @UseGuards(ApprenantGuard)
   @Get("apprenants/:matricule/supports-cours/:id")
   async streamSupportForApprenant(
     @Param("matricule") matricule: string,

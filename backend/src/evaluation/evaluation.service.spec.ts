@@ -12,13 +12,20 @@ import { PARTIE_OUVERTE_GRADING_CRITERIA } from "./partie-ouverte";
 
 function makePrismaMock() {
   return {
-    evaluationAttempt: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), count: jest.fn() },
+    evaluationAttempt: {
+      findUnique: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+    },
     situationResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     videoResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     essayResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     ecritOuvertResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     apprenant: { findMany: jest.fn(), create: jest.fn() },
     groupe: { findUnique: jest.fn() },
+    formateur: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
   };
 }
 
@@ -139,6 +146,51 @@ describe("EvaluationService", () => {
       expect(finalizeCall.data.status).toBe("soumis");
       expect(finalizeCall.data.submittedAt).toBeInstanceOf(Date);
     });
+
+    it("prévient chaque formateur par e-mail quand un test passe en 'soumis'", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({
+          lexiqueAnswers: "{}",
+          ecritOuvertResponse: { score: 8 },
+          oralAnswers: "{}",
+          situationResponses: new Array(5).fill({}),
+          videoResponses: new Array(2).fill({}),
+          essayResponse: { score: 9 },
+          candidat: CANDIDAT,
+        })
+      );
+      prisma.formateur.findMany.mockResolvedValue([
+        { prenom: "Ravaka", email: "ravaka@example.com" },
+        { prenom: "Sans", email: "" },
+      ]);
+
+      await service.submitAnswers("attempt-1", { oralAnswers: { q1: "a" } });
+
+      expect(email.send).toHaveBeenCalledTimes(1);
+      expect(email.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: "ravaka@example.com",
+          subject: "Nouveau test d'admission à corriger — Awa Diallo",
+        })
+      );
+    });
+
+    it("ne bloque pas la soumission si l'envoi aux formateurs échoue", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({
+          lexiqueAnswers: "{}",
+          ecritOuvertResponse: { score: 8 },
+          oralAnswers: "{}",
+          situationResponses: new Array(5).fill({}),
+          videoResponses: new Array(2).fill({}),
+          essayResponse: { score: 9 },
+          candidat: CANDIDAT,
+        })
+      );
+      prisma.formateur.findMany.mockRejectedValue(new Error("db down"));
+
+      await expect(service.submitAnswers("attempt-1", { oralAnswers: { q1: "a" } })).resolves.not.toThrow();
+    });
   });
 
   describe("gradeSituationResponse — validation", () => {
@@ -178,6 +230,22 @@ describe("EvaluationService", () => {
       expect(prisma.evaluationAttempt.update).toHaveBeenCalledWith({
         where: { id: "attempt-1" },
         data: { status: "en_correction" },
+      });
+    });
+
+    it("enregistre le premier formateur qui note comme correcteur (sans écraser un correcteur existant)", async () => {
+      prisma.videoResponse.findUnique.mockResolvedValue({ id: "v-1", attemptId: "attempt-1" });
+      prisma.videoResponse.update.mockResolvedValue({});
+      prisma.formateur.findUnique.mockResolvedValue({ id: "form-1" });
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({ status: "en_correction", situationResponses: [], videoResponses: [] })
+      );
+
+      await service.gradeVideoResponse("v-1", maxVideoCriteria(), "ETF-FORM-2026-0001");
+
+      expect(prisma.evaluationAttempt.updateMany).toHaveBeenCalledWith({
+        where: { id: "attempt-1", correcteurId: null },
+        data: { correcteurId: "form-1", correctionPriseAt: expect.any(Date) },
       });
     });
 

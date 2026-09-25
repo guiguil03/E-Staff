@@ -103,13 +103,34 @@ export default function OffresEmploiPanel() {
   function refresh() {
     apiGet<OffreRh[]>("/rh/offres-emploi", adminHeaders())
       .then(setOffres)
-      .catch(() => setOffres("erreur"));
+      .catch((err) => {
+        setOffres("erreur");
+        const message = messageDiagnostic(err);
+        if (message) setErreur(message);
+      });
   }
 
   useEffect(refresh, []);
 
+  // Causes identifiables affichées telles quelles (plutôt qu'un message
+  // générique) : backend pas encore redéployé avec le module Offres
+  // d'emploi (404), ou session qui n'est pas une session RH (401).
+  function messageDiagnostic(err: unknown): string | null {
+    if (!(err instanceof ApiError)) return null;
+    if (err.status === 404) {
+      return "Le serveur n'a pas encore la fonctionnalité Offres d'emploi : le backend doit être redéployé (migration en attente).";
+    }
+    if (err.status === 401 || err.status === 403) {
+      return "Session RH invalide ou expirée — reconnectez-vous avec un compte RH.";
+    }
+    return null;
+  }
+
   function messageErreur(err: unknown): string {
-    return err instanceof ApiError ? err.message : "Enregistrement impossible — réessayez.";
+    return (
+      messageDiagnostic(err) ??
+      (err instanceof ApiError ? err.message : "Enregistrement impossible — réessayez.")
+    );
   }
 
   async function enregistrer() {

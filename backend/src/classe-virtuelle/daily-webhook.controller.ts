@@ -9,6 +9,7 @@ import {
   Req,
   UnauthorizedException,
   UseGuards,
+  Logger,
 } from "@nestjs/common";
 import type { RawBodyRequest } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
@@ -16,11 +17,17 @@ import type { Request } from "express";
 import { FormateurGuard } from "../common/formateur.guard";
 import { DailyService } from "./daily.service";
 import { PresenceService } from "./presence.service";
+import { EnregistrementService } from "./enregistrement.service";
 
 interface DailyWebhookPayload {
   type: string;
   payload: {
     room: string;
+    // recording.* (voir EnregistrementService)
+    recording_id?: string;
+    room_name?: string;
+    start_ts?: number;
+    duration?: number;
     user_id?: string;
     user_name?: string;
     session_id: string;
@@ -42,9 +49,12 @@ function verifySignature(rawBody: Buffer, timestamp: string, signature: string, 
 @ApiTags("Webhooks")
 @Controller()
 export class DailyWebhookController {
+  private readonly logger = new Logger(DailyWebhookController.name);
+
   constructor(
     private readonly presence: PresenceService,
-    private readonly daily: DailyService
+    private readonly daily: DailyService,
+    private readonly enregistrements: EnregistrementService
   ) {}
 
   // Reçoit participant.joined/participant.left de Daily et alimente la
@@ -73,6 +83,13 @@ export class DailyWebhookController {
       await this.presence.recordJoin(body.payload);
     } else if (body.type === "participant.left") {
       await this.presence.recordLeave(body.payload);
+    } else if (body.type === "recording.ready-to-download") {
+      const { recording_id, room_name, start_ts, duration } = body.payload;
+      if (recording_id && room_name) {
+        await this.enregistrements.enregistrerPret({ recording_id, room_name, start_ts, duration });
+      }
+    } else if (body.type === "recording.error") {
+      this.logger.error(`Erreur d'enregistrement Daily : ${JSON.stringify(body.payload)}`);
     }
 
     return { ok: true };
@@ -92,6 +109,23 @@ export class DailyWebhookController {
     const result = await this.daily.createWebhook(`${backendUrl}/webhooks/daily`);
     if (!result) {
       throw new BadRequestException("DAILY_API_KEY non configurée ou échec de création.");
+    }
+    return result;
+  }
+
+  // À appeler une fois après avoir activé l'enregistrement : ajoute
+  // recording.ready-to-download / recording.error au webhook existant
+  // (créé avant, avec seulement participant.*), sans changer son secret.
+  @Post("admin/daily-webhook/enable-recordings")
+  @UseGuards(FormateurGuard)
+  async enableRecordingEvents() {
+    const backendUrl = process.env.BACKEND_PUBLIC_URL;
+    if (!backendUrl) {
+      throw new BadRequestException("BACKEND_PUBLIC_URL non configurée.");
+    }
+    const result = await this.daily.ensureWebhookEventTypes(`${backendUrl}/webhooks/daily`);
+    if (!result) {
+      throw new BadRequestException("DAILY_API_KEY non configurée ou échec de lecture des webhooks.");
     }
     return result;
   }

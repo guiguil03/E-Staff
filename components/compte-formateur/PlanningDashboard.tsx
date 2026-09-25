@@ -17,6 +17,7 @@ import {
 import { COMPETENCY_DEFS, tauxAssimilation } from "./gradingGrids";
 import SupportsCoursCard from "./SupportsCoursCard";
 import { DevoirDownloadButton } from "./DevoirPreview";
+import EnregistrementsLecteur, { type EnregistrementApi } from "@/components/ui/EnregistrementsLecteur";
 
 interface NotationCell {
   id: string;
@@ -91,6 +92,20 @@ export default function PlanningDashboard() {
   );
   const [horaireError, setHoraireError] = useState<string | null>(null);
   const [notations, setNotations] = useState<NotationMap | "loading" | "erreur">("loading");
+  // Enregistrements cloud de la séance sélectionnée (revisionnage).
+  const [enregistrements, setEnregistrements] = useState<EnregistrementApi[]>([]);
+
+  useEffect(() => {
+    if (!groupeKey) return;
+    let cancelled = false;
+    setEnregistrements([]);
+    apiGet<EnregistrementApi[]>(`/seances/${groupeKey}/${seance}/enregistrements`, formateurHeaders())
+      .then((data) => !cancelled && setEnregistrements(data ?? []))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [groupeKey, seance]);
 
   // Groupes/apprenants branchés sur le vrai backend, scopés au formateur
   // connecté (voir CockpitService.getGroupes/listApprenants) — avant, cette
@@ -388,6 +403,18 @@ export default function PlanningDashboard() {
                 )}
               </p>
             </div>
+            {enregistrements.length > 0 && (
+              <div className="mt-4 border-t border-white/10 pt-4">
+                <p className="font-sans text-sm text-white/80">
+                  Enregistrement{enregistrements.length > 1 ? "s" : ""} de la séance n°{seance}
+                </p>
+                <EnregistrementsLecteur
+                  enregistrements={enregistrements}
+                  lienPath={(id) => `/enregistrements/${id}/lien`}
+                  headers={formateurHeaders()}
+                />
+              </div>
+            )}
           </div>
         </Reveal>
 

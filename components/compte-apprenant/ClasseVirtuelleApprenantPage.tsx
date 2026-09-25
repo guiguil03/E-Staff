@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { apiGet, ApiError } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
+import DocumentsSeancePanel from "./DocumentsSeancePanel";
+import TableauBlanc from "@/components/classe-virtuelle/TableauBlanc";
 
 interface RoomStatus {
   groupeCle: string;
@@ -39,6 +41,11 @@ export default function ClasseVirtuelleApprenantPage() {
   const checked = useRequireRole("apprenant");
   const [status, setStatus] = useState<RoomStatus | null | "loading" | "erreur">("loading");
   const [erreurDetail, setErreurDetail] = useState<string | null>(null);
+  const [panneauDocs, setPanneauDocs] = useState(true);
+  // Onglet du panneau : documents ou tableau blanc du formateur.
+  const [ongletApprenant, setOngletApprenant] = useState<"documents" | "tableau">("documents");
+  const [tableauModifie, setTableauModifie] = useState(false);
+  const [nbNouveauxDocs, setNbNouveauxDocs] = useState(0);
 
   // Une 401/403 (session expirée, matricule qui ne correspond plus à la
   // session signée) ne doit jamais s'afficher comme "rien de prévu" — ça
@@ -95,22 +102,90 @@ export default function ClasseVirtuelleApprenantPage() {
   }
 
   if (status && typeof status === "object" && status.withinJoinWindow && status.roomUrl) {
+    const matricule = typeof window !== "undefined" ? sessionStorage.getItem(ACCOUNT_MATRICULE_KEY) : null;
     return (
       <div className="flex h-screen flex-col bg-obsidian">
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
           <p className="font-sans text-sm text-white/70">Groupe {status.groupeCle} — Séance n°{status.numero}</p>
-          <Link
-            href="/compte/apprenant"
-            className="font-mono text-xs uppercase tracking-widest text-accent hover:underline"
-          >
-            ← Quitter
-          </Link>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setPanneauDocs((o) => !o)}
+              className="font-mono text-xs uppercase tracking-widest text-white/60 hover:text-accent"
+            >
+              {panneauDocs ? "Masquer les documents" : "Documents"}
+              {!panneauDocs && nbNouveauxDocs > 0 && (
+                <span className="ml-2 rounded-full bg-accent px-1.5 py-0.5 text-obsidian">{nbNouveauxDocs}</span>
+              )}
+            </button>
+            <Link
+              href="/compte/apprenant"
+              className="font-mono text-xs uppercase tracking-widest text-accent hover:underline"
+            >
+              ← Quitter
+            </Link>
+          </div>
         </div>
-        <iframe
-          src={status.roomUrl}
-          allow="camera; microphone; fullscreen; display-capture; autoplay"
-          className="w-full flex-1 border-0"
-        />
+        {/* L'iframe reste montée quand le panneau s'ouvre ou se ferme : la
+            visio n'est jamais coupée. Le panneau reste monté (masqué) pour
+            continuer à détecter les nouveaux documents. */}
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          <iframe
+            src={status.roomUrl}
+            allow="camera; microphone; fullscreen; display-capture; autoplay"
+            className="min-h-0 w-full flex-1 border-0"
+          />
+          {matricule && (
+            <aside
+              className={`${
+                panneauDocs ? "flex" : "hidden"
+              } max-h-[45vh] w-full shrink-0 flex-col border-t border-white/10 bg-obsidianCard md:max-h-none md:border-l md:border-t-0 ${
+                ongletApprenant === "tableau" ? "md:w-[60%]" : "md:w-[340px]"
+              }`}
+            >
+              <div className="flex border-b border-white/10">
+                {(
+                  [
+                    ["documents", "Documents"],
+                    ["tableau", "Tableau"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setOngletApprenant(key);
+                      if (key === "tableau") setTableauModifie(false);
+                    }}
+                    className={`flex-1 px-4 py-3 font-mono text-xs uppercase tracking-widest transition-colors ${
+                      ongletApprenant === key ? "border-b-2 border-accent text-accent" : "text-white/50 hover:text-white"
+                    }`}
+                  >
+                    {label}
+                    {key === "tableau" && tableauModifie && ongletApprenant !== "tableau" && (
+                      <span className="ml-2 inline-block h-2 w-2 rounded-full bg-accent align-middle" />
+                    )}
+                  </button>
+                ))}
+              </div>
+              {/* Les deux onglets restent montés (masqués) : la liste des
+                  documents continue de détecter les nouveautés, et le
+                  tableau de suivre le formateur. */}
+              <div className={`${ongletApprenant === "documents" ? "block" : "hidden"} min-h-0 flex-1 overflow-y-auto p-4`}>
+                <h2 className="font-display text-base font-semibold text-white">Documents de la séance</h2>
+                <div className="mt-2">
+                  <DocumentsSeancePanel matricule={matricule} numero={status.numero} onCount={setNbNouveauxDocs} />
+                </div>
+              </div>
+              <div className={`${ongletApprenant === "tableau" ? "flex" : "hidden"} min-h-0 flex-1 flex-col p-3`}>
+                <TableauBlanc
+                  mode="lecture"
+                  basePath={`/apprenants/${matricule}/seances/${status.numero}/tableau`}
+                  onNouveaute={() => setTableauModifie(true)}
+                  visible={panneauDocs && ongletApprenant === "tableau"}
+                />
+              </div>
+            </aside>
+          )}
+        </div>
       </div>
     );
   }
