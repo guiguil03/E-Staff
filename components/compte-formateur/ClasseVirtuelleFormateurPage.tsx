@@ -7,6 +7,8 @@ import Button from "@/components/ui/Button";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { apiGet } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
+import NotationCompetencesPanel from "./NotationCompetencesPanel";
+import SupportsCoursCard from "./SupportsCoursCard";
 
 interface ApprenantListApi {
   matricule: string;
@@ -59,6 +61,9 @@ export default function ClasseVirtuelleFormateurPage({
   const checked = useRequireRole("formateur");
   const [status, setStatus] = useState<RoomStatus | "loading" | "erreur">("loading");
   const [launched, setLaunched] = useState(false);
+  // Panneau latéral pendant le cours : notation en direct ou supports.
+  const [panneau, setPanneau] = useState<"noter" | "supports" | null>("noter");
+  const [apprenantNote, setApprenantNote] = useState<string | null>(null);
   const [apprenants, setApprenants] = useState<ApprenantListApi[]>([]);
 
   useEffect(() => {
@@ -83,24 +88,107 @@ export default function ClasseVirtuelleFormateurPage({
   }
 
   if (launched && status !== "erreur" && status.withinJoinWindow && status.roomUrl) {
+    const apprenantsDuGroupe = apprenants.filter((a) => a.groupeCle === groupeCle);
     return (
       <div className="flex h-screen flex-col bg-obsidian">
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
           <p className="font-sans text-sm text-white/70">
             Groupe {groupeCle} — Séance n°{numero}
           </p>
-          <button
-            onClick={() => setLaunched(false)}
-            className="font-mono text-xs uppercase tracking-widest text-accent hover:underline"
-          >
-            ← Quitter
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setPanneau((p) => (p ? null : "noter"))}
+              className="font-mono text-xs uppercase tracking-widest text-white/60 hover:text-accent"
+            >
+              {panneau ? "Masquer le panneau" : "Noter / Supports"}
+            </button>
+            <button
+              onClick={() => setLaunched(false)}
+              className="font-mono text-xs uppercase tracking-widest text-accent hover:underline"
+            >
+              ← Quitter
+            </button>
+          </div>
         </div>
-        <iframe
-          src={status.roomUrl}
-          allow="camera; microphone; fullscreen; display-capture; autoplay"
-          className="w-full flex-1 border-0"
-        />
+        {/* La visio reste montée en permanence : ouvrir/fermer le panneau ou
+            y noter ne recharge jamais l'iframe, donc ne coupe pas le cours
+            (demande cliente du 2026-09-25 : noter et ajouter des supports
+            « sans que la séance ne soit interrompue »). */}
+        <div className="flex min-h-0 flex-1">
+          <iframe
+            src={status.roomUrl}
+            allow="camera; microphone; fullscreen; display-capture; autoplay"
+            className="min-w-0 flex-1 border-0"
+          />
+          {panneau && (
+            <aside className="flex w-full max-w-[420px] shrink-0 flex-col border-l border-white/10 bg-obsidianCard">
+              <div className="flex border-b border-white/10">
+                {(
+                  [
+                    ["noter", "Noter"],
+                    ["supports", "Supports"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setPanneau(key)}
+                    className={`flex-1 px-4 py-3 font-mono text-xs uppercase tracking-widest transition-colors ${
+                      panneau === key ? "border-b-2 border-accent text-accent" : "text-white/50 hover:text-white"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                {panneau === "noter" && (
+                  <>
+                    <label className="block font-mono text-[11px] uppercase tracking-widest text-white/50">
+                      Apprenant
+                      <select
+                        value={apprenantNote ?? ""}
+                        onChange={(e) => setApprenantNote(e.target.value || null)}
+                        className="mt-1 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm normal-case tracking-normal text-white outline-none focus:border-accent"
+                      >
+                        <option value="">— Choisir un apprenant —</option>
+                        {apprenantsDuGroupe.map((a) => (
+                          <option key={a.matricule} value={a.matricule}>
+                            {a.prenom} {a.nom}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="mt-4">
+                      {apprenantNote ? (
+                        <NotationCompetencesPanel
+                          key={apprenantNote}
+                          groupe={groupeCle}
+                          seance={numero}
+                          matricule={apprenantNote}
+                          compact
+                        />
+                      ) : (
+                        <p className="font-sans text-sm text-white/50">
+                          Choisissez un apprenant pour noter ses compétences pendant le cours — la visio
+                          continue à gauche.
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+                {panneau === "supports" && (
+                  <>
+                    <p className="font-sans text-xs text-white/60">
+                      Les documents déposés « pour la séance n°{numero} » apparaissent aussitôt chez les
+                      apprenants, à côté de leur visio.
+                    </p>
+                    <SupportsCoursCard groupeKey={groupeCle} seance={numero} />
+                  </>
+                )}
+              </div>
+            </aside>
+          )}
+        </div>
       </div>
     );
   }
