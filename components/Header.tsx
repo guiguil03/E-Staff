@@ -5,8 +5,10 @@ import AuthNavItem from "./AuthNavItem";
 // "Forum" retiré du menu public le 2026-09-05 (masqué le temps de trouver
 // du contenu à y mettre, voir ForumAccessGate) — reste accessible aux
 // apprenants connectés via QuickActions sur leur tableau de bord.
+// « Communauté » remplacée par « Ma carrière » le 2026-09-26, le temps
+// d'avoir plus de volume (voir components/communaute/CommunautePage.tsx).
 const NAV_ITEMS = [
-  { label: "Communauté", href: "/communaute" },
+  { label: "Ma carrière", href: "/offres/carrieres" },
   { label: "Se préparer aux examens", href: "/offres/examens" },
   { label: "Proposer un partenariat", href: "/entreprises" },
 ];

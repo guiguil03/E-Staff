@@ -79,7 +79,7 @@ export default function QuickActions({ prochaineSeance }: QuickActionsProps) {
           <RendreExerciceAction />
           <LiveAction label="Calendrier des classes virtuelles" href="/compte/apprenant/calendrier" />
           <LiveAction label="Accéder au Forum" href="/forum" />
-          <LiveAction label="Accéder à la Communauté" href="/communaute" />
+          <LiveAction label="Ma carrière : offres d'emploi" href="/offres/carrieres" />
           <PlaceholderAction label="Contacter le formateur" />
         </div>
       </div>
