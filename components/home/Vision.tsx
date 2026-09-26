@@ -163,11 +163,11 @@ export default function Vision() {
           <Reveal delay={100} className="md:col-start-3 md:row-start-2">
             <div className="grid w-full grid-cols-1 gap-6 sm:grid-cols-3 md:grid-cols-1 lg:grid-cols-3">
               <VisionCard
-                href="/communaute"
+                href="/offres/carrieres#reussites"
                 accent="teal"
                 icon={<StarPersonIcon className="h-full w-full" />}
               >
-                Découvrir nos meilleurs talents
+                Découvrir nos talents embauchés
               </VisionCard>
               <VisionCard
                 href="/entreprises"

@@ -15,7 +15,6 @@ const ROUTES: { path: string; priority: number; changeFrequency: MetadataRoute.S
   { path: "/entreprises/proposer-un-projet", priority: 0.6, changeFrequency: "monthly" },
   { path: "/entreprises/former-son-equipe", priority: 0.6, changeFrequency: "monthly" },
   { path: "/entreprises/devenir-connecteur", priority: 0.6, changeFrequency: "monthly" },
-  { path: "/communaute", priority: 0.6, changeFrequency: "monthly" },
   { path: "/forum", priority: 0.6, changeFrequency: "weekly" },
   { path: "/contact", priority: 0.5, changeFrequency: "yearly" },
   { path: "/mentions-legales", priority: 0.2, changeFrequency: "yearly" },
