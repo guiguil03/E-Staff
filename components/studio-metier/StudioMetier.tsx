@@ -7,6 +7,7 @@ import AccessNotice from "@/components/studio-metier/AccessNotice";
 import CircuitTexture from "@/components/studio-metier/CircuitTexture";
 import OffreCard from "@/components/studio-metier/OffreCard";
 import TemoignagesEmbauche from "@/components/studio-metier/TemoignagesEmbauche";
+import MediaWall from "@/components/communaute/MediaWall";
 import type { OffreEmploi } from "@/components/studio-metier/offres";
 import { apiGet } from "@/lib/api";
 import {
@@ -31,12 +32,13 @@ function HangingPin() {
   );
 }
 
-// « Ma carrière » (/offres/carrieres) — univers sombre/élite (obsidienne +
-// or). Depuis le 2026-09-26 (demande cliente), la grille des 10 cartes
-// métiers est remplacée par la disposition de la page Communauté (mise en
-// pause) : à gauche le mur des offres d'emploi publiées par la RH, à droite
-// les témoignages de personnes embauchées. La candidature spontanée reste
-// possible, avec le choix du métier dans une liste.
+// « Ma carrière » / Studio Métier (/offres/carrieres) — univers
+// sombre/élite (obsidienne + or). Depuis le 2026-09-26 (demande cliente), la
+// grille des 10 cartes métiers est remplacée par la page Communauté (mise
+// en pause) : après l'accroche Studio Métier, le mur photos/vidéos à gauche
+// et les témoignages de personnes embauchées à droite, puis les offres
+// d'emploi publiées par la RH et la candidature (spontanée possible, avec
+// le choix du métier dans une liste).
 export default function StudioMetier() {
   const murRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
@@ -86,7 +88,7 @@ export default function StudioMetier() {
           <div className="mx-auto max-w-3xl">
             <Reveal>
               <p className="font-mono text-xs uppercase tracking-widest text-accent">
-                e-Staf — Ma carrière
+                e-Staf — Studio Métier
               </p>
               <h1 className="mt-4 font-display text-2xl font-bold leading-tight text-white sm:text-3xl md:text-4xl">
                 Votre carrière de rêve en quelques clics.
@@ -110,13 +112,38 @@ export default function StudioMetier() {
           </div>
         </section>
 
-        {/* Mur des offres + témoignages (disposition de la page Communauté) */}
-        <section className="mt-12 border-t border-accent/15 px-4 pb-20 pt-12 sm:px-6">
+        {/* Accroche + disposition de la page Communauté : mur photos/vidéos
+            et témoignages de personnes embauchées */}
+        <section className="px-4 pt-16 sm:px-6">
+          <div className="mx-auto max-w-7xl">
+            <Reveal>
+              <h2 className="font-display text-2xl font-black uppercase leading-tight text-accent sm:text-3xl md:text-4xl">
+                Vous avez du talent, et votre trajectoire mérite
+                l&apos;excellence.
+              </h2>
+              <p className="mt-3 max-w-3xl font-sans text-sm text-white/70 sm:text-base">
+                Explorez vos options, écoutez vos aspirations, et faites le
+                choix qui transformera votre potentiel en réussite.
+              </p>
+            </Reveal>
+          </div>
+        </section>
+
+        <section className="mt-10 border-t border-accent/15 px-4 pb-16 pt-12 sm:px-6">
           <div className="mx-auto grid max-w-7xl grid-cols-1 gap-12 lg:grid-cols-[1fr_380px] lg:gap-10">
-            <div ref={murRef} aria-labelledby="mur-offres" className="min-w-0 scroll-mt-24">
+            <MediaWall />
+            <div className="lg:border-l lg:border-accent/15 lg:pl-10">
+              <TemoignagesEmbauche />
+            </div>
+          </div>
+        </section>
+
+        {/* Offres d'emploi publiées par la RH + candidature */}
+        <section className="border-t border-accent/15 px-4 pb-20 pt-12 sm:px-6">
+          <div ref={murRef} aria-labelledby="mur-offres" className="mx-auto min-w-0 max-w-7xl scroll-mt-24">
               <Reveal>
                 <h2 id="mur-offres" className="font-display text-2xl font-bold text-accent sm:text-3xl">
-                  Le Mur des Offres
+                  Nos offres d&apos;emploi
                 </h2>
                 <p className="mt-2 max-w-2xl font-sans text-sm text-white/60">
                   Nos postes ouverts en ce moment. Choisissez l&apos;offre qui vous correspond et
@@ -139,7 +166,7 @@ export default function StudioMetier() {
                   </div>
                 </Reveal>
               ) : (
-                <div className="mt-6 grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
+                <div className="mt-6 grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2 lg:grid-cols-3">
                   {offresTriees.map((offre, i) => (
                     <Reveal key={offre.id} delay={i * 60}>
                       <div className="flex h-full flex-col">
@@ -239,11 +266,6 @@ export default function StudioMetier() {
                   )}
                 </div>
               )}
-            </div>
-
-            <div className="lg:border-l lg:border-accent/15 lg:pl-10">
-              <TemoignagesEmbauche />
-            </div>
           </div>
         </section>
       </div>
