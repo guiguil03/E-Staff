@@ -151,6 +151,12 @@ model Registration {
   offreEmploiId String?
   offreEmploi   OffreEmploi? @relation(fields: [offreEmploiId], references: [id], onDelete: SetNull)
   listeAttente  Boolean      @default(false)
+
+  // Jeton des liens publics (contrat, paiement) envoyés par e-mail — voir
+  // common/lien-token.ts. accesParIdAutorise : lignes antérieures aux
+  // jetons, dont les liens déjà envoyés contiennent l'identifiant.
+  lienToken          String?  @unique
+  accesParIdAutorise Boolean  @default(false)
 }
 
 // ---------------------------------------------------------------------------
@@ -361,6 +367,12 @@ model EvaluationAttempt {
   correctionPriseAt DateTime?
 
   @@index([candidatId])
+
+  // Jeton des liens publics (contrat, paiement) envoyés par e-mail — voir
+  // common/lien-token.ts. accesParIdAutorise : lignes antérieures aux
+  // jetons, dont les liens déjà envoyés contiennent l'identifiant.
+  lienToken          String?  @unique
+  accesParIdAutorise Boolean  @default(false)
 }
 
 // Une réponse audio à une des 10 situations professionnelles (le candidat

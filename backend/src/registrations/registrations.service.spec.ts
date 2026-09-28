@@ -11,9 +11,13 @@ import { OffresEmploiService } from '../offres-emploi/offres-emploi.service';
 // inscription en "converti", voir la discussion sur RegistrationsService.
 
 function makePrismaMock() {
+  // Les routes publiques cherchent par jeton (findFirst), les routes RH par
+  // id (findUnique) : même réponse simulée pour les deux.
+  const findUnique = jest.fn();
   return {
     registration: {
-      findUnique: jest.fn(),
+      findUnique,
+      findFirst: findUnique,
       update: jest.fn(),
       create: jest.fn(),
     },
