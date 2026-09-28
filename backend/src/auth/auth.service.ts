@@ -8,7 +8,7 @@ import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../common/email.service";
-import { renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
+import { escapeHtml, renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
 import { createViewAsToken } from "../common/view-as-token";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
@@ -121,7 +121,7 @@ export class AuthService {
           title: "Réinitialisation de mot de passe",
           preheader: "Choisissez un nouveau mot de passe (lien valable 1h)",
           bodyHtml:
-            emailParagraph(`Bonjour ${account.prenom},`) +
+            emailParagraph(`Bonjour ${escapeHtml(account.prenom)},`) +
             emailParagraph(
               `Une demande de réinitialisation de mot de passe a été faite pour votre compte (${account.matricule}).`
             ) +

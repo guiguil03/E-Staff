@@ -11,7 +11,7 @@ import { CockpitService } from '../cockpit/cockpit.service';
 import { NotationService } from '../notation/notation.service';
 import { EmailService } from '../common/email.service';
 import { StorageService } from '../common/storage.service';
-import { renderEmailHtml, emailParagraph, emailParagraphsFromText, credentialsBox } from '../common/email-template';
+import { escapeHtml, renderEmailHtml, emailParagraph, emailParagraphsFromText, credentialsBox } from '../common/email-template';
 import { TIER_LABELS } from '../evaluation/evaluation.service';
 import { EnvoyerResultatsDto } from './dto/envoyer-resultats.dto';
 import { UpsertReunionDto } from './dto/upsert-reunion.dto';
@@ -383,7 +383,7 @@ export class RhService {
         title: 'Bienvenue chez e-Staf',
         preheader: 'Vos identifiants pour votre Cockpit Formateur',
         bodyHtml:
-          emailParagraph(`Bonjour ${dto.prenom},`) +
+          emailParagraph(`Bonjour ${escapeHtml(dto.prenom)},`) +
           emailParagraph('Un compte formateur a été créé pour vous sur e-Staf.') +
           credentialsBox([
             { label: 'Matricule', value: dto.matricule },
@@ -420,7 +420,7 @@ export class RhService {
         title: 'Vos nouveaux identifiants',
         preheader: 'Mot de passe régénéré pour votre Cockpit Formateur',
         bodyHtml:
-          emailParagraph(`Bonjour ${formateur.prenom},`) +
+          emailParagraph(`Bonjour ${escapeHtml(formateur.prenom)},`) +
           emailParagraph('Voici vos nouveaux identifiants pour vous connecter à votre Cockpit Formateur :') +
           credentialsBox([
             { label: 'Matricule', value: formateur.matricule },
@@ -1116,7 +1116,7 @@ export class RhService {
         title: 'Bienvenue chez e-Staf',
         preheader: `Vos identifiants pour le ${groupe.label}`,
         bodyHtml:
-          emailParagraph(`Bonjour ${dto.prenom},`) +
+          emailParagraph(`Bonjour ${escapeHtml(dto.prenom)},`) +
           emailParagraph(`Un compte apprenant a été créé pour vous dans le <strong>${groupe.label}</strong>.`) +
           credentialsBox([
             { label: 'Matricule', value: matricule },

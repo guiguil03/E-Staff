@@ -9,7 +9,7 @@ import { PrismaService } from "../prisma/prisma.service";
 
 function makePrismaMock() {
   return {
-    apprenant: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
+    apprenant: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(), update: jest.fn() },
     notation: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn() },
     seance: { findMany: jest.fn().mockResolvedValue([]) },
     presence: { findMany: jest.fn().mockResolvedValue([]) },
@@ -231,5 +231,28 @@ describe("CockpitService — scoping par formateur", () => {
       expect(prisma.apprenant.findMany).toHaveBeenCalledWith({ where: { groupeId: "groupe-a" } });
       expect(email.send).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe("CockpitService — paiements et abonnements limités aux groupes du formateur (audit 2026-09-28)", () => {
+  it("ne liste que les apprenants des groupes du formateur connecté", async () => {
+    const prisma = makePrismaMock();
+    prisma.formateur.findUnique.mockResolvedValue(FORMATEUR);
+    const service = new CockpitService(prisma as unknown as PrismaService, {} as never, {} as never);
+    await service.getPaiements(FORMATEUR.matricule);
+    expect(prisma.apprenant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { groupe: { formateurId: FORMATEUR.id } } })
+    );
+  });
+
+  it("refuse de modifier l'abonnement d'un apprenant d'un autre groupe", async () => {
+    const prisma = makePrismaMock();
+    prisma.formateur.findUnique.mockResolvedValue(FORMATEUR);
+    prisma.apprenant.findUnique.mockResolvedValue(APPRENANT_B);
+    const service = new CockpitService(prisma as unknown as PrismaService, {} as never, {} as never);
+    await expect(
+      service.setAbonnementExpireAt(APPRENANT_B.matricule, new Date(), FORMATEUR.matricule)
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.apprenant.update).not.toHaveBeenCalled();
   });
 });

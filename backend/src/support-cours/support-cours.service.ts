@@ -3,7 +3,7 @@ import * as path from "path";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage.service";
 import { EmailService } from "../common/email.service";
-import { renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
+import { escapeHtml, renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
 
 const APP_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
@@ -73,9 +73,9 @@ export class SupportCoursService {
             title: "Nouveau support de cours",
             preheader: `${groupe.label} — ${file.originalname}`,
             bodyHtml:
-              emailParagraph(`Bonjour ${a.prenom},`) +
+              emailParagraph(`Bonjour ${escapeHtml(a.prenom)},`) +
               emailParagraph(
-                `Votre formateur vient de déposer un nouveau support de cours ${contexte} (<strong>${groupe.label}</strong>) : <strong>${file.originalname}</strong>.`
+                `Votre formateur vient de déposer un nouveau support de cours ${contexte} (<strong>${groupe.label}</strong>) : <strong>${escapeHtml(file.originalname)}</strong>.`
               ) +
               ctaButton("Voir les supports de cours", link),
           }),

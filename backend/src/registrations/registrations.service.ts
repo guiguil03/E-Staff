@@ -3,7 +3,7 @@ import { timingSafeEqual } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../common/storage.service';
 import { EmailService } from '../common/email.service';
-import { renderEmailHtml, emailParagraph, ctaButton } from '../common/email-template';
+import { escapeHtml, renderEmailHtml, emailParagraph, ctaButton } from '../common/email-template';
 import { CreateRegistrationDto } from './create-registration.dto';
 import { SubmitPaymentReferenceDto } from './submit-payment-reference.dto';
 import { SubmitPaymentPublicDto } from './submit-payment-public.dto';
@@ -90,7 +90,7 @@ export class RegistrationsService {
         title: 'Votre contrat de formation',
         preheader: 'Contrat et instructions de paiement',
         bodyHtml:
-          emailParagraph(`Bonjour ${registration.firstName},`) +
+          emailParagraph(`Bonjour ${escapeHtml(registration.firstName)},`) +
           emailParagraph('Votre inscription a été traitée.') +
           emailParagraph('Votre contrat de formation (durée, frais, conditions) et les instructions de paiement vous attendent ici :') +
           ctaButton('Consulter mon contrat', link),

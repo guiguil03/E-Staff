@@ -3,9 +3,11 @@ import { Logger, ValidationPipe } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import basicAuth = require("express-basic-auth");
 import * as cookieParser from "cookie-parser";
+import helmet from "helmet";
 import * as Sentry from "@sentry/node";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/all-exceptions.filter";
+import { allowedOrigins, originCheck } from "./common/origin-check";
 
 async function bootstrap() {
   const logger = new Logger("Bootstrap");
@@ -72,10 +74,24 @@ async function bootstrap() {
   // les verrouillerait tous ensemble après quelques échecs de n'importe qui.
   app.getHttpAdapter().getInstance().set("trust proxy", 1);
 
-  app.enableCors({
-    origin: process.env.CORS_ORIGIN?.split(",") ?? "http://localhost:3000",
-    credentials: true,
-  });
+  // En-têtes de sécurité HTTP (audit du 2026-09-28) : nosniff (un fichier
+  // déposé ne peut pas être interprété comme une page HTML), HSTS,
+  // interdiction d'afficher l'API dans une iframe tierce... Pas de CSP :
+  // l'API ne sert que du JSON et des fichiers dont le type est filtré (voir
+  // StorageService.getObjectStream), et une CSP empêche Chrome d'afficher
+  // les contrats PDF ouverts dans un onglet. Ressources lisibles depuis le
+  // front (autre domaine) pour les <video>/<audio> servis par l'API.
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: { policy: "cross-origin" },
+    })
+  );
+
+  const origins = allowedOrigins();
+  app.enableCors({ origin: origins, credentials: true });
+  // Protection CSRF — voir common/origin-check.ts.
+  app.use(originCheck(origins));
 
   app.useGlobalPipes(
     new ValidationPipe({

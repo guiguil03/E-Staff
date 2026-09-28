@@ -2,7 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../common/email.service";
-import { renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
+import { escapeHtml, renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
 
 const APP_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
@@ -43,7 +43,7 @@ export class ClasseVirtuelleReminderService {
           title: `Rappel — séance ${jourRelatif(startAt).deLibelle}`,
           preheader: `${groupeLabel} — ${formatDateTime(startAt)}`,
           bodyHtml:
-            emailParagraph(`Bonjour ${prenom},`) +
+            emailParagraph(`Bonjour ${escapeHtml(prenom)},`) +
             emailParagraph(
               `Petit rappel : votre prochaine séance (${groupeLabel}) a lieu ${jourRelatif(startAt).libelle}, le ${formatDateTime(startAt)}.`
             ) +
@@ -63,7 +63,7 @@ export class ClasseVirtuelleReminderService {
           title: "Votre classe virtuelle commence bientôt",
           preheader: `${groupeLabel} — dans ${minutesAvant(startAt)} minutes`,
           bodyHtml:
-            emailParagraph(`Bonjour ${prenom},`) +
+            emailParagraph(`Bonjour ${escapeHtml(prenom)},`) +
             emailParagraph(
               `Votre séance (${groupeLabel}) commence dans ${minutesAvant(startAt)} minutes, le ${formatDateTime(startAt)}.`
             ) +

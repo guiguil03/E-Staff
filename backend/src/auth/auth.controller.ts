@@ -18,6 +18,7 @@ import { ConsumeViewAsTokenDto } from "./dto/consume-view-as-token.dto";
 import { AuthService } from "./auth.service";
 import { AdminGuard } from "../common/admin.guard";
 import { RhGuard } from "../common/rh.guard";
+import { RateLimitGuard } from "../common/rate-limit.guard";
 import { recordFailure, recordSuccess, remainingLockoutSeconds } from "../common/login-rate-limit";
 import { consumeViewAsToken } from "../common/view-as-token";
 import { clearSessionCookie, setSessionCookie, SessionRole } from "../common/session";
@@ -96,16 +97,35 @@ export class AuthController {
     return { ok: true };
   }
 
+  // Vérifie l'ancien mot de passe : même anti-brute-force que le login
+  // (audit du 2026-09-28) — sans ça, cette route permettait de tester des
+  // mots de passe à l'infini en contournant le verrouillage du login.
   @Post("change-password")
-  changePassword(@Body() dto: ChangePasswordDto) {
-    return this.authService.changePassword(dto);
+  async changePassword(@Body() dto: ChangePasswordDto, @Req() request: Request) {
+    const key = `login:${request.ip}`;
+    const lockedFor = remainingLockoutSeconds(key);
+    if (lockedFor > 0) {
+      throw new UnauthorizedException(`Trop de tentatives. Réessayez dans ${lockedFor}s.`);
+    }
+    try {
+      const result = await this.authService.changePassword(dto);
+      recordSuccess(key);
+      return result;
+    } catch (err) {
+      if (err instanceof UnauthorizedException) recordFailure(key);
+      throw err;
+    }
   }
 
+  // Envoie un e-mail : limité pour qu'on ne puisse pas inonder la boîte
+  // d'un compte (audit du 2026-09-28).
+  @UseGuards(RateLimitGuard("auth-forgot-password", 5))
   @Post("forgot-password")
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
   }
 
+  @UseGuards(RateLimitGuard("auth-reset-password", 10))
   @Post("reset-password")
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
@@ -131,6 +151,7 @@ export class AuthController {
     return this.authService.createFormateurViewAsToken(matricule);
   }
 
+  @UseGuards(RateLimitGuard("auth-view-as-consume", 10))
   @Post("view-as/consume")
   consumeViewAs(
     @Body() dto: ConsumeViewAsTokenDto,

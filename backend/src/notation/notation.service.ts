@@ -3,7 +3,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage.service";
 import { EmailService } from "../common/email.service";
-import { renderEmailHtml, emailParagraph, ctaButton, emailQuote } from "../common/email-template";
+import { escapeHtml, renderEmailHtml, emailParagraph, ctaButton, emailQuote } from "../common/email-template";
 import { GradeNotationDto } from "./dto/grade-notation.dto";
 
 const APP_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
@@ -214,7 +214,7 @@ export class NotationService {
           title: "Nouveau commentaire de votre formateur",
           preheader: `Séance ${numero} — ${competenceLabel}`,
           bodyHtml:
-            emailParagraph(`Bonjour ${apprenant.prenom},`) +
+            emailParagraph(`Bonjour ${escapeHtml(apprenant.prenom)},`) +
             emailParagraph(
               `Votre formateur a laissé un commentaire sur votre évaluation « ${competenceLabel} » (séance n°${numero}) :`
             ) +
@@ -571,9 +571,9 @@ export class NotationService {
         title: "Nouveau rendu à corriger",
         preheader: `${apprenant.prenom} ${apprenant.nom} — ${competenceLabel}, séance ${numero}`,
         bodyHtml:
-          emailParagraph(`Bonjour ${formateur.prenom},`) +
+          emailParagraph(`Bonjour ${escapeHtml(formateur.prenom)},`) +
           emailParagraph(
-            `<strong>${apprenant.prenom} ${apprenant.nom}</strong> (${groupe.label}) vient de déposer un devoir « ${competenceLabel} » pour la séance n°${numero} : ${fileName}.`
+            `<strong>${escapeHtml(`${apprenant.prenom} ${apprenant.nom}`)}</strong> (${groupe.label}) vient de déposer un devoir « ${competenceLabel} » pour la séance n°${numero} : ${escapeHtml(fileName ?? "")}.`
           ) +
           ctaButton("Corriger maintenant", link),
       }),

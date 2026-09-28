@@ -21,8 +21,18 @@ interface Entry {
 }
 const hits = new Map<string, Entry>();
 
+// Au-delà, on purge les fenêtres expirées : sans ça, chaque IP vue restait
+// en mémoire jusqu'au prochain redémarrage (audit du 2026-09-28).
+const PURGE_AU_DELA = 5_000;
+const FENETRE_MAX_MS = 60 * 60 * 1000;
+
 function checkAndRecord(key: string, max: number, windowMs: number): void {
   const now = Date.now();
+  if (hits.size > PURGE_AU_DELA) {
+    for (const [k, e] of hits) {
+      if (now - e.windowStart >= FENETRE_MAX_MS) hits.delete(k);
+    }
+  }
   const entry = hits.get(key);
   if (!entry || now - entry.windowStart >= windowMs) {
     hits.set(key, { count: 1, windowStart: now });

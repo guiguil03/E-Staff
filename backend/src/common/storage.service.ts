@@ -7,6 +7,27 @@ import {
 } from "@aws-sdk/client-s3";
 import type { Readable } from "stream";
 
+// Types de fichiers servis tels quels (audit du 2026-09-28). Le type
+// enregistré vient souvent du navigateur de la personne qui dépose le
+// fichier (file.mimetype) : un fichier déclaré text/html ou image/svg+xml
+// serait affiché comme une page par le navigateur de celui qui l'ouvre, sur
+// le domaine de l'API, avec sa session (XSS). Tout autre type est servi en
+// téléchargement (application/octet-stream).
+const TYPES_SURS = [
+  /^application\/pdf$/,
+  /^image\/(png|jpeg|gif|webp)$/,
+  /^audio\/[\w.+-]+$/,
+  /^video\/[\w.+-]+$/,
+  /^text\/(plain|csv)$/,
+  /^application\/(msword|rtf|zip|json)$/,
+  /^application\/vnd\.(openxmlformats-officedocument\.[\w.]+|ms-[\w.]+|oasis\.opendocument\.[\w.]+)$/,
+];
+
+export function typeServable(contentType?: string): string {
+  const base = (contentType ?? "").split(";")[0].trim().toLowerCase();
+  return TYPES_SURS.some((re) => re.test(base)) ? base : "application/octet-stream";
+}
+
 // Stockage objet (Railway Bucket, S3-compatible) pour les fichiers audio du
 // module d'évaluation. Le disque du serveur Railway est éphémère (perdu à
 // chaque redéploiement) — les enregistrements des candidats doivent donc
@@ -53,7 +74,7 @@ export class StorageService {
     );
     return {
       stream: result.Body as Readable,
-      contentType: result.ContentType,
+      contentType: typeServable(result.ContentType),
     };
   }
 }
