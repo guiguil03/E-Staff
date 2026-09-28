@@ -12,7 +12,7 @@
     "postinstall": "node scripts/copy-vendor-assets.mjs"
   },
   "dependencies": {
-    "@excalidraw/excalidraw": "0.17.6",
+    "@excalidraw/excalidraw": "0.18.1",
     "@tailwindcss/typography": "^0.5.20",
     "@vercel/analytics": "^2.0.1",
     "next": "14.2.35",
@@ -21,12 +21,12 @@
     "react-dom": "^18"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "^7.0.0",
-    "@testing-library/react": "^16.3.2",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "@vitejs/plugin-react": "^6.0.5",
+    "@vitejs/plugin-react": "^6.1.1",
     "eslint": "^8",
     "eslint-config-next": "14.2.35",
     "jsdom": "^29.1.1",
