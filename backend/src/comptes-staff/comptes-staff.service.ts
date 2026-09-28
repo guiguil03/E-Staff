@@ -7,11 +7,12 @@ import { credentialsBox, emailParagraph, escapeHtml, renderEmailHtml } from "../
 import { identifiantPartage } from "../common/session";
 import { CreateCompteStaffDto } from "./comptes-staff.dto";
 
-// Même alphabet que les mots de passe temporaires formateur (RhService).
-const TEMP_PASSWORD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+// Caractères des mots de passe temporaires, sans ambigus (0/O, 1/l/I) — même
+// alphabet que RhService.
+const ALPHABET_TEMPORAIRE = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
 function motDePasseTemporaire(length = 12): string {
   const bytes = crypto.randomBytes(length);
-  return Array.from(bytes, (b) => TEMP_PASSWORD_CHARS[b % TEMP_PASSWORD_CHARS.length]).join("");
+  return Array.from(bytes, (b) => ALPHABET_TEMPORAIRE[b % ALPHABET_TEMPORAIRE.length]).join("");
 }
 
 const LIBELLE_ROLE = { admin: "Admin", rh: "RH" } as const;
