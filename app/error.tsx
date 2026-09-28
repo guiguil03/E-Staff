@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
+import { signalerErreur } from "@/lib/suiviErreurs";
 
 export default function Error({
   error,
@@ -12,10 +13,11 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Log console client — pas d'outil de suivi d'erreurs (Sentry) branché
-    // à ce jour, voir audit du 2026-09-21. Le `digest` identifie l'erreur
-    // côté logs serveur Next.js si besoin de la retrouver.
+    // Envoyée à Sentry si NEXT_PUBLIC_SENTRY_DSN est renseignée (voir
+    // lib/suiviErreurs.ts). Le `digest` identifie l'erreur côté logs
+    // serveur Next.js si besoin de la retrouver.
     console.error(error);
+    signalerErreur(error);
   }, [error]);
 
   return (
