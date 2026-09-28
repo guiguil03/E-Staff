@@ -40,6 +40,5 @@ next-env.d.ts
 .env*
 
 # Assets Excalidraw et worker pdf.js copiés au postinstall (scripts/copy-vendor-assets.mjs)
-/public/excalidraw-assets
-/public/excalidraw-assets-dev
+/public/excalidraw
 /public/pdfjs

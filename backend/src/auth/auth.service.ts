@@ -8,7 +8,7 @@ import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../common/email.service";
-import { renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
+import { escapeHtml, renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
 import { createViewAsToken } from "../common/view-as-token";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
@@ -17,14 +17,14 @@ import { ResetPasswordDto } from "./dto/reset-password.dto";
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1h
 const APP_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
-// Un "compte" ici est soit un Apprenant, soit un Formateur (Admin reste sur
-// le stopgap "identifiant de test partagé", pas de compte individuel — voir
-// AuthController). Les deux modèles ont les mêmes champs d'auth
-// (password/resetToken/resetTokenExpiresAt, voir migrations apprenant_auth
-// et formateur_auth) et leurs matricules ne se chevauchent jamais
-// ("ETF-2026-" vs "ETF-FORM-2026-"), donc un simple essai
-// apprenant-puis-formateur suffit à retrouver le bon compte par matricule.
+// Un « compte » est un Apprenant, un Formateur ou un compte nominatif
+// Admin/RH (CompteStaff, audit du 2026-09-28). Les trois modèles ont les
+// mêmes champs d'auth (password, resetToken, resetTokenExpiresAt,
+// sessionsRevoqueesAt) et des matricules qui ne se chevauchent pas
+// ("ETF-2026-", "ETF-FORM-2026-", "ADM-"/"RH-").
+type TypeCompte = "apprenant" | "formateur" | "staff";
 type Account = {
+  type: TypeCompte;
   id: string;
   matricule: string;
   prenom: string;
@@ -33,12 +33,6 @@ type Account = {
   resetTokenExpiresAt: Date | null;
 };
 
-// Comptes réels — chaque ligne Apprenant/Formateur a son propre mot de passe
-// (hash bcrypt), généré à la création (confirmation de paiement pour
-// l'apprenant, RhService.createFormateur pour le formateur) ou lors du seed
-// (démo). Admin reste sur le stopgap "un identifiant de test partagé"
-// (AuthController) — pas urgent, une seule personne (voir brainstorm
-// 2026-08-10).
 @Injectable()
 export class AuthService {
   constructor(
@@ -46,25 +40,50 @@ export class AuthService {
     private readonly email: EmailService
   ) {}
 
-  private async findAccountByMatricule(matricule: string): Promise<Account | null> {
-    const apprenant = await this.prisma.apprenant.findUnique({ where: { matricule } });
-    if (apprenant) return apprenant;
-    return this.prisma.formateur.findUnique({ where: { matricule } });
+  private async findAccount(
+    where: { matricule: string } | { resetToken: string }
+  ): Promise<Account | null> {
+    const apprenant = await this.prisma.apprenant.findUnique({ where });
+    if (apprenant) return { ...apprenant, type: "apprenant" };
+    const formateur = await this.prisma.formateur.findUnique({ where });
+    if (formateur) return { ...formateur, type: "formateur" };
+    const staff = await this.prisma.compteStaff.findUnique({ where });
+    if (staff && staff.actif) return { ...staff, type: "staff" };
+    return null;
   }
 
-  private async findAccountByResetToken(token: string): Promise<Account | null> {
-    const apprenant = await this.prisma.apprenant.findUnique({ where: { resetToken: token } });
-    if (apprenant) return apprenant;
-    return this.prisma.formateur.findUnique({ where: { resetToken: token } });
+  private findAccountByMatricule(matricule: string) {
+    return this.findAccount({ matricule });
+  }
+
+  private findAccountByResetToken(token: string) {
+    return this.findAccount({ resetToken: token });
   }
 
   private updateAccountPassword(account: Account, data: Record<string, unknown>) {
-    // Un même matricule n'existe jamais dans les deux tables à la fois (voir
-    // commentaire au-dessus) — l'id suffit à retrouver la bonne ligne une
-    // fois qu'on sait de quel modèle elle vient.
-    return account.matricule.startsWith("ETF-FORM-")
-      ? this.prisma.formateur.update({ where: { id: account.id }, data })
-      : this.prisma.apprenant.update({ where: { id: account.id }, data });
+    if (account.type === "formateur") return this.prisma.formateur.update({ where: { id: account.id }, data });
+    if (account.type === "staff") return this.prisma.compteStaff.update({ where: { id: account.id }, data });
+    return this.prisma.apprenant.update({ where: { id: account.id }, data });
+  }
+
+  async compteExiste(matricule: string) {
+    return (await this.findAccountByMatricule(matricule)) !== null;
+  }
+
+  // Coupe toutes les sessions du compte émises jusqu'ici (voir
+  // common/session.ts, sessionToujoursValide).
+  async revoquerSessions(matricule: string) {
+    const account = await this.findAccountByMatricule(matricule);
+    if (!account) throw new NotFoundException("Compte introuvable.");
+    await this.updateAccountPassword(account, { sessionsRevoqueesAt: new Date() });
+    return { ok: true };
+  }
+
+  async loginStaff(matricule: string, password: string) {
+    const compte = await this.prisma.compteStaff.findUnique({ where: { matricule } });
+    if (!compte || !compte.actif) return null;
+    const valid = await bcrypt.compare(password, compte.password);
+    return valid ? compte : null;
   }
 
   async loginApprenant(matricule: string, password: string) {
@@ -95,7 +114,8 @@ export class AuthService {
     }
 
     const newHash = await bcrypt.hash(dto.newPassword, 10);
-    await this.updateAccountPassword(account, { password: newHash });
+    // Déconnecte toutes les sessions existantes (audit du 2026-09-28).
+    await this.updateAccountPassword(account, { password: newHash, sessionsRevoqueesAt: new Date() });
 
     return { ok: true };
   }
@@ -121,7 +141,7 @@ export class AuthService {
           title: "Réinitialisation de mot de passe",
           preheader: "Choisissez un nouveau mot de passe (lien valable 1h)",
           bodyHtml:
-            emailParagraph(`Bonjour ${account.prenom},`) +
+            emailParagraph(`Bonjour ${escapeHtml(account.prenom)},`) +
             emailParagraph(
               `Une demande de réinitialisation de mot de passe a été faite pour votre compte (${account.matricule}).`
             ) +
@@ -147,6 +167,7 @@ export class AuthService {
       password: newHash,
       resetToken: null,
       resetTokenExpiresAt: null,
+      sessionsRevoqueesAt: new Date(),
     });
 
     return { ok: true };

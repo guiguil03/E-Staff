@@ -150,16 +150,19 @@ export class EvaluationController {
     stream.pipe(res);
   }
 
+  @UseGuards(RateLimitGuard("evaluation-submit", 10))
   @Post("attempts/:id/submit")
   submitAnswers(@Param("id") id: string, @Body() dto: SubmitAnswersDto) {
     return this.service.submitAnswers(id, dto);
   }
 
+  @UseGuards(RateLimitGuard("evaluation-essay", 10))
   @Post("attempts/:id/essay")
   submitEssay(@Param("id") id: string, @Body() dto: SubmitEssayDto) {
     return this.service.submitEssay(id, dto);
   }
 
+  @UseGuards(RateLimitGuard("evaluation-partie-ouverte", 10))
   @Post("attempts/:id/partie-ouverte")
   submitPartieOuverte(@Param("id") id: string, @Body() dto: SubmitPartieOuverteDto) {
     return this.service.submitPartieOuverte(id, dto);
@@ -421,6 +424,7 @@ export class EvaluationController {
     stream.pipe(res);
   }
 
+  @UseGuards(RateLimitGuard("evaluation-paiement-public", 10))
   @Post("contrats/:id/paiement")
   submitPaymentReference(@Param("id") id: string, @Body() dto: SubmitPaymentReferenceDto) {
     return this.service.submitPaymentReference(id, dto);

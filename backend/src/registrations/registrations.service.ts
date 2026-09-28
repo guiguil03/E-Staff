@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { timingSafeEqual } from 'crypto';
+import { nouveauLienToken, whereLien } from '../common/lien-token';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../common/storage.service';
 import { EmailService } from '../common/email.service';
-import { renderEmailHtml, emailParagraph, ctaButton } from '../common/email-template';
+import { escapeHtml, renderEmailHtml, emailParagraph, ctaButton } from '../common/email-template';
 import { CreateRegistrationDto } from './create-registration.dto';
 import { SubmitPaymentReferenceDto } from './submit-payment-reference.dto';
 import { SubmitPaymentPublicDto } from './submit-payment-public.dto';
@@ -62,6 +63,14 @@ export class RegistrationsService {
     return registration;
   }
 
+  // Routes publiques (lien envoyé par e-mail) : par jeton, voir
+  // common/lien-token.ts.
+  private async getByLienOrThrow(lien: string) {
+    const registration = await this.prisma.registration.findFirst({ where: whereLien(lien) });
+    if (!registration) throw new NotFoundException('Inscription introuvable.');
+    return registration;
+  }
+
   // L'admin saisit les termes (durée, frais, conditions — pas de modèle
   // figé, variable selon le programme/inscrit, même principe que
   // EvaluationService.validateContract) : génère le PDF, l'envoie par
@@ -81,7 +90,8 @@ export class RegistrationsService {
     const contractPdfKey = `registration-contracts/${id}.pdf`;
     await this.storage.uploadBuffer(contractPdfKey, pdf, 'application/pdf');
 
-    const link = `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/inscription/contrat/${id}`;
+    const lienToken = registration.lienToken ?? nouveauLienToken();
+    const link = `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/inscription/contrat/${lienToken}`;
     const result = await this.email.send({
       to: registration.email,
       subject: 'Votre contrat de formation e-Staf',
@@ -90,7 +100,7 @@ export class RegistrationsService {
         title: 'Votre contrat de formation',
         preheader: 'Contrat et instructions de paiement',
         bodyHtml:
-          emailParagraph(`Bonjour ${registration.firstName},`) +
+          emailParagraph(`Bonjour ${escapeHtml(registration.firstName)},`) +
           emailParagraph('Votre inscription a été traitée.') +
           emailParagraph('Votre contrat de formation (durée, frais, conditions) et les instructions de paiement vous attendent ici :') +
           ctaButton('Consulter mon contrat', link),
@@ -112,6 +122,7 @@ export class RegistrationsService {
         contractFrais: dto.frais,
         contractConditions: dto.conditions,
         contractPdfKey,
+        lienToken,
         paymentAmount: dto.montant ?? null,
         status: 'contrat_envoye',
         contractSentAt: new Date(),
@@ -120,10 +131,10 @@ export class RegistrationsService {
   }
 
   // Accès public (inscrit) — la page contrat n'est accessible que via le
-  // lien envoyé par e-mail (id comme jeton), même principe que
-  // /evaluation/contrat côté recrutement.
-  async getContractInfo(id: string) {
-    const registration = await this.getOrThrow(id);
+  // lien envoyé par e-mail (jeton), même principe que /evaluation/contrat
+  // côté recrutement.
+  async getContractInfo(lien: string) {
+    const registration = await this.getByLienOrThrow(lien);
     if (!['contrat_envoye', 'en_attente_paiement', 'converti'].includes(registration.status)) {
       throw new NotFoundException('Contrat pas encore disponible.');
     }
@@ -148,8 +159,8 @@ export class RegistrationsService {
     };
   }
 
-  async getContractPdfStream(id: string) {
-    const registration = await this.getOrThrow(id);
+  async getContractPdfStream(lien: string) {
+    const registration = await this.getByLienOrThrow(lien);
     if (!registration.contractPdfKey) {
       throw new NotFoundException('Contrat introuvable pour cette inscription.');
     }
@@ -177,15 +188,15 @@ export class RegistrationsService {
   // Soumission publique — l'inscrit transmet lui-même sa référence Mobile
   // Money / virement depuis la page contrat, en acceptant les CGU
   // (obligatoire, voir /conditions-generales et SubmitPaymentPublicDto).
-  async submitPaymentReferencePublic(id: string, dto: SubmitPaymentPublicDto) {
-    const registration = await this.getOrThrow(id);
+  async submitPaymentReferencePublic(lien: string, dto: SubmitPaymentPublicDto) {
+    const registration = await this.getByLienOrThrow(lien);
     if (registration.status !== 'contrat_envoye') {
       throw new BadRequestException(
         'Le contrat doit avoir été envoyé avant de transmettre une référence de paiement.',
       );
     }
     return this.prisma.registration.update({
-      where: { id },
+      where: { id: registration.id },
       data: {
         paymentReference: dto.reference,
         cguAcceptedAt: new Date(),
@@ -197,8 +208,8 @@ export class RegistrationsService {
   // Reçu/capture d'écran de la transaction, optionnel — déposé avec la
   // référence de paiement (voir controller) pour accélérer la vérification
   // manuelle par l'admin. Même principe de clé stable que uploadCv.
-  async uploadPaymentReceipt(id: string, file: Express.Multer.File) {
-    await this.getOrThrow(id);
+  async uploadPaymentReceipt(lien: string, file: Express.Multer.File) {
+    const { id } = await this.getByLienOrThrow(lien);
     const extension = RECEIPT_MIME_EXTENSIONS[file.mimetype] ?? 'bin';
     const key = `registrations/${id}/recu-paiement.${extension}`;
     await this.storage.uploadBuffer(key, file.buffer, file.mimetype);
@@ -234,8 +245,10 @@ export class RegistrationsService {
   // Papi, autant créer le lien au moment où l'inscrit clique réellement).
   // Une nouvelle référence est générée à chaque appel, Papi exigeant une
   // référence unique par tentative de paiement.
-  async createPaymentLinkPublic(id: string) {
-    const registration = await this.getOrThrow(id);
+  async createPaymentLinkPublic(lien: string) {
+    const registration = await this.getByLienOrThrow(lien);
+    const id = registration.id;
+    const lienToken = registration.lienToken ?? nouveauLienToken();
     if (registration.status !== 'contrat_envoye') {
       throw new BadRequestException('Le paiement en ligne n\'est disponible qu\'après réception du contrat.');
     }
@@ -252,9 +265,9 @@ export class RegistrationsService {
       amount: registration.paymentAmount,
       reference,
       description: `Frais de formation e-Staf — ${registration.typeFormation ?? registration.segment}`,
-      notificationUrl: `${backendUrl}/registrations/contrats/${id}/paiement-webhook`,
-      successUrl: `${frontendUrl}/inscription/contrat/${id}?paiement=succes`,
-      failureUrl: `${frontendUrl}/inscription/contrat/${id}?paiement=echec`,
+      notificationUrl: `${backendUrl}/registrations/contrats/${lienToken}/paiement-webhook`,
+      successUrl: `${frontendUrl}/inscription/contrat/${lienToken}?paiement=succes`,
+      failureUrl: `${frontendUrl}/inscription/contrat/${lienToken}?paiement=echec`,
       payerEmail: registration.email,
       payerPhone: registration.phone,
     });
@@ -267,7 +280,7 @@ export class RegistrationsService {
 
     await this.prisma.registration.update({
       where: { id },
-      data: { papiReference: reference, papiNotificationToken: link.notificationToken },
+      data: { papiReference: reference, papiNotificationToken: link.notificationToken, lienToken },
     });
 
     return { paymentLink: link.paymentLink };
@@ -283,8 +296,8 @@ export class RegistrationsService {
   // vérification HMAC des webhooks Daily — voir daily-webhook.controller.ts).
   // Idempotent : rejouer la même notification (SUCCESS) après confirmation
   // ne fait rien de plus.
-  async handlePapiWebhook(id: string, dto: PapiWebhookDto) {
-    const registration = await this.getOrThrow(id);
+  async handlePapiWebhook(lien: string, dto: PapiWebhookDto) {
+    const registration = await this.getByLienOrThrow(lien);
 
     const authentic =
       registration.papiReference &&
@@ -301,7 +314,7 @@ export class RegistrationsService {
     }
 
     return this.prisma.registration.update({
-      where: { id },
+      where: { id: registration.id },
       data: { status: 'converti', paymentMethod: 'papi', paymentConfirmedAt: new Date() },
     });
   }

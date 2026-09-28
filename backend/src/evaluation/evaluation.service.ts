@@ -7,9 +7,10 @@ import {
 import * as path from "path";
 import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
+import { nouveauLienToken, whereLien } from "../common/lien-token";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../common/email.service";
-import { renderEmailHtml, emailParagraph, ctaButton, credentialsBox } from "../common/email-template";
+import { escapeHtml, renderEmailHtml, emailParagraph, ctaButton, credentialsBox } from "../common/email-template";
 import { StorageService } from "../common/storage.service";
 import { CreateCandidatDto } from "./dto/create-candidat.dto";
 import { SubmitAnswersDto } from "./dto/submit-answers.dto";
@@ -235,6 +236,25 @@ export class EvaluationService {
     if (!attempt) throw new NotFoundException("Tentative introuvable.");
     return attempt;
   }
+  // Routes publiques du contrat (lien envoyé par e-mail) : par jeton, voir
+  // common/lien-token.ts.
+  private async getAttemptByLienOrThrow(lien: string) {
+    const attempt = await this.prisma.evaluationAttempt.findFirst({
+      where: whereLien(lien),
+      include: {
+        situationResponses: true,
+        videoResponses: true,
+        essayResponse: true,
+        ecritOuvertResponse: true,
+        candidat: true,
+        apprenant: true,
+        correcteur: { select: { prenom: true, nom: true, matricule: true } },
+      },
+    });
+    if (!attempt) throw new NotFoundException("Contrat introuvable.");
+    return attempt;
+  }
+
 
   // Les 5 blocs construits (1 Lexique, 2 Commentaire Argumentatif, 3 Mises
   // en Situation, 4 Compréhension Orale, 5 Vidéo) sont indépendants et
@@ -282,9 +302,9 @@ export class EvaluationService {
             title: "Nouveau test d'admission à corriger",
             preheader: `${nom} vient de terminer son test`,
             bodyHtml:
-              emailParagraph(`Bonjour ${formateur.prenom},`) +
+              emailParagraph(`Bonjour ${escapeHtml(formateur.prenom)},`) +
               emailParagraph(
-                `<strong>${nom}</strong> vient de terminer son test d'admission. Il attend une correction (mises en situation, vidéos, écrits).`
+                `<strong>${escapeHtml(nom)}</strong> vient de terminer son test d'admission. Il attend une correction (mises en situation, vidéos, écrits).`
               ) +
               ctaButton("Corriger le test", link),
           }),
@@ -857,7 +877,7 @@ export class EvaluationService {
       html: renderEmailHtml({
         title: "Résultat de votre évaluation",
         bodyHtml:
-          emailParagraph(`Bonjour ${attempt.candidat.firstName},`) +
+          emailParagraph(`Bonjour ${escapeHtml(attempt.candidat.firstName)},`) +
           emailParagraph("Nous vous remercions pour le temps consacré à notre évaluation.") +
           emailParagraph(
             "Après étude de votre dossier, nous ne sommes pas en mesure de vous proposer une place pour le moment. N'hésitez pas à retenter votre chance lors d'une prochaine session."
@@ -925,7 +945,8 @@ export class EvaluationService {
       );
     }
 
-    const link = `${process.env.FRONTEND_URL ?? "http://localhost:3000"}/evaluation/contrat/${attempt.id}`;
+    const lienToken = attempt.lienToken ?? nouveauLienToken();
+    const link = `${process.env.FRONTEND_URL ?? "http://localhost:3000"}/evaluation/contrat/${lienToken}`;
     const tierLabel = attempt.tier ? TIER_LABELS[attempt.tier] ?? attempt.tier : "";
 
     const result = await this.email.send({
@@ -936,7 +957,7 @@ export class EvaluationService {
         title: "Votre résultat et votre contrat",
         preheader: `Résultat : ${tierLabel}`,
         bodyHtml:
-          emailParagraph(`Bonjour ${attempt.candidat.firstName},`) +
+          emailParagraph(`Bonjour ${escapeHtml(attempt.candidat.firstName)},`) +
           emailParagraph(`Votre évaluation a été traitée. Résultat : <strong>${tierLabel}</strong>.`) +
           emailParagraph("Votre contrat de formation (durée, frais, conditions) et les prochaines étapes vous attendent ici :") +
           ctaButton("Consulter mon contrat", link),
@@ -956,12 +977,12 @@ export class EvaluationService {
 
     return this.prisma.evaluationAttempt.update({
       where: { id: attemptId },
-      data: { status: "contrat_envoye", contractSentAt: new Date() },
+      data: { status: "contrat_envoye", contractSentAt: new Date(), lienToken },
     });
   }
 
-  async getContractPdfStream(attemptId: string) {
-    const attempt = await this.getAttemptOrThrow(attemptId);
+  async getContractPdfStream(lien: string) {
+    const attempt = await this.getAttemptByLienOrThrow(lien);
     if (!attempt.contractPdfKey) {
       throw new NotFoundException("Contrat introuvable pour cette tentative.");
     }
@@ -973,10 +994,10 @@ export class EvaluationService {
   }
 
   // Accès public (candidat) — la page contrat n'est accessible que via le
-  // lien envoyé par e-mail (attemptId comme jeton), même principe que le
-  // reste du parcours candidat sans compte.
-  async getContractInfo(attemptId: string) {
-    const attempt = await this.getAttemptOrThrow(attemptId);
+  // lien envoyé par e-mail (jeton), même principe que le reste du parcours
+  // candidat sans compte.
+  async getContractInfo(lien: string) {
+    const attempt = await this.getAttemptByLienOrThrow(lien);
     if (
       !["valide_pret_envoi", "contrat_envoye", "en_attente_paiement", "active"].includes(
         attempt.status
@@ -998,15 +1019,15 @@ export class EvaluationService {
     };
   }
 
-  async submitPaymentReference(attemptId: string, dto: SubmitPaymentReferenceDto) {
-    const attempt = await this.getAttemptOrThrow(attemptId);
+  async submitPaymentReference(lien: string, dto: SubmitPaymentReferenceDto) {
+    const attempt = await this.getAttemptByLienOrThrow(lien);
     if (attempt.status !== "contrat_envoye") {
       throw new BadRequestException(
         "Le contrat doit avoir été envoyé avant de transmettre une référence de paiement."
       );
     }
     return this.prisma.evaluationAttempt.update({
-      where: { id: attemptId },
+      where: { id: attempt.id },
       data: { paymentReference: dto.reference, status: "en_attente_paiement" },
     });
   }
@@ -1145,7 +1166,7 @@ export class EvaluationService {
         title: "Bienvenue chez e-Staf",
         preheader: `Votre place est validée dans le ${groupe.label}`,
         bodyHtml:
-          emailParagraph(`Bonjour ${attempt.candidat.firstName},`) +
+          emailParagraph(`Bonjour ${escapeHtml(attempt.candidat.firstName)},`) +
           emailParagraph(
             `Votre paiement a bien été confirmé et votre place est validée dans le <strong>${groupe.label}</strong>.`
           ) +

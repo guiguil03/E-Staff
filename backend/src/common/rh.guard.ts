@@ -1,12 +1,6 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  UnauthorizedException,
-} from "@nestjs/common";
+import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import type { Request } from "express";
-import { readSession } from "./session";
-import { recordFailure, recordSuccess, remainingLockoutSeconds } from "./login-rate-limit";
+import { exigerSession } from "./garde-session";
 
 // Gate des routes RH (clients & contrats, finances, pilotage) — même
 // principe qu'AdminGuard : exige une session signée au login avec le rôle
@@ -18,22 +12,9 @@ import { recordFailure, recordSuccess, remainingLockoutSeconds } from "./login-r
 // pilotage).
 @Injectable()
 export class RhGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
-    const key = `rh:${request.ip}`;
-
-    const lockedFor = remainingLockoutSeconds(key);
-    if (lockedFor > 0) {
-      throw new UnauthorizedException(`Trop de tentatives. Réessayez dans ${lockedFor}s.`);
-    }
-
-    const session = readSession(request);
-    if (!session || session.role !== "rh") {
-      recordFailure(key);
-      throw new UnauthorizedException("Session RH invalide ou expirée.");
-    }
-
-    recordSuccess(key);
+    await exigerSession(request, { cle: "rh", roles: ["rh"], message: "Session RH invalide ou expirée." });
     return true;
   }
 }

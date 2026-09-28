@@ -3,7 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { DailyService, recordingEnabled } from "./daily.service";
 import { EmailService } from "../common/email.service";
 import { UpsertSeanceDto } from "./dto/upsert-seance.dto";
-import { renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
+import { escapeHtml, renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
 
 // Le lien de la salle n'est jamais renvoyé en dehors de cette fenêtre —
 // c'est le backend qui garde le contrôle du "rejoin", pas juste l'UI.
@@ -155,7 +155,7 @@ export class ClasseVirtuelleService {
             title: "Séance annulée",
             preheader: `${groupe!.label} — nouvelle date à venir`,
             bodyHtml:
-              emailParagraph(`Bonjour ${apprenant.prenom},`) +
+              emailParagraph(`Bonjour ${escapeHtml(apprenant.prenom)},`) +
               emailParagraph(
                 `La séance qui était programmée pour <strong>${groupe!.label}</strong> le ${formatDateTime(wasScheduled)} a été annulée par votre formateur.`
               ) +
@@ -268,7 +268,7 @@ export class ClasseVirtuelleService {
             title: "Nouvelle séance programmée",
             preheader: `${groupe!.label} — ${formatDateTime(nextStartAt)}`,
             bodyHtml:
-              emailParagraph(`Bonjour ${apprenant.prenom},`) +
+              emailParagraph(`Bonjour ${escapeHtml(apprenant.prenom)},`) +
               emailParagraph(
                 `Une séance vient d'être programmée pour <strong>${groupe!.label}</strong> : ${formatDateTime(nextStartAt)}.`
               ) +

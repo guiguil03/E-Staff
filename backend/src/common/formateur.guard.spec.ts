@@ -29,50 +29,38 @@ describe("FormateurGuard", () => {
     return { estaf_session: signSession({ matricule, role: "formateur" }) };
   }
 
-  it("laisse passer avec une session formateur valide et réinjecte le matricule dans le header", () => {
+  it("laisse passer avec une session formateur valide et réinjecte le matricule dans le header", async () => {
     const guard = new FormateurGuard();
     const context = makeContext(formateurCookie("ETF-FORM-2026-0001"), freshIp());
-    expect(guard.canActivate(context)).toBe(true);
+    await expect(guard.canActivate(context)).resolves.toBe(true);
     const request = context.switchToHttp().getRequest<{ headers: Record<string, string> }>();
     expect(request.headers["x-formateur-matricule"]).toBe("ETF-FORM-2026-0001");
   });
 
-  it("rejette une session d'un autre rôle", () => {
+  it("rejette une session d'un autre rôle", async () => {
     const guard = new FormateurGuard();
     const context = makeContext({ estaf_session: signSession({ matricule: "ETF-2026-0001", role: "apprenant" }) }, freshIp());
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
-    expect(() => guard.canActivate(context)).toThrow("Session formateur invalide ou expirée.");
+    await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
+    await expect(guard.canActivate(context)).rejects.toThrow("Session formateur invalide ou expirée.");
   });
 
-  it("rejette quand aucun cookie de session n'est présent", () => {
+  it("rejette quand aucun cookie de session n'est présent", async () => {
     const guard = new FormateurGuard();
     const context = makeContext({}, freshIp());
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
   });
 
-  it("verrouille l'IP après 5 échecs consécutifs, même avec une session valide ensuite", () => {
+  it("verrouille l'IP après 5 échecs consécutifs ; une session valide passe toujours", async () => {
     const guard = new FormateurGuard();
     const ip = freshIp();
 
     for (let i = 0; i < 5; i++) {
-      expect(() => guard.canActivate(makeContext({}, ip))).toThrow(UnauthorizedException);
+      await expect(guard.canActivate(makeContext({}, ip))).rejects.toThrow(UnauthorizedException);
     }
 
-    expect(() => guard.canActivate(makeContext(formateurCookie(), ip))).toThrow(/Trop de tentatives/);
-  });
-
-  it("une réussite remet le compteur d'échecs à zéro pour cette IP", () => {
-    const guard = new FormateurGuard();
-    const ip = freshIp();
-
-    expect(() => guard.canActivate(makeContext({}, ip))).toThrow();
-    expect(() => guard.canActivate(makeContext({}, ip))).toThrow();
-    expect(guard.canActivate(makeContext(formateurCookie(), ip))).toBe(true);
-
-    for (let i = 0; i < 4; i++) {
-      expect(() => guard.canActivate(makeContext({}, ip))).toThrow(
-        "Session formateur invalide ou expirée."
-      );
-    }
+    await expect(guard.canActivate(makeContext({}, ip))).rejects.toThrow(/Trop de tentatives/);
+    // Le verrou vise les tentatives invalides (audit du 2026-09-28) : une
+    // personne réellement connectée derrière la même IP n'est pas bloquée.
+    await expect(guard.canActivate(makeContext(formateurCookie(), ip))).resolves.toBe(true);
   });
 });

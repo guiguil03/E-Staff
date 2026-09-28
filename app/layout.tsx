@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Analytics } from '@vercel/analytics/next'
+import SuiviErreurs from '@/components/SuiviErreurs'
 import { fraunces, plexSans, plexMono } from '@/lib/fonts'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
@@ -26,6 +27,7 @@ export default function RootLayout({
         <main className="flex-1">{children}</main>
         <Footer />
         <Analytics />
+        <SuiviErreurs />
       </body>
     </html>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import DeconnecterPartoutButton from "./DeconnecterPartoutButton";
 import Reveal from "@/components/Reveal";
 import { apiGet, apiPostAuthed, apiPut } from "@/lib/api";
 import { COMPETENCY_DEFS } from "@/components/compte-formateur/gradingGrids";
@@ -171,6 +172,8 @@ export default function ApprenantCasierPanel({ matricule }: { matricule: string 
                 {casier.matricule} · {casier.email}
               </p>
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+            <DeconnecterPartoutButton matricule={casier.matricule} />
             <button
               onClick={seConnecterEnTantQue}
               disabled={openingViewAs}
@@ -179,6 +182,7 @@ export default function ApprenantCasierPanel({ matricule }: { matricule: string 
             >
               {openingViewAs ? "Ouverture..." : "Se connecter en tant que"}
             </button>
+            </div>
           </div>
           <div className="mt-3 grid gap-3 border-t border-white/10 pt-3 text-sm text-white/80 sm:grid-cols-3">
             <p>

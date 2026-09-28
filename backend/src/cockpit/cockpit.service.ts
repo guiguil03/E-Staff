@@ -514,8 +514,12 @@ export class CockpitService {
   // mise à jour manuellement par le formateur (pas de facturation/webhook
   // automatique). "non_defini" pour les apprenants sans date encore fixée —
   // distinct de "en_retard", pour ne pas leur prêter un statut inventé.
-  async getPaiements() {
+  // Limité aux apprenants des groupes du formateur (audit du 2026-09-28 :
+  // tout formateur voyait et modifiait l'abonnement de toute l'académie).
+  async getPaiements(formateurMatricule?: string) {
+    const formateur = formateurMatricule ? await this.findFormateurOrThrow(formateurMatricule) : null;
     const apprenants = await this.prisma.apprenant.findMany({
+      where: formateur ? { groupe: { formateurId: formateur.id } } : undefined,
       include: { groupe: true },
       orderBy: { abonnementExpireAt: "asc" },
     });
@@ -528,9 +532,15 @@ export class CockpitService {
     }));
   }
 
-  async setAbonnementExpireAt(matricule: string, expireAt: Date) {
-    const apprenant = await this.prisma.apprenant.findUnique({ where: { matricule } });
+  async setAbonnementExpireAt(matricule: string, expireAt: Date, formateurMatricule?: string) {
+    const apprenant = await this.prisma.apprenant.findUnique({ where: { matricule }, include: { groupe: true } });
     if (!apprenant) throw new NotFoundException(`Apprenant ${matricule} introuvable.`);
+    if (formateurMatricule) {
+      const formateur = await this.findFormateurOrThrow(formateurMatricule);
+      if (apprenant.groupe.formateurId !== formateur.id) {
+        throw new ForbiddenException(`Vous n'encadrez pas cet apprenant.`);
+      }
+    }
     const updated = await this.prisma.apprenant.update({
       where: { matricule },
       data: { abonnementExpireAt: expireAt },

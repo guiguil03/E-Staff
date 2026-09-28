@@ -53,6 +53,9 @@ export default function AuthNavItem() {
       <Link href={ROLE_ROUTES[session.role] ?? "/"} className="font-medium hover:text-accent">
         {session.matricule}
       </Link>
+      <Link href="/compte/securite" className="font-mono text-xs uppercase tracking-widest text-primary/50 hover:text-accent">
+        Sécurité
+      </Link>
       <button
         type="button"
         onClick={logout}

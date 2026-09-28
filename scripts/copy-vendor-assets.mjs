@@ -4,8 +4,7 @@
 // 1. pdf.js : le worker qui lit les PDF importés sur le tableau blanc
 //    (voir pdfEnImages dans TableauBlanc.tsx).
 //
-// 2. Les fichiers annexes d'Excalidraw (polices, code chargé à la
-//    demande, traductions), au lieu du CDN unpkg qu'Excalidraw utilise par
+// 2. Les polices d'Excalidraw, au lieu du CDN qu'Excalidraw utilise par
 //    défaut (tableau blanc de la classe virtuelle).
 //
 // Lancé automatiquement après `npm install` (postinstall) ; les dossiers
@@ -22,12 +21,13 @@ if (existsSync(workerPdf)) {
   console.warn("[pdfjs] paquet absent, copie du worker ignorée");
 }
 
-const source = join("node_modules", "@excalidraw", "excalidraw", "dist");
+// Excalidraw 0.18 : seules les polices sont chargées à la demande (le code
+// est intégré au bundle) — servies depuis /excalidraw/fonts/, voir
+// EXCALIDRAW_ASSET_PATH dans TableauBlanc.tsx.
+const source = join("node_modules", "@excalidraw", "excalidraw", "dist", "prod", "fonts");
 if (existsSync(source)) {
-  for (const dossier of ["excalidraw-assets", "excalidraw-assets-dev"]) {
-    cpSync(join(source, dossier), join("public", dossier), { recursive: true });
-  }
-  console.log("[excalidraw] assets copiés dans public/");
+  cpSync(source, join("public", "excalidraw", "fonts"), { recursive: true });
+  console.log("[excalidraw] polices copiées dans public/excalidraw/");
 } else {
-  console.warn("[excalidraw] paquet absent, copie des assets ignorée");
+  console.warn("[excalidraw] paquet absent, copie des polices ignorée");
 }

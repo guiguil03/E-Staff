@@ -20,35 +20,35 @@ describe("StaffGuard", () => {
     return `10.99.1.${ipCounter}`;
   }
 
-  it("laisse passer avec une session admin", () => {
+  it("laisse passer avec une session admin", async () => {
     const guard = new StaffGuard();
     const context = makeContext(
       { estaf_session: signSession({ matricule: "ADMIN-1", role: "admin" }) },
       freshIp()
     );
-    expect(guard.canActivate(context)).toBe(true);
+    await expect(guard.canActivate(context)).resolves.toBe(true);
   });
 
-  it("laisse passer avec une session RH", () => {
+  it("laisse passer avec une session RH", async () => {
     const guard = new StaffGuard();
     const context = makeContext(
       { estaf_session: signSession({ matricule: "RH-1", role: "rh" }) },
       freshIp()
     );
-    expect(guard.canActivate(context)).toBe(true);
+    await expect(guard.canActivate(context)).resolves.toBe(true);
   });
 
-  it("rejette une session d'un autre rôle", () => {
+  it("rejette une session d'un autre rôle", async () => {
     const guard = new StaffGuard();
     const context = makeContext(
       { estaf_session: signSession({ matricule: "ETF-FORM-2026-0001", role: "formateur" }) },
       freshIp()
     );
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
   });
 
-  it("rejette quand aucun cookie de session n'est présent", () => {
+  it("rejette quand aucun cookie de session n'est présent", async () => {
     const guard = new StaffGuard();
-    expect(() => guard.canActivate(makeContext({}, freshIp()))).toThrow(UnauthorizedException);
+    await expect(guard.canActivate(makeContext({}, freshIp()))).rejects.toThrow(UnauthorizedException);
   });
 });

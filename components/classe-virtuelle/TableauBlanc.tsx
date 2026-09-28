@@ -4,11 +4,13 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiGet, apiGetBlob, ApiError } from "@/lib/api";
 
-// Polices et code annexe d'Excalidraw servis par le site lui-même (copiés
-// dans public/ par scripts/copy-vendor-assets.mjs) plutôt que depuis le
-// CDN unpkg par défaut. Doit être défini avant le chargement d'Excalidraw.
+import "@excalidraw/excalidraw/index.css";
+
+// Polices d'Excalidraw servies par le site lui-même (copiées dans
+// public/excalidraw/ par scripts/copy-vendor-assets.mjs) plutôt que depuis
+// le CDN par défaut. Doit être défini avant le chargement d'Excalidraw.
 if (typeof window !== "undefined") {
-  (window as unknown as { EXCALIDRAW_ASSET_PATH: string }).EXCALIDRAW_ASSET_PATH = "/";
+  (window as unknown as { EXCALIDRAW_ASSET_PATH: string }).EXCALIDRAW_ASSET_PATH = "/excalidraw/";
 }
 
 // Excalidraw ne fonctionne que côté navigateur (canvas) : jamais rendu au

@@ -20,6 +20,7 @@ import { SubmitPaymentPublicDto } from './submit-payment-public.dto';
 import { SendContractDto } from './send-contract.dto';
 import { PapiWebhookDto } from './papi-webhook.dto';
 import { RhGuard } from '../common/rh.guard';
+import { StaffGuard } from '../common/staff.guard';
 import { RateLimitGuard } from '../common/rate-limit.guard';
 import { isImage, isPdf } from '../common/file-signature';
 
@@ -82,7 +83,10 @@ export class RegistrationsController {
     stream.pipe(res);
   }
 
-  // Consultation du reçu par l'admin (lien affiché dans InscriptionsPanel).
+  // Consultation du reçu par l'admin/RH (lien affiché dans
+  // InscriptionsPanel). Était public (audit du 2026-09-28) : n'importe qui
+  // ayant l'identifiant pouvait télécharger la capture de paiement.
+  @UseGuards(StaffGuard)
   @Get('contrats/:id/recu')
   async streamPaymentReceipt(@Param('id') id: string, @Res() res: Response) {
     const { stream, contentType } = await this.service.getPaymentReceiptStream(id);
@@ -120,6 +124,7 @@ export class RegistrationsController {
   // Génère un lien de paiement Papi (Mobile Money/carte) à la volée.
   // Backend conservé mais inutilisé côté produit depuis le retour au flux
   // déclaratif (2026-09-09) — voir schema.prisma.
+  @UseGuards(RateLimitGuard('registrations-paiement-en-ligne', 5))
   @Post('contrats/:id/paiement-en-ligne')
   createPaymentLinkPublic(@Param('id') id: string) {
     return this.service.createPaymentLinkPublic(id);

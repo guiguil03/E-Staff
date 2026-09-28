@@ -152,12 +152,16 @@ export class CockpitController {
   }
 
   @Get("paiements")
-  getPaiements() {
-    return this.service.getPaiements();
+  getPaiements(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.getPaiements(formateurMatricule);
   }
 
   @Put("apprenants/:matricule/abonnement")
-  setAbonnement(@Param("matricule") matricule: string, @Body() dto: SetAbonnementDto) {
-    return this.service.setAbonnementExpireAt(matricule, new Date(dto.expireAt));
+  setAbonnement(
+    @Param("matricule") matricule: string,
+    @Headers("x-formateur-matricule") formateurMatricule: string,
+    @Body() dto: SetAbonnementDto
+  ) {
+    return this.service.setAbonnementExpireAt(matricule, new Date(dto.expireAt), formateurMatricule);
   }
 }
