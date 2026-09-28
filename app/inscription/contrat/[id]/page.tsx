@@ -6,7 +6,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function ContratInscriptionPage({ params }: { params: { id: string } }) {
+export default async function ContratInscriptionPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   return (
     <div className="min-h-screen bg-obsidian px-4 py-16 sm:px-6 sm:py-20">
       <div className="mx-auto max-w-2xl">
@@ -18,7 +19,7 @@ export default function ContratInscriptionPage({ params }: { params: { id: strin
         </h1>
 
         <div className="mt-8">
-          <ContratInscrit registrationId={params.id} />
+          <ContratInscrit registrationId={id} />
         </div>
       </div>
     </div>

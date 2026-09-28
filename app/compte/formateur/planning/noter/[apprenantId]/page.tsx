@@ -6,16 +6,17 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function NoterApprenantPage({
+export default async function NoterApprenantPage({
   params,
   searchParams,
 }: {
-  params: { apprenantId: string };
-  searchParams: { seance?: string; groupe?: string };
+  params: Promise<{ apprenantId: string }>;
+  searchParams: Promise<{ seance?: string; groupe?: string }>;
 }) {
-  const seance = Number(searchParams.seance ?? "1");
-  const groupe = searchParams.groupe ?? "";
+  const [{ apprenantId }, query] = await Promise.all([params, searchParams]);
+  const seance = Number(query.seance ?? "1");
+  const groupe = query.groupe ?? "";
   return (
-    <NoterApprenantDashboard apprenantId={params.apprenantId} seance={seance} groupe={groupe} />
+    <NoterApprenantDashboard apprenantId={apprenantId} seance={seance} groupe={groupe} />
   );
 }

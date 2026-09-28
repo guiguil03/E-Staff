@@ -65,7 +65,7 @@ export default function StudioMetier() {
   const metierChoisi = ALL_METIERS.find((m) => m.slug === metierSpontane) ?? null;
   const segment = offreChoisie?.metierSlug ?? metierChoisi?.slug ?? null;
 
-  function scrollTo(ref: React.RefObject<HTMLElement>) {
+  function scrollTo(ref: React.RefObject<HTMLElement | null>) {
     ref.current?.scrollIntoView({
       behavior: prefersReducedMotion() ? "auto" : "smooth",
       block: "start",
