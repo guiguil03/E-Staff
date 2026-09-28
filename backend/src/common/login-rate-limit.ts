@@ -1,37 +1,17 @@
-// Anti-brute-force minimal pour les gates par session (FormateurGuard,
-// AdminGuard, RhGuard, ApprenantGuard, StaffGuard, /auth/login) — protège
-// à la fois les tentatives de connexion et les sessions invalides/expirées
-// présentées en boucle. Store en mémoire
-// (process unique, comme le reste des stopgaps de ce projet) : suffisant vu
-// le volume et repart à zéro à chaque redéploiement, ce qui est acceptable
-// pour ce niveau de risque.
-const MAX_ATTEMPTS = 5;
-const LOCKOUT_MS = 15 * 60 * 1000; // 15 min
+// Anti-brute-force de la connexion et des guards : 5 échecs → verrou de
+// 15 minutes par clé (ex. `login:<ip>`). Compteurs en base depuis l'audit
+// du 2026-09-28 (voir anti-abus.ts) : partagés entre instances et conservés
+// après un redémarrage.
+import { effacerEchecs, enregistrerEchec, secondesVerrouRestantes } from "./anti-abus";
 
-interface Entry {
-  count: number;
-  lockedUntil: number | null;
+export function remainingLockoutSeconds(key: string): Promise<number> {
+  return secondesVerrouRestantes(key);
 }
 
-const attempts = new Map<string, Entry>();
-
-export function remainingLockoutSeconds(key: string): number {
-  const entry = attempts.get(key);
-  if (!entry?.lockedUntil) return 0;
-  const remainingMs = entry.lockedUntil - Date.now();
-  return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
+export function recordFailure(key: string): Promise<void> {
+  return enregistrerEchec(key);
 }
 
-export function recordFailure(key: string): void {
-  const entry = attempts.get(key) ?? { count: 0, lockedUntil: null };
-  entry.count += 1;
-  if (entry.count >= MAX_ATTEMPTS) {
-    entry.lockedUntil = Date.now() + LOCKOUT_MS;
-    entry.count = 0;
-  }
-  attempts.set(key, entry);
-}
-
-export function recordSuccess(key: string): void {
-  attempts.delete(key);
+export function recordSuccess(key: string): Promise<void> {
+  return effacerEchecs(key);
 }

@@ -1,12 +1,6 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  UnauthorizedException,
-} from "@nestjs/common";
+import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import type { Request } from "express";
-import { readSession } from "./session";
-import { recordFailure, recordSuccess, remainingLockoutSeconds } from "./login-rate-limit";
+import { exigerSession } from "./garde-session";
 
 // Gate des routes d'administration : planification du Live du Forum, et
 // depuis le 2026-09-18 la génération de comptes/identifiants (formateur,
@@ -20,22 +14,9 @@ import { recordFailure, recordSuccess, remainingLockoutSeconds } from "./login-r
 // possible sans changer la variable d'env pour tout le monde à la fois).
 @Injectable()
 export class AdminGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
-    const key = `admin:${request.ip}`;
-
-    const lockedFor = remainingLockoutSeconds(key);
-    if (lockedFor > 0) {
-      throw new UnauthorizedException(`Trop de tentatives. Réessayez dans ${lockedFor}s.`);
-    }
-
-    const session = readSession(request);
-    if (!session || session.role !== "admin") {
-      recordFailure(key);
-      throw new UnauthorizedException("Session admin invalide ou expirée.");
-    }
-
-    recordSuccess(key);
+    await exigerSession(request, { cle: "admin", roles: ["admin"], message: "Session admin invalide ou expirée." });
     return true;
   }
 }

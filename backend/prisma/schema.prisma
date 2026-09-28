@@ -546,6 +546,9 @@ model Formateur {
   password            String?
   resetToken          String?   @unique
   resetTokenExpiresAt DateTime?
+  // « Déconnecter partout » / changement de mot de passe : toute session
+  // émise avant cette date est refusée (voir common/session.ts).
+  sessionsRevoqueesAt DateTime?
 
   // Fixe mensuel négocié — base du Net à Payer (voir PaiementFormateur),
   // même principe que Superviseur.tarifFixe côté Production. Nullable tant
@@ -685,6 +688,9 @@ model Apprenant {
   // Mot de passe oublié : jeton à usage unique, expire 1h après génération.
   resetToken          String?   @unique
   resetTokenExpiresAt DateTime?
+  // « Déconnecter partout » / changement de mot de passe : toute session
+  // émise avant cette date est refusée (voir common/session.ts).
+  sessionsRevoqueesAt DateTime?
 
   // Échéance de l'abonnement en cours (renouvellement à date fixe, décision
   // produit du 2026-08-24) — saisie/mise à jour manuellement par le
@@ -1451,4 +1457,37 @@ model TableauFichier {
   createdAt  DateTime     @default(now())
 
   @@id([seanceId, fileId])
+}
+
+// Comptes nominatifs Admin / RH (audit du 2026-09-28) — remplacent les
+// identifiants partagés ADMIN_TEST_* / RH_TEST_* : dès qu'un compte actif
+// existe pour un rôle, l'identifiant partagé de ce rôle est refusé (voir
+// AuthController.login). Gérés par l'admin (Paramètres > Comptes d'accès).
+model CompteStaff {
+  id        String   @id @default(cuid())
+  matricule String   @unique // ex. "ADM-2026-0001", "RH-2026-0001"
+  role      String // "admin" | "rh"
+  prenom    String
+  nom       String
+  email     String
+  password  String // hash bcrypt
+  actif     Boolean  @default(true)
+
+  resetToken          String?   @unique
+  resetTokenExpiresAt DateTime?
+  sessionsRevoqueesAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Compteurs anti-abus (limites de requêtes, verrouillage après échecs de
+// connexion) — en base plutôt qu'en mémoire du serveur (audit du
+// 2026-09-28) : partagés entre plusieurs instances Railway et conservés
+// après un redémarrage. Voir common/anti-abus.ts.
+model CompteurAbus {
+  cle              String    @id
+  compte           Int       @default(0)
+  debutFenetre     DateTime  @default(now())
+  verrouilleJusqua DateTime?
 }

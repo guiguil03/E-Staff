@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
+import { timingSafeEqual } from "crypto";
 import type { Request, Response } from "express";
 import { LoginDto } from "./dto/login.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
@@ -21,28 +22,27 @@ import { RhGuard } from "../common/rh.guard";
 import { RateLimitGuard } from "../common/rate-limit.guard";
 import { recordFailure, recordSuccess, remainingLockoutSeconds } from "../common/login-rate-limit";
 import { consumeViewAsToken } from "../common/view-as-token";
-import { clearSessionCookie, setSessionCookie, SessionRole } from "../common/session";
+import {
+  clearSessionCookie,
+  identifiantPartage,
+  identifiantPartageAutorise,
+  readSession,
+  setSessionCookie,
+  SessionRole,
+  verifierSession,
+} from "../common/session";
+import { StaffGuard } from "../common/staff.guard";
 
-// Login générique — stopgap pour Admin/RH (un identifiant de test partagé
-// par compte, une seule personne interne connue par compte — voir brainstorm
-// 2026-08-10 et 2026-09-18 pour la scission Admin/RH). Apprenant et
-// Formateur ont désormais de vrais comptes individuels (voir AuthService) :
-// chaque candidat qui paie, ou chaque formateur créé par la RH, reçoit son
-// propre matricule + mot de passe. Le compte de test formateur partagé
-// (FORMATEUR_TEST_MATRICULE) reste néanmoins actif en parallèle des vrais
-// comptes (démo/dev), donc toujours dans cette liste.
-const TEST_ACCOUNTS: { matricule?: string; password?: string; role: string }[] = [
-  {
-    matricule: process.env.ADMIN_TEST_MATRICULE,
-    password: process.env.ADMIN_TEST_PASSWORD,
-    role: "admin",
-  },
-  {
-    matricule: process.env.RH_TEST_MATRICULE,
-    password: process.env.RH_TEST_PASSWORD,
-    role: "rh",
-  },
-];
+// Identifiants partagés Admin/RH (ADMIN_TEST_* / RH_TEST_*) : uniquement
+// pour démarrer. Dès qu'un compte nominatif actif existe pour un rôle
+// (Paramètres > Comptes d'accès, voir CompteStaff), l'identifiant partagé de
+// ce rôle est refusé (audit du 2026-09-28). Apprenants et formateurs ont
+// chacun leur compte (voir AuthService).
+function comparerTexte(a: string, b: string): boolean {
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ba.length === bb.length && timingSafeEqual(ba, bb);
+}
 
 @ApiTags("Auth")
 @Controller("auth")
@@ -59,35 +59,45 @@ export class AuthController {
     // les codes de test partagés (formateur/admin) et les vrais mots de
     // passe apprenant.
     const key = `login:${request.ip}`;
-    const lockedFor = remainingLockoutSeconds(key);
+    const lockedFor = await remainingLockoutSeconds(key);
     if (lockedFor > 0) {
       throw new UnauthorizedException(`Trop de tentatives. Réessayez dans ${lockedFor}s.`);
     }
 
-    const account = TEST_ACCOUNTS.find(
-      (a) => a.matricule && a.password && a.matricule === dto.matricule && a.password === dto.password
-    );
-    if (account) {
-      recordSuccess(key);
-      setSessionCookie(response, { matricule: dto.matricule, role: account.role as SessionRole });
-      return { ok: true, role: account.role };
+    const connecter = async (matricule: string, role: SessionRole) => {
+      await recordSuccess(key);
+      setSessionCookie(response, { matricule, role });
+      return { ok: true, role };
+    };
+
+    const staff = await this.authService.loginStaff(dto.matricule, dto.password);
+    if (staff) return connecter(staff.matricule, staff.role as SessionRole);
+
+    for (const role of ["admin", "rh"] as const) {
+      const partage = identifiantPartage(role);
+      if (
+        partage.matricule &&
+        partage.password &&
+        comparerTexte(dto.matricule, partage.matricule) &&
+        comparerTexte(dto.password, partage.password)
+      ) {
+        if (!(await identifiantPartageAutorise(role))) {
+          await recordFailure(key);
+          throw new UnauthorizedException(
+            "Cet identifiant partagé est désactivé : connectez-vous avec votre compte personnel."
+          );
+        }
+        return connecter(partage.matricule, role);
+      }
     }
 
     const formateur = await this.authService.loginFormateur(dto.matricule, dto.password);
-    if (formateur) {
-      recordSuccess(key);
-      setSessionCookie(response, { matricule: formateur.matricule, role: "formateur" });
-      return { ok: true, role: "formateur" };
-    }
+    if (formateur) return connecter(formateur.matricule, "formateur");
 
     const apprenant = await this.authService.loginApprenant(dto.matricule, dto.password);
-    if (apprenant) {
-      recordSuccess(key);
-      setSessionCookie(response, { matricule: apprenant.matricule, role: "apprenant" });
-      return { ok: true, role: "apprenant" };
-    }
+    if (apprenant) return connecter(apprenant.matricule, "apprenant");
 
-    recordFailure(key);
+    await recordFailure(key);
     throw new UnauthorizedException("Matricule ou mot de passe invalide.");
   }
 
@@ -100,21 +110,54 @@ export class AuthController {
   // Vérifie l'ancien mot de passe : même anti-brute-force que le login
   // (audit du 2026-09-28) — sans ça, cette route permettait de tester des
   // mots de passe à l'infini en contournant le verrouillage du login.
+  // Vérifie l'ancien mot de passe : même anti-brute-force que le login
+  // (audit du 2026-09-28). Le changement déconnecte toutes les autres
+  // sessions du compte ; celle en cours reçoit un nouveau cookie.
   @Post("change-password")
-  async changePassword(@Body() dto: ChangePasswordDto, @Req() request: Request) {
+  async changePassword(
+    @Body() dto: ChangePasswordDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response
+  ) {
     const key = `login:${request.ip}`;
-    const lockedFor = remainingLockoutSeconds(key);
+    const lockedFor = await remainingLockoutSeconds(key);
     if (lockedFor > 0) {
       throw new UnauthorizedException(`Trop de tentatives. Réessayez dans ${lockedFor}s.`);
     }
     try {
+      const courante = readSession(request);
       const result = await this.authService.changePassword(dto);
-      recordSuccess(key);
+      await recordSuccess(key);
+      if (courante && courante.matricule === dto.matricule) {
+        setSessionCookie(response, { matricule: courante.matricule, role: courante.role });
+      }
       return result;
     } catch (err) {
-      if (err instanceof UnauthorizedException) recordFailure(key);
+      if (err instanceof UnauthorizedException) await recordFailure(key);
       throw err;
     }
+  }
+
+  // « Déconnecter tous mes appareils » : révoque toutes les sessions du
+  // compte connecté, y compris celle-ci.
+  @Post("logout-everywhere")
+  async logoutEverywhere(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    const session = await verifierSession(request);
+    clearSessionCookie(response);
+    if (!session) throw new UnauthorizedException("Session invalide ou expirée.");
+    // Identifiant partagé Admin/RH : pas de compte en base à révoquer, on
+    // déconnecte seulement ce navigateur (créer des comptes personnels).
+    if (!(await this.authService.compteExiste(session.matricule))) return { ok: true, partage: true };
+    await this.authService.revoquerSessions(session.matricule);
+    return { ok: true };
+  }
+
+  // Admin/RH : déconnecter partout un formateur, un apprenant ou un compte
+  // staff (ex. appareil perdu, départ d'un collaborateur).
+  @UseGuards(StaffGuard)
+  @Post("revoquer-sessions/:matricule")
+  revoquerSessions(@Param("matricule") matricule: string) {
+    return this.authService.revoquerSessions(matricule);
   }
 
   // Envoie un e-mail : limité pour qu'on ne puisse pas inonder la boîte

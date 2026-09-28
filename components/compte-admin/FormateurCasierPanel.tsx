@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import DeconnecterPartoutButton from "./DeconnecterPartoutButton";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
 import { apiGet, apiGetBlob, apiUpload } from "@/lib/api";
@@ -98,12 +99,17 @@ export default function FormateurCasierPanel({ id }: { id: string }) {
     <div className="space-y-6">
       <Reveal>
         <div className="rounded border border-white/10 bg-obsidianCard p-6">
-          <p className="font-display text-lg font-semibold text-white">
-            {casier.prenom} {casier.nom}
-          </p>
-          <p className="font-mono text-xs text-white/40">
-            {casier.matricule} · {casier.email}
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-display text-lg font-semibold text-white">
+                {casier.prenom} {casier.nom}
+              </p>
+              <p className="font-mono text-xs text-white/40">
+                {casier.matricule} · {casier.email}
+              </p>
+            </div>
+            <DeconnecterPartoutButton matricule={casier.matricule} />
+          </div>
           <p className="mt-2 font-mono text-xs text-accent">
             Vivier C1 : {casier.vivierCount} apprenant{casier.vivierCount > 1 ? "s" : ""}
           </p>

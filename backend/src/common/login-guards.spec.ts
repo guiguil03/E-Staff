@@ -55,46 +55,36 @@ describe.each(cases)("$name", ({ Guard, role, invalidMessage, keyPrefix }) => {
     return { estaf_session: signSession({ matricule: "ETF-2026-0001", role: otherRole }) };
   }
 
-  it("laisse passer avec une session du bon rôle", () => {
+  it("laisse passer avec une session du bon rôle", async () => {
     const guard = new Guard();
     const context = makeContext(validCookie(), freshIp());
-    expect(guard.canActivate(context)).toBe(true);
+    await expect(guard.canActivate(context)).resolves.toBe(true);
   });
 
-  it("rejette une session d'un autre rôle", () => {
+  it("rejette une session d'un autre rôle", async () => {
     const guard = new Guard();
     const context = makeContext(wrongRoleCookie(), freshIp());
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
-    expect(() => guard.canActivate(context)).toThrow(invalidMessage);
+    await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
+    await expect(guard.canActivate(context)).rejects.toThrow(invalidMessage);
   });
 
-  it("rejette quand aucun cookie de session n'est présent", () => {
+  it("rejette quand aucun cookie de session n'est présent", async () => {
     const guard = new Guard();
     const context = makeContext({}, freshIp());
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
   });
 
-  it("verrouille l'IP après 5 échecs consécutifs, même avec une bonne session ensuite", () => {
+  it("verrouille l'IP après 5 échecs consécutifs ; une session valide passe toujours", async () => {
     const guard = new Guard();
     const ip = freshIp();
 
     for (let i = 0; i < 5; i++) {
-      expect(() => guard.canActivate(makeContext({}, ip))).toThrow(UnauthorizedException);
+      await expect(guard.canActivate(makeContext({}, ip))).rejects.toThrow(UnauthorizedException);
     }
 
-    expect(() => guard.canActivate(makeContext(validCookie(), ip))).toThrow(/Trop de tentatives/);
-  });
-
-  it("une réussite remet le compteur d'échecs à zéro pour cette IP", () => {
-    const guard = new Guard();
-    const ip = freshIp();
-
-    expect(() => guard.canActivate(makeContext({}, ip))).toThrow();
-    expect(() => guard.canActivate(makeContext({}, ip))).toThrow();
-    expect(() => guard.canActivate(makeContext(validCookie(), ip))).not.toThrow();
-
-    for (let i = 0; i < 4; i++) {
-      expect(() => guard.canActivate(makeContext({}, ip))).toThrow(invalidMessage);
-    }
+    await expect(guard.canActivate(makeContext({}, ip))).rejects.toThrow(/Trop de tentatives/);
+    // Le verrou vise les tentatives invalides (audit du 2026-09-28) : une
+    // personne réellement connectée derrière la même IP n'est pas bloquée.
+    await expect(guard.canActivate(makeContext(validCookie(), ip))).resolves.toBe(true);
   });
 });

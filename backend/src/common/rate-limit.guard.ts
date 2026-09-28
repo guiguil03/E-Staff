@@ -7,51 +7,20 @@ import {
   mixin,
 } from "@nestjs/common";
 import type { Request } from "express";
+import { compterRequete } from "./anti-abus";
 
-// Anti-abus générique par IP — distinct de login-rate-limit.ts, qui gère
-// spécifiquement le lockout après des échecs d'authentification (bon
-// identifiant/mauvais secret). Ici, TOUTE requête compte (upload de CV/
-// vidéo, création de compte, webhook Papi) : ces endpoints sont publics et
-// n'ont jusqu'ici aucune limite de fréquence — un script pouvait les
-// marteler sans jamais être bloqué. Store en mémoire, comme le reste des
-// anti-abus du projet (process unique, repart à zéro à chaque déploiement).
-interface Entry {
-  count: number;
-  windowStart: number;
-}
-const hits = new Map<string, Entry>();
-
-// Au-delà, on purge les fenêtres expirées : sans ça, chaque IP vue restait
-// en mémoire jusqu'au prochain redémarrage (audit du 2026-09-28).
-const PURGE_AU_DELA = 5_000;
-const FENETRE_MAX_MS = 60 * 60 * 1000;
-
-function checkAndRecord(key: string, max: number, windowMs: number): void {
-  const now = Date.now();
-  if (hits.size > PURGE_AU_DELA) {
-    for (const [k, e] of hits) {
-      if (now - e.windowStart >= FENETRE_MAX_MS) hits.delete(k);
-    }
-  }
-  const entry = hits.get(key);
-  if (!entry || now - entry.windowStart >= windowMs) {
-    hits.set(key, { count: 1, windowStart: now });
-    return;
-  }
-  entry.count += 1;
-  if (entry.count > max) {
-    throw new HttpException("Trop de requêtes. Réessayez dans une minute.", HttpStatus.TOO_MANY_REQUESTS);
-  }
-}
-
-// Fabrique un guard paramétré : `keyPrefix` isole le compteur par route (un
-// abus sur l'upload CV ne verrouille pas la création de compte), `max`
-// requêtes par IP toutes les `windowMs` (défaut 60s).
+// Limite de requêtes par IP et par route publique (formulaires, dépôts de
+// fichiers...) : `max` requêtes par fenêtre de `windowMs`. Compteurs en
+// base depuis l'audit du 2026-09-28 (voir anti-abus.ts) : partagés entre
+// instances et conservés après un redémarrage.
 export function RateLimitGuard(keyPrefix: string, max: number, windowMs = 60_000): Type<CanActivate> {
   class RateLimitGuardImpl implements CanActivate {
-    canActivate(context: ExecutionContext): boolean {
+    async canActivate(context: ExecutionContext): Promise<boolean> {
       const request = context.switchToHttp().getRequest<Request>();
-      checkAndRecord(`${keyPrefix}:${request.ip}`, max, windowMs);
+      const compte = await compterRequete(`rl:${keyPrefix}:${request.ip}`, windowMs);
+      if (compte > max) {
+        throw new HttpException("Trop de requêtes. Réessayez dans une minute.", HttpStatus.TOO_MANY_REQUESTS);
+      }
       return true;
     }
   }

@@ -407,9 +407,10 @@ export class RhService {
     if (!formateur) throw new NotFoundException('Formateur introuvable.');
 
     const temporaryPassword = generateTemporaryPassword();
+    // Nouveau mot de passe = anciennes sessions coupées (audit 2026-09-28).
     await this.prisma.formateur.update({
       where: { id },
-      data: { password: await bcrypt.hash(temporaryPassword, 10) },
+      data: { password: await bcrypt.hash(temporaryPassword, 10), sessionsRevoqueesAt: new Date() },
     });
 
     await this.email.send({

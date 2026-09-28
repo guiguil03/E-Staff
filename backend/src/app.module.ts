@@ -19,6 +19,8 @@ import { RhModule } from "./rh/rh.module";
 import { ProductionModule } from "./production/production.module";
 import { SupportCoursModule } from "./support-cours/support-cours.module";
 import { OffresEmploiModule } from "./offres-emploi/offres-emploi.module";
+import { ComptesStaffModule } from "./comptes-staff/comptes-staff.module";
+import { AntiAbusCronService } from "./common/anti-abus-cron.service";
 
 @Module({
   imports: [
@@ -40,8 +42,9 @@ import { OffresEmploiModule } from "./offres-emploi/offres-emploi.module";
     ProductionModule,
     SupportCoursModule,
     OffresEmploiModule,
+    ComptesStaffModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, AntiAbusCronService],
 })
 export class AppModule {}

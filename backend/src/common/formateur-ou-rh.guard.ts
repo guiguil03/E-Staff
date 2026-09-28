@@ -1,11 +1,6 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  UnauthorizedException,
-} from "@nestjs/common";
+import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import type { Request } from "express";
-import { readSession } from "./session";
+import { exigerSession } from "./garde-session";
 
 // Gate des quelques ressources consultées à la fois par le formateur (file
 // de correction, TrainerDashboard) et par la RH (vérification des
@@ -14,12 +9,9 @@ import { readSession } from "./session";
 // rh.
 @Injectable()
 export class FormateurOuRhGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
-    const session = readSession(request);
-    if (!session || (session.role !== "formateur" && session.role !== "rh")) {
-      throw new UnauthorizedException("Accès refusé.");
-    }
+    await exigerSession(request, { cle: "formateur-ou-rh", roles: ["formateur", "rh"], message: "Accès refusé." });
     return true;
   }
 }

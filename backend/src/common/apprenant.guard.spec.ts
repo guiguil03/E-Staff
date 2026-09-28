@@ -24,51 +24,51 @@ describe("ApprenantGuard", () => {
     return `10.99.2.${ipCounter}`;
   }
 
-  it("laisse passer quand la session correspond exactement au matricule de l'URL", () => {
+  it("laisse passer quand la session correspond exactement au matricule de l'URL", async () => {
     const guard = new ApprenantGuard();
     const context = makeContext(
       { estaf_session: signSession({ matricule: "ETF-2026-0001", role: "apprenant" }) },
       { matricule: "ETF-2026-0001" },
       freshIp()
     );
-    expect(guard.canActivate(context)).toBe(true);
+    await expect(guard.canActivate(context)).resolves.toBe(true);
   });
 
-  it("rejette quand la session est celle d'un AUTRE apprenant (IDOR)", () => {
+  it("rejette quand la session est celle d'un AUTRE apprenant (IDOR)", async () => {
     const guard = new ApprenantGuard();
     const context = makeContext(
       { estaf_session: signSession({ matricule: "ETF-2026-0001", role: "apprenant" }) },
       { matricule: "ETF-2026-0002" },
       freshIp()
     );
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
   });
 
-  it("rejette une session d'un autre rôle", () => {
+  it("rejette une session d'un autre rôle", async () => {
     const guard = new ApprenantGuard();
     const context = makeContext(
       { estaf_session: signSession({ matricule: "ETF-2026-0001", role: "formateur" }) },
       { matricule: "ETF-2026-0001" },
       freshIp()
     );
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
   });
 
-  it("rejette quand aucun cookie de session n'est présent", () => {
+  it("rejette quand aucun cookie de session n'est présent", async () => {
     const guard = new ApprenantGuard();
     const context = makeContext({}, { matricule: "ETF-2026-0001" }, freshIp());
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
   });
 
-  it("laisse passer une session valide même quand l'IP est verrouillée par d'autres échecs", () => {
+  it("laisse passer une session valide même quand l'IP est verrouillée par d'autres échecs", async () => {
     const guard = new ApprenantGuard();
     const ip = freshIp();
     for (let i = 0; i < 5; i++) {
-      expect(() => guard.canActivate(makeContext({}, { matricule: "ETF-2026-0001" }, ip))).toThrow(
+      await expect(guard.canActivate(makeContext({}, { matricule: "ETF-2026-0001" }, ip))).rejects.toThrow(
         UnauthorizedException
       );
     }
-    expect(() => guard.canActivate(makeContext({}, { matricule: "ETF-2026-0001" }, ip))).toThrow(
+    await expect(guard.canActivate(makeContext({}, { matricule: "ETF-2026-0001" }, ip))).rejects.toThrow(
       /Trop de tentatives/
     );
 
@@ -77,6 +77,6 @@ describe("ApprenantGuard", () => {
       { matricule: "ETF-2026-0002" },
       ip
     );
-    expect(guard.canActivate(valide)).toBe(true);
+    await expect(guard.canActivate(valide)).resolves.toBe(true);
   });
 });

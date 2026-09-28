@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Post, Put, Req, UseGuards } from "@nestjs
 import { ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { AdminGuard } from "../common/admin.guard";
-import { readSession } from "../common/session";
+import { verifierSession } from "../common/session";
 import { ForumService } from "./forum.service";
 import { UpsertForumLiveDto } from "./dto/upsert-forum-live.dto";
 
@@ -41,8 +41,8 @@ export class ForumController {
   // hôte : n'importe qui connaissant (ou devinant) ce matricule pouvait se
   // faire passer pour l'hôte du Live.
   @Get("live/room")
-  getLiveRoom(@Req() request: Request) {
-    const isAdmin = readSession(request)?.role === "admin";
+  async getLiveRoom(@Req() request: Request) {
+    const isAdmin = (await verifierSession(request))?.role === "admin";
     return this.service.getLiveRoom(isAdmin);
   }
 }
