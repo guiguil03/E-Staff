@@ -1,0 +1,37 @@
+name: Uptime
+
+# Ping périodique du backend prod (Railway) — au-delà de ce que Sentry
+# couvre (erreurs applicatives) : détecte un backend injoignable ou en panne
+# de base de données (voir backend/src/app.controller.ts, /health renvoie
+# 503 si la connexion DB échoue). Aucun nouveau compte/service à créer :
+# un run qui échoue déclenche la notification par e-mail par défaut de
+# GitHub Actions pour les workflows programmés — vérifiez que les
+# notifications "Actions" sont activées (github.com/settings/notifications).
+#
+# 3 tentatives espacées avant d'échouer réellement, pour ne pas alerter sur
+# un simple aléa réseau d'une requête isolée.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  health-check:
+    name: Ping /health
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend production
+        run: |
+          URL="https://backend-production-547d8.up.railway.app/health"
+          for attempt in 1 2 3; do
+            if curl --fail --silent --show-error --max-time 10 "$URL"; then
+              echo ""
+              echo "OK (tentative $attempt)"
+              exit 0
+            fi
+            echo "Échec tentative $attempt/3"
+            [ "$attempt" -lt 3 ] && sleep 15
+          done
+          echo "::error::Backend injoignable ou en panne après 3 tentatives : $URL"
+          exit 1

@@ -2,13 +2,17 @@ import type { Metadata } from "next";
 import RhShell from "@/components/compte-admin/RhShell";
 import BudgetDecaissementPanel from "@/components/compte-admin/BudgetDecaissementPanel";
 import PaieFormateursPanel from "@/components/compte-admin/PaieFormateursPanel";
-import ComingSoonPanel from "@/components/compte-admin/ComingSoonPanel";
 
 export const metadata: Metadata = {
   title: "Paie & Commissions — Portail RH — e-Staf",
   robots: { index: false, follow: false },
 };
 
+// Les commissions Connecteurs (récurrente % + démarrage) sont couvertes par
+// BudgetDecaissementPanel -> DetailCommissionsApporteursModal, adossées aux
+// mêmes ContratB2B que la facturation client (voir ProductionService
+// getCommissionsApporteurs/getCommissionsDemarrage) — retrait du panneau
+// "Coming Soon" qui annonçait ces deux points comme non couverts (2026-09-29).
 export default function Page() {
   return (
     <RhShell
@@ -19,13 +23,6 @@ export default function Page() {
       <div className="space-y-6">
         <BudgetDecaissementPanel />
         <PaieFormateursPanel />
-        <ComingSoonPanel
-          title="Commissions partenaires"
-          items={[
-            "Calcul et suivi des commissions versées aux Connecteurs (aucun modèle de deal/commission en base aujourd'hui)",
-            "Liaison comptable avec la facturation client",
-          ]}
-        />
       </div>
     </RhShell>
   );

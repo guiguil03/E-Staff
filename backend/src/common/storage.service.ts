@@ -41,6 +41,13 @@ export class StorageService {
     this.bucket = process.env.AWS_S3_BUCKET_NAME ?? "";
     this.client = new S3Client({
       endpoint: process.env.AWS_ENDPOINT_URL,
+      // Adressage "path-style" (host/bucket/clé) plutôt que "virtual-hosted"
+      // (bucket.host/clé) — nécessaire dès qu'on parle à un endpoint
+      // S3-compatible personnalisé plutôt qu'à AWS lui-même (le SDK envoie
+      // du virtual-hosted par défaut, que le host ne résout pas). Découvert
+      // en essayant de faire tourner les tests E2E contre un faux S3 local
+      // (voir e2e/) — sans ça, tout upload échoue en "NoSuchBucket".
+      forcePathStyle: true,
       region: process.env.AWS_DEFAULT_REGION ?? "auto",
       credentials: {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",

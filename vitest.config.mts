@@ -13,7 +13,9 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./tests/setup.ts"],
-    exclude: ["**/node_modules/**", "**/backend/**"],
+    // e2e/ : specs Playwright (autre test runner, voir playwright.config.ts),
+    // pas des tests unitaires.
+    exclude: ["**/node_modules/**", "**/backend/**", "**/e2e/**"],
     // "vitest run" est déclenché via le script "prebuild" de "npm run
     // build" — s'il hérite un NODE_ENV=production déjà positionné dans
     // l'environnement (CI), React charge son build de prod, qui ne supporte

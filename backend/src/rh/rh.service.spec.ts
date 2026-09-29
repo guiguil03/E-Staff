@@ -915,6 +915,59 @@ describe("RhService", () => {
     });
   });
 
+  describe("getVagues", () => {
+    it("marque cloturee une vague dont dateFin est passée, active sinon, et joint taux de réussite + éloquence", async () => {
+      const cockpit = {
+        getTauxReussiteParGroupe: jest.fn().mockResolvedValue(new Map([["A", 80]])),
+        getEloquenceParGroupe: jest.fn().mockResolvedValue(new Map([["A", 15.5]])),
+      };
+      const serviceAvecCockpit = new RhService(
+        prisma as unknown as PrismaService,
+        cockpit as unknown as CockpitService,
+        {} as unknown as NotationService,
+        email as unknown as EmailService,
+        storage as unknown as StorageService
+      );
+      prisma.groupe.findMany.mockResolvedValue([
+        {
+          id: "g-1",
+          cle: "A",
+          label: "Groupe A",
+          typeCours: "DELF/DALF",
+          dateDebut: new Date("2026-01-01"),
+          dateFin: new Date("2026-02-01"), // passée
+          formateur: { prenom: "Ravaka", nom: "Formateur" },
+          _count: { apprenants: 5 },
+        },
+        {
+          id: "g-2",
+          cle: "B",
+          label: "Groupe B",
+          typeCours: "TEF",
+          dateDebut: new Date("2026-01-01"),
+          dateFin: null,
+          formateur: null,
+          _count: { apprenants: 3 },
+        },
+      ]);
+
+      const result = await serviceAvecCockpit.getVagues();
+
+      expect(result[0]).toMatchObject({
+        cle: "A",
+        statut: "cloturee",
+        tauxReussite: 80,
+        scoreEloquenceMoyen: 15.5,
+      });
+      expect(result[1]).toMatchObject({
+        cle: "B",
+        statut: "active",
+        tauxReussite: 0,
+        scoreEloquenceMoyen: null,
+      });
+    });
+  });
+
   describe("purgeCandidatData", () => {
     function attempt(overrides: Record<string, unknown> = {}) {
       return {

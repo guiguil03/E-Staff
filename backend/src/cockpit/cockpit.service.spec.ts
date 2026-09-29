@@ -177,6 +177,34 @@ describe("CockpitService — scoping par formateur", () => {
     });
   });
 
+  describe("getEloquenceParGroupe", () => {
+    it("moyenne le score posture_eloquence à la séance la plus avancée où les 5 compétences sont notées", async () => {
+      prisma.apprenant.findMany.mockResolvedValue([APPRENANT_A]);
+      prisma.notation.findMany.mockResolvedValue([
+        { apprenantId: "app-1", competence: "comprehension_orale", scoreOn20: 12, seance: { numero: 1 } },
+        { apprenantId: "app-1", competence: "expression_orale", scoreOn20: 12, seance: { numero: 1 } },
+        { apprenantId: "app-1", competence: "comprehension_ecrite", scoreOn20: 12, seance: { numero: 1 } },
+        { apprenantId: "app-1", competence: "expression_ecrite", scoreOn20: 12, seance: { numero: 1 } },
+        { apprenantId: "app-1", competence: "posture_eloquence", scoreOn20: 15, seance: { numero: 1 } },
+      ]);
+
+      const result = await service.getEloquenceParGroupe();
+
+      expect(result.get("A")).toBe(15);
+    });
+
+    it("ignore un apprenant dont aucune séance n'a les 5 compétences notées", async () => {
+      prisma.apprenant.findMany.mockResolvedValue([APPRENANT_A]);
+      prisma.notation.findMany.mockResolvedValue([
+        { apprenantId: "app-1", competence: "posture_eloquence", scoreOn20: 15, seance: { numero: 1 } },
+      ]);
+
+      const result = await service.getEloquenceParGroupe();
+
+      expect(result.has("A")).toBe(false);
+    });
+  });
+
   describe("createDiffusion", () => {
     const formateur = { id: "f-1", matricule: "ETF-FORM-2026-0001", prenom: "Ravaka", nom: "Formateur" };
     const apprenant = { id: "app-1", prenom: "Awa", nom: "Diallo", email: "awa@example.com" };
