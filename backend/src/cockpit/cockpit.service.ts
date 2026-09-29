@@ -11,10 +11,9 @@ import { renderEmailHtml, emailQuote, emailParagraphsFromText } from "../common/
 // convention de "moyenne globale" que l'ancien mock : somme des 5 notes de
 // compétence (/20 chacune) de la séance la plus avancée où les 5 sont
 // notées pour cet apprenant — équivalent à l'ancien `moyenneGlobale`/100.
-// N'inclut PAS les "Alertes Paiements / renouvellements" : aucune donnée
-// d'abonnement/échéance n'existe en base (Apprenant n'a pas ces champs) —
-// nécessite une décision produit sur le modèle de renouvellement avant de
-// pouvoir les brancher, voir la conversation du 2026-08-24.
+// Les Alertes Paiements/Renouvellements sont couvertes séparément par
+// `Apprenant.abonnementExpireAt` (décision produit 2026-08-24) — voir
+// getPaiements/setAbonnementExpireAt plus bas dans ce service.
 const COMPETENCIES = [
   "comprehension_orale",
   "expression_orale",
@@ -273,6 +272,41 @@ export class CockpitService {
     const result = new Map<string, number>();
     for (const [cle, { total, reussis }] of parGroupe) {
       result.set(cle, total > 0 ? Math.round((reussis / total) * 100) : 0);
+    }
+    return result;
+  }
+
+  // Score "posture & éloquence" moyen par groupe — /20, même convention que
+  // moyenneGlobale (retenu à la séance la plus avancée où les 5 compétences
+  // sont notées pour l'apprenant). Sert au comparatif "Historique des
+  // vagues" (RhService.getVagues) — null pour un groupe sans aucun
+  // apprenant noté, plutôt qu'un 0 qui laisserait croire à un score réel.
+  async getEloquenceParGroupe(): Promise<Map<string, number | null>> {
+    const { apprenants, notations } = await this.loadRaw();
+    const scoresParApprenant = this.buildScoresParApprenant(notations);
+
+    const parGroupe = new Map<string, number[]>();
+    for (const a of apprenants) {
+      const bySeance = scoresParApprenant.get(a.id);
+      let best: number | null = null;
+      let bestNumero = -1;
+      if (bySeance) {
+        for (const [numero, scores] of bySeance) {
+          if (numero > bestNumero && COMPETENCIES.every((c) => scores[c] !== undefined)) {
+            bestNumero = numero;
+            best = scores.posture_eloquence;
+          }
+        }
+      }
+      if (best === null) continue;
+      const scores = parGroupe.get(a.groupe.cle) ?? [];
+      scores.push(best);
+      parGroupe.set(a.groupe.cle, scores);
+    }
+
+    const result = new Map<string, number | null>();
+    for (const [cle, scores] of parGroupe) {
+      result.set(cle, Math.round((scores.reduce((s, v) => s + v, 0) / scores.length) * 100) / 100);
     }
     return result;
   }

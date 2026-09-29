@@ -76,6 +76,34 @@ jobs:
           # s'instancie sans erreur.
           DATABASE_URL: postgresql://user:password@localhost:5432/ci
 
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    # Pas de bloc `services:` : e2e/global-setup.ts démarre lui-même
+    # Postgres et MinIO via Docker (disponible nativement sur ce runner) s'ils
+    # ne tournent pas déjà — jamais la base/bucket Railway de dev/prod (voir
+    # backend/.env). Même mécanisme qu'en local, voir ce fichier pour le détail.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E
+        run: npm run test:e2e
+
   deploy-vercel:
     name: Deploy to Vercel (production)
     runs-on: ubuntu-latest

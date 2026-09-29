@@ -525,12 +525,14 @@ export class RhService {
   // CockpitService.getTauxReussiteParGroupe). Remplace la simple liste de
   // chips A-F par une vraie table de pilotage.
   async getVagues() {
-    const [groupes, tauxReussiteParGroupe] = await Promise.all([
+    const now = new Date();
+    const [groupes, tauxReussiteParGroupe, eloquenceParGroupe] = await Promise.all([
       this.prisma.groupe.findMany({
         include: { formateur: true, _count: { select: { apprenants: true } } },
         orderBy: { cle: 'asc' },
       }),
       this.cockpit.getTauxReussiteParGroupe(),
+      this.cockpit.getEloquenceParGroupe(),
     ]);
 
     return groupes.map((g) => ({
@@ -540,9 +542,14 @@ export class RhService {
       typeCours: g.typeCours,
       dateDebut: g.dateDebut,
       dateFin: g.dateFin,
+      // "cloturee" dès que dateFin est passée — même convention que le
+      // commentaire du modèle Groupe (schema.prisma). Une vague sans dateFin
+      // reste "active" par défaut (pas de clôture implicite).
+      statut: g.dateFin && g.dateFin < now ? ('cloturee' as const) : ('active' as const),
       formateurNom: g.formateur ? `${g.formateur.prenom} ${g.formateur.nom}` : null,
       apprenantsCount: g._count.apprenants,
       tauxReussite: tauxReussiteParGroupe.get(g.cle) ?? 0,
+      scoreEloquenceMoyen: eloquenceParGroupe.get(g.cle) ?? null,
     }));
   }
 
