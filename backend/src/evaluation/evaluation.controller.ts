@@ -33,6 +33,7 @@ import { RhGuard } from "../common/rh.guard";
 import { StaffGuard } from "../common/staff.guard";
 import { FormateurGuard } from "../common/formateur.guard";
 import { FormateurOuRhGuard } from "../common/formateur-ou-rh.guard";
+import { ApprenantGuard } from "../common/apprenant.guard";
 import { RateLimitGuard } from "../common/rate-limit.guard";
 import { isAudio, isPdf, isVideo } from "../common/file-signature";
 
@@ -428,5 +429,23 @@ export class EvaluationController {
   @Post("contrats/:id/paiement")
   submitPaymentReference(@Param("id") id: string, @Body() dto: SubmitPaymentReferenceDto) {
     return this.service.submitPaymentReference(id, dto);
+  }
+
+  // ---- Compte Apprenant (authentifié) — retrouver son propre contrat -----
+  // Même contrat que ci-dessus, mais sans avoir à ressortir le lien reçu par
+  // e-mail à l'inscription : la session apprenant (ApprenantGuard) suffit.
+
+  @UseGuards(ApprenantGuard)
+  @Get("apprenants/:matricule/contrat")
+  getMyContract(@Param("matricule") matricule: string) {
+    return this.service.getContractForApprenant(matricule);
+  }
+
+  @UseGuards(ApprenantGuard)
+  @Get("apprenants/:matricule/contrat/pdf")
+  async streamMyContractPdf(@Param("matricule") matricule: string, @Res() res: Response) {
+    const { stream, contentType } = await this.service.streamContractPdfForApprenant(matricule);
+    res.set("Content-Type", contentType ?? "application/pdf");
+    stream.pipe(res);
   }
 }

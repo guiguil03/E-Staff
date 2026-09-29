@@ -255,6 +255,46 @@ export class EvaluationService {
     return attempt;
   }
 
+  // Accès authentifié (Compte Apprenant, voir ApprenantGuard) — l'apprenant
+  // retrouve son propre contrat sans le lien reçu par e-mail à l'inscription
+  // (contrairement à getContractInfo/getContractPdfStream ci-dessus, pas de
+  // jeton à vérifier ici : la session fait foi, la tentative est résolue
+  // depuis SON matricule, jamais depuis un id transmis par le client).
+  private async getMyAttemptOrThrow(apprenantMatricule: string) {
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { matricule: apprenantMatricule },
+      include: { evaluationAttempt: true },
+    });
+    if (!apprenant?.evaluationAttempt) {
+      throw new NotFoundException("Aucun contrat associé à ce compte.");
+    }
+    return apprenant.evaluationAttempt;
+  }
+
+  async getContractForApprenant(apprenantMatricule: string) {
+    const attempt = await this.getMyAttemptOrThrow(apprenantMatricule);
+    if (!attempt.contractPdfKey) {
+      throw new NotFoundException("Votre contrat n'est pas encore disponible.");
+    }
+    return {
+      duree: attempt.contractDuree,
+      frais: attempt.contractFrais,
+      conditions: attempt.contractConditions,
+    };
+  }
+
+  async streamContractPdfForApprenant(apprenantMatricule: string) {
+    const attempt = await this.getMyAttemptOrThrow(apprenantMatricule);
+    if (!attempt.contractPdfKey) {
+      throw new NotFoundException("Votre contrat n'est pas encore disponible.");
+    }
+    try {
+      return await this.storage.getObjectStream(attempt.contractPdfKey);
+    } catch {
+      throw new NotFoundException("Fichier de contrat introuvable.");
+    }
+  }
+
 
   // Les 5 blocs construits (1 Lexique, 2 Commentaire Argumentatif, 3 Mises
   // en Situation, 4 Compréhension Orale, 5 Vidéo) sont indépendants et

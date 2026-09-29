@@ -282,6 +282,62 @@ export class NotationService {
     }));
   }
 
+  // ---- Renouvellement déclaratif (voir schema.prisma, Apprenant) --------
+  // Même principe que Registration/EvaluationAttempt : l'apprenant transmet
+  // sa référence de paiement (+ reçu facultatif) ; le formateur reste seul à
+  // fixer la nouvelle échéance après vérification (voir CockpitService.
+  // setAbonnementExpireAt, qui efface ces champs à la confirmation) — ceci
+  // ne fait que le lui signaler avec de quoi vérifier.
+
+  async getRenewalInfo(matricule: string) {
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { matricule },
+      include: { groupe: true },
+    });
+    if (!apprenant) throw new NotFoundException(`Apprenant ${matricule} introuvable.`);
+
+    const tarif = apprenant.groupe.typeCours
+      ? await this.prisma.tarifFormation.findUnique({ where: { typeCours: apprenant.groupe.typeCours } })
+      : null;
+
+    return {
+      abonnementExpireAt: apprenant.abonnementExpireAt,
+      typeCours: apprenant.groupe.typeCours,
+      frais: tarif?.prixFormation ?? null,
+      renewalPaymentReference: apprenant.renewalPaymentReference,
+      renewalRequestedAt: apprenant.renewalRequestedAt,
+      // Coordonnées de paiement affichées telles quelles — même principe
+      // que RegistrationsService.getContractInfo (texte libre en env, vide
+      // = bloc masqué côté front).
+      paymentInfo: {
+        mobileMoneyMg: process.env.PAYMENT_INFO_MOBILE_MONEY_MG || null,
+        ribLocal: process.env.PAYMENT_INFO_RIB_LOCAL || null,
+        international: process.env.PAYMENT_INFO_INTERNATIONAL || null,
+      },
+    };
+  }
+
+  async submitRenewalPayment(matricule: string, reference: string, file?: Express.Multer.File) {
+    const apprenant = await this.findApprenantOrThrow(matricule);
+
+    let receiptKey = apprenant.renewalPaymentReceiptKey;
+    if (file) {
+      const extension = path.extname(file.originalname) || "";
+      receiptKey = `apprenants/${apprenant.id}/renouvellement-recu${extension}`;
+      await this.storage.uploadBuffer(receiptKey, file.buffer, file.mimetype || "application/octet-stream");
+    }
+
+    return this.prisma.apprenant.update({
+      where: { matricule },
+      data: {
+        renewalPaymentReference: reference,
+        renewalPaymentReceiptKey: receiptKey,
+        renewalRequestedAt: new Date(),
+      },
+      select: { renewalPaymentReference: true, renewalRequestedAt: true },
+    });
+  }
+
   // Annonces reçues par l'apprenant — diffusées par son formateur (voir
   // CockpitService.createDiffusion), soit ciblées sur son groupe précis,
   // soit sur "tous les groupes" de ce formateur (groupeId null).

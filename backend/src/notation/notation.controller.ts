@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -17,13 +18,20 @@ import { ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { FormateurGuard } from "../common/formateur.guard";
 import { ApprenantGuard } from "../common/apprenant.guard";
+import { RateLimitGuard } from "../common/rate-limit.guard";
+import { isImage, isPdf } from "../common/file-signature";
 import { NotationService } from "./notation.service";
 import { GradeNotationDto } from "./dto/grade-notation.dto";
+import { SubmitRenewalPaymentDto } from "./dto/submit-renewal-payment.dto";
 
 // Devoirs apprenant : vidéo possible pour l'oral (exposé), d'où une limite
 // large — Multer bufférise en mémoire, sans limite un upload serait sans
 // borne (même logique que evaluation.controller.ts).
 const MAX_DEVOIR_UPLOAD_BYTES = 200 * 1024 * 1024; // 200 Mo
+// Reçu de paiement du renouvellement — mêmes limites que
+// registrations.controller.ts (reçu de paiement de l'inscription).
+const MAX_RECEIPT_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
+const RECEIPT_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
 
 @ApiTags("Notation")
 @Controller()
@@ -134,5 +142,34 @@ export class NotationController {
     @UploadedFile() file: Express.Multer.File
   ) {
     return this.service.uploadDevoir(matricule, numero, competence, file);
+  }
+
+  // ---- Renouvellement déclaratif — voir NotationService pour le détail --
+
+  @UseGuards(ApprenantGuard)
+  @Get("apprenants/:matricule/renouvellement")
+  getRenewalInfo(@Param("matricule") matricule: string) {
+    return this.service.getRenewalInfo(matricule);
+  }
+
+  @UseGuards(ApprenantGuard, RateLimitGuard("apprenant-renouvellement-paiement", 10))
+  @Post("apprenants/:matricule/renouvellement")
+  @UseInterceptors(
+    FileInterceptor("recu", {
+      limits: { fileSize: MAX_RECEIPT_UPLOAD_BYTES },
+      fileFilter: (_req, file, cb) => {
+        cb(null, RECEIPT_MIME_TYPES.includes(file.mimetype));
+      },
+    })
+  )
+  async submitRenewalPayment(
+    @Param("matricule") matricule: string,
+    @Body() dto: SubmitRenewalPaymentDto,
+    @UploadedFile() file?: Express.Multer.File
+  ) {
+    if (file && !isPdf(file.buffer) && !isImage(file.buffer)) {
+      throw new BadRequestException("Le fichier ne semble pas être un PDF ou une image valide.");
+    }
+    return this.service.submitRenewalPayment(matricule, dto.reference, file);
   }
 }

@@ -142,7 +142,11 @@ export default function MesNotationsTable({ className }: { className?: string } 
 
   return (
     <Reveal className={className}>
-      <div ref={tableauRef} className="h-full rounded border border-white/10 bg-obsidianCard p-6">
+      <div
+        ref={tableauRef}
+        id="mes-notations"
+        className="h-full rounded border border-white/10 bg-obsidianCard p-6"
+      >
         <h3 className="font-display text-base font-semibold text-white">
           Mes séances &amp; notation
         </h3>

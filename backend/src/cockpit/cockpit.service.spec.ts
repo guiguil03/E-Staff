@@ -255,4 +255,25 @@ describe("CockpitService — paiements et abonnements limités aux groupes du fo
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.apprenant.update).not.toHaveBeenCalled();
   });
+
+  it("efface la demande de renouvellement en attente en même temps que la nouvelle échéance", async () => {
+    const prisma = makePrismaMock();
+    prisma.apprenant.findUnique.mockResolvedValue(APPRENANT_A);
+    prisma.apprenant.update.mockResolvedValue({ ...APPRENANT_A, groupe: GROUPE_A });
+    const service = new CockpitService(prisma as unknown as PrismaService, {} as never, {} as never);
+
+    const expireAt = new Date("2027-01-01");
+    await service.setAbonnementExpireAt(APPRENANT_A.matricule, expireAt);
+
+    expect(prisma.apprenant.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          abonnementExpireAt: expireAt,
+          renewalPaymentReference: null,
+          renewalPaymentReceiptKey: null,
+          renewalRequestedAt: null,
+        },
+      })
+    );
+  });
 });

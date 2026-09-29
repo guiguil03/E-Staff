@@ -23,7 +23,7 @@ function makePrismaMock() {
     videoResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     essayResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     ecritOuvertResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
-    apprenant: { findMany: jest.fn(), create: jest.fn() },
+    apprenant: { findMany: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
     groupe: { findUnique: jest.fn() },
     formateur: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
   };
@@ -475,6 +475,55 @@ describe("EvaluationService", () => {
           paymentConfirmedAt: expect.any(Date),
         },
       });
+    });
+  });
+
+  describe("getContractForApprenant / streamContractPdfForApprenant", () => {
+    it("lève NotFoundException si l'apprenant n'a pas de tentative d'évaluation associée", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({ evaluationAttempt: null });
+      await expect(service.getContractForApprenant("ETF-2026-0001")).rejects.toThrow(
+        NotFoundException
+      );
+    });
+
+    it("lève NotFoundException si le contrat n'a pas encore été envoyé (pas de contractPdfKey)", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({
+        evaluationAttempt: baseAttempt({ contractPdfKey: null }),
+      });
+      await expect(service.getContractForApprenant("ETF-2026-0001")).rejects.toThrow(
+        NotFoundException
+      );
+    });
+
+    it("renvoie durée/frais/conditions pour l'apprenant propriétaire de la tentative", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({
+        evaluationAttempt: baseAttempt({
+          contractPdfKey: "evaluations/attempt-1/contrat.pdf",
+          contractDuree: "6 semaines",
+          contractFrais: "120 000 Ar",
+          contractConditions: "Paiement intégral avant le début.",
+        }),
+      });
+
+      const result = await service.getContractForApprenant("ETF-2026-0001");
+
+      expect(result).toEqual({
+        duree: "6 semaines",
+        frais: "120 000 Ar",
+        conditions: "Paiement intégral avant le début.",
+      });
+    });
+
+    it("streame le PDF stocké pour la tentative de l'apprenant", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({
+        evaluationAttempt: baseAttempt({ contractPdfKey: "evaluations/attempt-1/contrat.pdf" }),
+      });
+      storage.getObjectStream.mockResolvedValue({ stream: "fake-stream", contentType: "application/pdf" });
+
+      const result = await service.streamContractPdfForApprenant("ETF-2026-0001");
+
+      expect(storage.getObjectStream).toHaveBeenCalledWith("evaluations/attempt-1/contrat.pdf");
+      expect(result).toEqual({ stream: "fake-stream", contentType: "application/pdf" });
     });
   });
 });
