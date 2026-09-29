@@ -18,7 +18,15 @@ async function bootstrap() {
   // variable d'env est vide. Voir all-exceptions.filter.ts pour l'endroit
   // où les erreurs 5xx sont effectivement remontées.
   if (process.env.SENTRY_DSN) {
-    Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0.1 });
+    Sentry.init({
+      dsn: process.env.SENTRY_DSN,
+      // Sans ça, toutes les erreurs remontent avec le même environnement
+      // indifférencié — impossible de distinguer une erreur de dev locale
+      // d'une vraie panne en prod (le front, lui, le fait déjà — voir
+      // lib/suiviErreurs.ts).
+      environment: process.env.NODE_ENV ?? "development",
+      tracesSampleRate: 0.1,
+    });
   }
 
   // Erreur explicite au démarrage plutôt qu'un JWT_SECRET manquant
