@@ -6,6 +6,11 @@ describe("DailyService — enregistrement cloud", () => {
 
   beforeEach(() => {
     process.env.DAILY_API_KEY = "test-key";
+    // Nettoyé aussi ici (pas seulement en afterEach) : sur Railway, le build
+    // tourne dans l'environnement du service où DAILY_RECORDING_ENABLED peut
+    // valoir "true" en ambiant, ce qui ferait échouer le tout premier test
+    // de ce fichier avant même qu'un afterEach n'ait pu le nettoyer.
+    delete process.env.DAILY_RECORDING_ENABLED;
     fetchMock = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ name: "seance-1", url: "https://x.daily.co/seance-1", token: "tok" }),
