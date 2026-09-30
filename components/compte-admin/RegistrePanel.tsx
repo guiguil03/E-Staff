@@ -46,6 +46,7 @@ export default function RegistrePanel() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyCreationForm);
   const [status, setStatus] = useState<"idle" | "saving" | "error" | "success">("idle");
+  const [openingViewAsMatricule, setOpeningViewAsMatricule] = useState<string | null>(null);
 
   function refreshRows() {
     apiGet<RegistreRow[]>("/rh/registre", adminHeaders())
@@ -80,6 +81,26 @@ export default function RegistrePanel() {
       refreshRows();
     } catch {
       setStatus("error");
+    }
+  }
+
+  // Même mécanisme que FormateursPanel.seConnecterEnTantQue : un jeton
+  // opaque à usage unique échangé contre une vraie session dans le nouvel
+  // onglet (voir AuthController.createApprenantViewAsToken), sans jamais
+  // connaître ni transmettre le mot de passe de l'apprenant. Ici en ligne
+  // dans le Registre plutôt que sur la seule page Casier, pour être aussi
+  // immédiatement visible que l'équivalent formateur.
+  async function seConnecterEnTantQue(matricule: string) {
+    setOpeningViewAsMatricule(matricule);
+    try {
+      const { token } = await apiPostAuthed<{ token: string }>(
+        `/auth/view-as/${matricule}`,
+        {},
+        adminHeaders()
+      );
+      window.open(`/compte/apprenant?viewAsToken=${token}`, "_blank");
+    } finally {
+      setOpeningViewAsMatricule(null);
     }
   }
 
@@ -208,7 +229,7 @@ export default function RegistrePanel() {
 
         {Array.isArray(rows) && (
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[1400px] border-collapse text-left">
+            <table className="w-full min-w-[1600px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-white/10 font-mono text-[11px] uppercase tracking-widest text-white/40">
                   <th className="py-2 pr-4">Matricule</th>
@@ -222,6 +243,7 @@ export default function RegistrePanel() {
                   <th className="py-2 pr-4">Formateur assigné</th>
                   <th className="py-2 pr-4">Date d&apos;entrée en prod</th>
                   <th className="py-2 pr-4">Dernière mission (Client)</th>
+                  <th className="py-2 pr-4">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -266,6 +288,16 @@ export default function RegistrePanel() {
                     </td>
                     <td className="py-2.5 pr-4 font-mono text-xs text-white/40">
                       {r.derniereMissionClient ?? "—"}
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      <button
+                        onClick={() => seConnecterEnTantQue(r.matricule)}
+                        disabled={openingViewAsMatricule === r.matricule}
+                        title="Ouvre son tableau de bord dans un nouvel onglet, sans son mot de passe"
+                        className="whitespace-nowrap rounded border border-accent/40 px-2.5 py-1 font-mono text-[11px] uppercase tracking-widest text-accent hover:bg-accent/10 disabled:opacity-50"
+                      >
+                        {openingViewAsMatricule === r.matricule ? "Ouverture..." : "Se connecter en tant que"}
+                      </button>
                     </td>
                   </tr>
                 ))}

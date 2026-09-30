@@ -117,6 +117,8 @@ export default function CoordonneesPanel() {
                       {r.cvDisponible ? (
                         <a
                           href={`${API_URL}/evaluation/candidats/${r.candidatId}/cv`}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className="font-mono text-xs text-accent hover:underline"
                         >
                           Voir le CV
@@ -132,6 +134,8 @@ export default function CoordonneesPanel() {
                             <a
                               key={id}
                               href={`${API_URL}/evaluation/video-responses/${id}/video`}
+                              target="_blank"
+                              rel="noopener noreferrer"
                               className="font-mono text-xs text-accent hover:underline"
                             >
                               Vidéo {i + 1}

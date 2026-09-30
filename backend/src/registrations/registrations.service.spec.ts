@@ -83,6 +83,12 @@ describe('RegistrationsService — paiement', () => {
       await service.create(base);
       expect(offresEmploi.verifierCandidature).not.toHaveBeenCalled();
     });
+
+    it('rejette une inscription si l’e-mail est déjà utilisé', async () => {
+      prisma.registration.findUnique.mockResolvedValue({ id: 'reg-existant' });
+      await expect(service.create(base)).rejects.toThrow(BadRequestException);
+      expect(prisma.registration.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('createPaymentLinkPublic', () => {

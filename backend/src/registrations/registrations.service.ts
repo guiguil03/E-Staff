@@ -39,6 +39,13 @@ export class RegistrationsService {
   ) {}
 
   async create(dto: CreateRegistrationDto) {
+    const existing = await this.prisma.registration.findFirst({
+      where: { email: { equals: dto.email, mode: 'insensitive' } },
+    });
+    if (existing) {
+      throw new BadRequestException('Cette adresse e-mail est déjà utilisée pour une inscription.');
+    }
+
     // Candidature sur une offre précise : l'offre doit exister, être
     // publiée et encore ouverte (sauf inscription en liste d'attente).
     if (dto.offreEmploiId) {

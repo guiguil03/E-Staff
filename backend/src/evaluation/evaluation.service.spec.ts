@@ -373,6 +373,57 @@ describe("EvaluationService", () => {
     });
   });
 
+  describe("validateContract", () => {
+    const dto = { duree: "6 mois", frais: "500 000 Ar", conditions: "RAS" };
+
+    it("rejette si le CV du candidat n'a pas été déposé", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({
+          status: "corrige",
+          tier: "placement_direct",
+          candidat: { ...CANDIDAT, cvKey: null },
+          videoResponses: new Array(2).fill({}),
+        })
+      );
+      await expect(service.validateContract("attempt-1", dto)).rejects.toThrow(BadRequestException);
+      expect(storage.uploadBuffer).not.toHaveBeenCalled();
+    });
+
+    it("rejette si les vidéos de test sont incomplètes", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({
+          status: "corrige",
+          tier: "placement_direct",
+          candidat: { ...CANDIDAT, cvKey: "candidats/cand-1/cv.pdf" },
+          videoResponses: [{}],
+        })
+      );
+      await expect(service.validateContract("attempt-1", dto)).rejects.toThrow(BadRequestException);
+      expect(storage.uploadBuffer).not.toHaveBeenCalled();
+    });
+
+    it("valide le contrat quand le CV et les 2 vidéos sont présents", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({
+          status: "corrige",
+          tier: "placement_direct",
+          totalScore: 82,
+          candidat: { ...CANDIDAT, cvKey: "candidats/cand-1/cv.pdf" },
+          videoResponses: new Array(2).fill({}),
+        })
+      );
+      prisma.evaluationAttempt.update.mockResolvedValue({});
+
+      await service.validateContract("attempt-1", dto);
+
+      expect(storage.uploadBuffer).toHaveBeenCalledTimes(1);
+      expect(prisma.evaluationAttempt.update).toHaveBeenCalledWith({
+        where: { id: "attempt-1" },
+        data: expect.objectContaining({ status: "valide_pret_envoi" }),
+      });
+    });
+  });
+
   describe("confirmPayment", () => {
     it("rejette si la tentative n'est pas en_attente_paiement", async () => {
       prisma.evaluationAttempt.findUnique.mockResolvedValue(baseAttempt({ status: "corrige" }));

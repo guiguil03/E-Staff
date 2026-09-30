@@ -947,6 +947,16 @@ export class EvaluationService {
         "Cette tentative n'est pas modifiable (correction non terminée, ou paiement déjà en cours)."
       );
     }
+    if (!attempt.candidat.cvKey) {
+      throw new BadRequestException(
+        "Impossible de valider : le CV du candidat n'a pas été déposé."
+      );
+    }
+    if (attempt.videoResponses.length < REQUIRED_VIDEO_COUNT) {
+      throw new BadRequestException(
+        "Impossible de valider : la vidéo de test du candidat est incomplète."
+      );
+    }
 
     const pdf = await generateContractPdf({
       prenom: attempt.candidat.firstName,

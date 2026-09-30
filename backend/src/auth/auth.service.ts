@@ -176,10 +176,8 @@ export class AuthService {
   // "Se connecter en tant que" — la RH consulte déjà le Casier Apprenant en
   // lecture seule (RhService.getApprenantCasier) ; ce jeton permet en plus
   // d'ouvrir le vrai tableau de bord de l'apprenant tel qu'il le voit, sans
-  // connaître ni transmettre son mot de passe. Pas d'équivalent formateur
-  // pour l'instant (pas demandé) — les formateurs ont bien des comptes
-  // individuels depuis la migration formateur_auth, seul ce raccourci RH
-  // manque encore.
+  // connaître ni transmettre son mot de passe. Voir createFormateurViewAsToken
+  // ci-dessous pour l'équivalent formateur.
   async createApprenantViewAsToken(matricule: string) {
     const apprenant = await this.prisma.apprenant.findUnique({ where: { matricule } });
     if (!apprenant) throw new NotFoundException("Apprenant introuvable.");
