@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 
 export default function ConditionsGeneralesPage() {
   return (
-    <div className="min-h-screen bg-obsidian px-4 py-16 sm:px-6 sm:py-20">
+    <div className="min-h-screen bg-obsidian px-3 py-16 sm:px-6 sm:py-20">
       <div className="mx-auto max-w-2xl">
         <Reveal>
           <p className="font-mono text-xs uppercase tracking-widest text-accent">
