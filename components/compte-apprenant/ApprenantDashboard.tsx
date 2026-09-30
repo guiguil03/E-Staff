@@ -149,6 +149,7 @@ export default function ApprenantDashboard() {
             />
             <QuickActions prochaineSeance={data.prochaineSeance} />
             <MonDossier
+              matricule={matricule ?? ""}
               dateInscription={data.dateInscription}
               seancesRestantes={data.seancesTotal - data.seancesEffectuees}
               seancesTotal={data.seancesTotal}

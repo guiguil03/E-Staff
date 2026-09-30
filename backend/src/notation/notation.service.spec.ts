@@ -8,11 +8,12 @@ function makePrismaMock() {
   return {
     groupe: { findUnique: jest.fn() },
     seance: { findUnique: jest.fn(), findMany: jest.fn() },
-    apprenant: { findUnique: jest.fn() },
+    apprenant: { findUnique: jest.fn(), update: jest.fn() },
     formateur: { findUnique: jest.fn() },
     notation: { findUnique: jest.fn(), findMany: jest.fn(), upsert: jest.fn() },
     presence: { findMany: jest.fn() },
     diffusion: { findMany: jest.fn() },
+    tarifFormation: { findUnique: jest.fn() },
   };
 }
 
@@ -754,6 +755,93 @@ describe("NotationService", () => {
       prisma.apprenant.findUnique.mockResolvedValue(null);
 
       await expect(service.listAnnoncesForApprenant("inconnu")).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe("getRenewalInfo", () => {
+    it("lève NotFoundException si l'apprenant n'existe pas", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+      await expect(service.getRenewalInfo("inconnu")).rejects.toThrow(NotFoundException);
+    });
+
+    it("renvoie le tarif du type de cours du groupe, et null si aucun tarif fixé", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({
+        ...APPRENANT,
+        abonnementExpireAt: new Date("2026-12-01"),
+        renewalPaymentReference: null,
+        renewalRequestedAt: null,
+        groupe: { ...GROUPE, typeCours: "DELF/DALF" },
+      });
+      prisma.tarifFormation.findUnique.mockResolvedValue({ typeCours: "DELF/DALF", prixFormation: 120000 });
+
+      const result = await service.getRenewalInfo(APPRENANT.matricule);
+
+      expect(prisma.tarifFormation.findUnique).toHaveBeenCalledWith({ where: { typeCours: "DELF/DALF" } });
+      expect(result.frais).toBe(120000);
+      expect(result.typeCours).toBe("DELF/DALF");
+    });
+
+    it("ne cherche pas de tarif si le groupe n'a pas de type de cours renseigné", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({
+        ...APPRENANT,
+        abonnementExpireAt: null,
+        renewalPaymentReference: null,
+        renewalRequestedAt: null,
+        groupe: { ...GROUPE, typeCours: null },
+      });
+
+      const result = await service.getRenewalInfo(APPRENANT.matricule);
+
+      expect(prisma.tarifFormation.findUnique).not.toHaveBeenCalled();
+      expect(result.frais).toBeNull();
+    });
+  });
+
+  describe("submitRenewalPayment", () => {
+    it("enregistre la référence et l'horodatage, sans reçu si aucun fichier fourni", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
+      prisma.apprenant.update.mockResolvedValue({
+        renewalPaymentReference: "MVOLA-123",
+        renewalRequestedAt: new Date(),
+      });
+
+      await service.submitRenewalPayment(APPRENANT.matricule, "MVOLA-123");
+
+      expect(storage.uploadBuffer).not.toHaveBeenCalled();
+      expect(prisma.apprenant.update).toHaveBeenCalledWith({
+        where: { matricule: APPRENANT.matricule },
+        data: {
+          renewalPaymentReference: "MVOLA-123",
+          renewalPaymentReceiptKey: undefined,
+          renewalRequestedAt: expect.any(Date),
+        },
+        select: { renewalPaymentReference: true, renewalRequestedAt: true },
+      });
+    });
+
+    it("téléverse le reçu et enregistre sa clé quand un fichier est fourni", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
+      prisma.apprenant.update.mockResolvedValue({});
+      const file = {
+        originalname: "recu.pdf",
+        buffer: Buffer.from("fake-pdf"),
+        mimetype: "application/pdf",
+      } as Express.Multer.File;
+
+      await service.submitRenewalPayment(APPRENANT.matricule, "MVOLA-123", file);
+
+      const expectedKey = `apprenants/${APPRENANT.id}/renouvellement-recu.pdf`;
+      expect(storage.uploadBuffer).toHaveBeenCalledWith(expectedKey, file.buffer, "application/pdf");
+      expect(prisma.apprenant.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ renewalPaymentReceiptKey: expectedKey }) })
+      );
+    });
+
+    it("lève NotFoundException si l'apprenant n'existe pas", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+      await expect(service.submitRenewalPayment("inconnu", "MVOLA-123")).rejects.toThrow(
+        NotFoundException
+      );
     });
   });
 });

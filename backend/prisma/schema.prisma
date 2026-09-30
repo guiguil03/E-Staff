@@ -700,6 +700,16 @@ model Apprenant {
   // statut inventé.
   abonnementExpireAt DateTime?
 
+  // Renouvellement déclaratif (Compte Apprenant, 2026-09-29) — même
+  // principe que Registration/EvaluationAttempt : l'apprenant transmet
+  // lui-même sa référence de paiement (+ reçu facultatif), le formateur
+  // vérifie et fixe la nouvelle échéance (voir CockpitService.
+  // setAbonnementExpireAt, qui efface ces 3 champs à la confirmation — pas
+  // un historique, juste "une demande en attente" à la fois).
+  renewalPaymentReference  String?
+  renewalPaymentReceiptKey String?
+  renewalRequestedAt       DateTime?
+
   groupeId String
   groupe   Groupe @relation(fields: [groupeId], references: [id])
 

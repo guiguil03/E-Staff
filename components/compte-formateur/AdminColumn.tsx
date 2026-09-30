@@ -28,6 +28,30 @@ interface GroupeOption {
   apprenantsCount: number;
 }
 
+// Échappe pour CSV (RFC 4180) : entoure de guillemets dès qu'une virgule,
+// un guillemet ou un retour à la ligne est présent, double les guillemets
+// internes.
+function csvField(value: string | number): string {
+  const s = String(value);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Export local — les données sont déjà en mémoire (même liste que la carte
+// Vivier C1), pas besoin d'un aller-retour serveur pour un simple CSV.
+function exportVivierCsv(vivier: VivierApprenantApi[]) {
+  const header = ["Matricule", "Prénom", "Nom", "Groupe", "Moyenne globale /100"];
+  const rows = vivier.map((a) => [a.matricule, a.prenom, a.nom, a.groupeCle, a.moyenneGlobale]);
+  const csv = [header, ...rows].map((row) => row.map(csvField).join(",")).join("\r\n");
+
+  const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `vivier-c1-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function formateurHeaders(): HeadersInit {
   const matricule =
     typeof window !== "undefined" ? sessionStorage.getItem(ACCOUNT_MATRICULE_KEY) : null;
@@ -251,12 +275,14 @@ export function VivierC1Card({ onSelectApprenant }: ApprenantPickerProps) {
                 )}
               </ul>
             )}
-            <Button variant="ghostDark" className="mt-3" disabled>
+            <Button
+              variant="ghostDark"
+              className="mt-3"
+              onClick={() => exportVivierCsv(Array.isArray(vivier) ? vivier : [])}
+              disabled={!Array.isArray(vivier) || vivier.length === 0}
+            >
               Exporter le vivier
             </Button>
-            <p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-white/30">
-              Bientôt disponible
-            </p>
           </>
         )}
       </div>

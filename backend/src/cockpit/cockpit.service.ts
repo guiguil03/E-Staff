@@ -563,6 +563,11 @@ export class CockpitService {
       nom: a.nom,
       groupeCle: a.groupe.cle,
       abonnementExpireAt: a.abonnementExpireAt,
+      // Renouvellement déclaratif soumis par l'apprenant (voir
+      // NotationService.submitRenewalPayment) — à vérifier avant de
+      // confirmer la nouvelle échéance ci-dessous.
+      renewalPaymentReference: a.renewalPaymentReference,
+      renewalRequestedAt: a.renewalRequestedAt,
     }));
   }
 
@@ -577,7 +582,16 @@ export class CockpitService {
     }
     const updated = await this.prisma.apprenant.update({
       where: { matricule },
-      data: { abonnementExpireAt: expireAt },
+      data: {
+        abonnementExpireAt: expireAt,
+        // Fixer une échéance VAUT confirmation de la demande de
+        // renouvellement en attente, s'il y en avait une — pas un
+        // historique à conserver (voir schema.prisma), juste "une demande à
+        // la fois".
+        renewalPaymentReference: null,
+        renewalPaymentReceiptKey: null,
+        renewalRequestedAt: null,
+      },
       include: { groupe: true },
     });
     return {
