@@ -151,6 +151,15 @@ export class EvaluationController {
     stream.pipe(res);
   }
 
+  // Avancement public d'une tentative (indicateurs seulement) : permet au
+  // candidat de reprendre un test commencé. L'identifiant de tentative joue
+  // le rôle de jeton, comme pour les routes de dépôt ci-dessous.
+  @UseGuards(RateLimitGuard("evaluation-progress", 60))
+  @Get("attempts/:id/progress")
+  getAttemptProgress(@Param("id") id: string) {
+    return this.service.getAttemptProgress(id);
+  }
+
   @UseGuards(RateLimitGuard("evaluation-submit", 10))
   @Post("attempts/:id/submit")
   submitAnswers(@Param("id") id: string, @Body() dto: SubmitAnswersDto) {

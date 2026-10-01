@@ -18,7 +18,9 @@ function makePrismaMock() {
       updateMany: jest.fn(),
       findMany: jest.fn(),
       count: jest.fn(),
+      create: jest.fn(),
     },
+    candidat: { create: jest.fn() },
     situationResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     videoResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     essayResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
@@ -93,6 +95,83 @@ describe("EvaluationService", () => {
       storage as unknown as StorageService
     );
     delete process.env.RH_NOTIFICATION_EMAIL;
+  });
+
+  describe("createCandidat — reprise d'un test en cours", () => {
+    const dto = { firstName: "Awa", lastName: "Diallo", email: "Awa@Example.com", phone: "+261 34 12 345 67" };
+
+    it("reprend la tentative en cours quand l'e-mail ET le téléphone correspondent", async () => {
+      prisma.evaluationAttempt.findMany.mockResolvedValue([
+        { id: "attempt-9", candidatId: "cand-9", candidat: { phone: "034 12 345 67" } },
+      ]);
+
+      const result = await service.createCandidat(dto);
+
+      expect(result).toEqual({ candidatId: "cand-9", attemptId: "attempt-9", resumed: true });
+      expect(prisma.candidat.create).not.toHaveBeenCalled();
+      expect(prisma.evaluationAttempt.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ status: "en_cours" }),
+        })
+      );
+    });
+
+    it("ne reprend pas la tentative d'un autre téléphone, même avec le même e-mail", async () => {
+      prisma.evaluationAttempt.findMany.mockResolvedValue([
+        { id: "attempt-9", candidatId: "cand-9", candidat: { phone: "032 99 888 77" } },
+      ]);
+      prisma.candidat.create.mockResolvedValue({ id: "cand-10" });
+      prisma.evaluationAttempt.create.mockResolvedValue({ id: "attempt-10" });
+
+      const result = await service.createCandidat(dto);
+
+      expect(result).toEqual({ candidatId: "cand-10", attemptId: "attempt-10", resumed: false });
+    });
+
+    it("crée un nouveau candidat quand aucune tentative n'est en cours", async () => {
+      prisma.evaluationAttempt.findMany.mockResolvedValue([]);
+      prisma.candidat.create.mockResolvedValue({ id: "cand-11" });
+      prisma.evaluationAttempt.create.mockResolvedValue({ id: "attempt-11" });
+
+      const result = await service.createCandidat(dto);
+
+      expect(result.resumed).toBe(false);
+      expect(prisma.candidat.create).toHaveBeenCalledWith({ data: dto });
+    });
+  });
+
+  describe("getAttemptProgress", () => {
+    it("indique les blocs déjà faits, sans exposer les réponses", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({
+          lexiqueAnswers: "{}",
+          ecritOuvertResponse: { id: "eo-1" },
+          situationResponses: [{ situationIndex: 2 }, { situationIndex: 5 }],
+          videoResponses: [{ taskIndex: 1 }],
+        })
+      );
+
+      const p = await service.getAttemptProgress("attempt-1");
+
+      expect(p).toEqual({
+        status: "en_cours",
+        lexique: true,
+        oral: false,
+        essay: false,
+        situationIndexes: [2, 5],
+        videoTaskIndexes: [1],
+        requiredSituations: 5,
+        requiredVideos: 2,
+      });
+    });
+
+    it("le Bloc 1 n'est pas fait tant que la partie ouverte manque", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(baseAttempt({ lexiqueAnswers: "{}" }));
+
+      const p = await service.getAttemptProgress("attempt-1");
+
+      expect(p.lexique).toBe(false);
+    });
   });
 
   describe("submitAnswers + finalisation automatique", () => {
