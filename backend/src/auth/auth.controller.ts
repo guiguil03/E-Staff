@@ -24,6 +24,7 @@ import { recordFailure, recordSuccess, remainingLockoutSeconds } from "../common
 import { consumeViewAsToken } from "../common/view-as-token";
 import {
   clearSessionCookie,
+  setViewAsSessionCookie,
   identifiantPartage,
   identifiantPartageAutorise,
   readSession,
@@ -191,7 +192,7 @@ export class AuthController {
     // titre qu'un vrai login — sans ça, les routes désormais gardées par
     // FormateurGuard/ApprenantGuard resteraient inaccessibles depuis une
     // session "se connecter en tant que".
-    setSessionCookie(response, {
+    setViewAsSessionCookie(response, {
       matricule: result.matricule,
       role: result.role as SessionRole,
     });
