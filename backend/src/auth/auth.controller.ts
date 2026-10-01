@@ -174,26 +174,9 @@ export class AuthController {
     return this.authService.resetPassword(dto);
   }
 
-  // "Se connecter en tant que" (RH -> compte apprenant) — voir
-  // AuthService.createApprenantViewAsToken. Appelé depuis le Casier
-  // Apprenant (page RH) — génération réservée à RhGuard ; la consommation
-  // ci-dessous reste publique (c'est le nouvel onglet, sans session RH,
-  // qui l'appelle).
-  @UseGuards(RhGuard)
-  @Post("view-as/:matricule")
-  createViewAs(@Param("matricule") matricule: string) {
-    return this.authService.createApprenantViewAsToken(matricule);
-  }
-
-  // "Se connecter en tant que" (RH -> compte formateur) — voir
-  // AuthService.createFormateurViewAsToken. Chemin distinct du précédent
-  // (déjà utilisé par le Casier Apprenant) pour ne rien casser côté front.
-  @UseGuards(AdminGuard)
-  @Post("view-as/formateur/:matricule")
-  createFormateurViewAs(@Param("matricule") matricule: string) {
-    return this.authService.createFormateurViewAsToken(matricule);
-  }
-
+  // Doit rester déclarée AVANT `view-as/:matricule` : Express prend la première
+  // route qui correspond, et "consume" serait sinon lu comme un matricule
+  // (garde RH -> 401 pour le nouvel onglet, le jeton n'étant jamais consommé).
   @UseGuards(RateLimitGuard("auth-view-as-consume", 10))
   @Post("view-as/consume")
   consumeViewAs(
@@ -213,5 +196,25 @@ export class AuthController {
       role: result.role as SessionRole,
     });
     return result;
+  }
+
+  // "Se connecter en tant que" (RH -> compte apprenant) — voir
+  // AuthService.createApprenantViewAsToken. Appelé depuis le Casier
+  // Apprenant (page RH) — génération réservée à RhGuard ; la consommation
+  // ci-dessous reste publique (c'est le nouvel onglet, sans session RH,
+  // qui l'appelle).
+  @UseGuards(RhGuard)
+  @Post("view-as/:matricule")
+  createViewAs(@Param("matricule") matricule: string) {
+    return this.authService.createApprenantViewAsToken(matricule);
+  }
+
+  // "Se connecter en tant que" (RH -> compte formateur) — voir
+  // AuthService.createFormateurViewAsToken. Chemin distinct du précédent
+  // (déjà utilisé par le Casier Apprenant) pour ne rien casser côté front.
+  @UseGuards(AdminGuard)
+  @Post("view-as/formateur/:matricule")
+  createFormateurViewAs(@Param("matricule") matricule: string) {
+    return this.authService.createFormateurViewAsToken(matricule);
   }
 }
