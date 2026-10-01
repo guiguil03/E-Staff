@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
-import { apiGet, apiPostAuthed } from "@/lib/api";
+import { ApiError, apiGet, apiPostAuthed } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 
 interface PendingPayment {
@@ -48,6 +48,7 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [groupeId, setGroupeId] = useState("");
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Candidats dont le contrat est envoyé mais qui n'ont transmis aucune
   // référence (ni via leur page publique, ni en appelant) — repli RH pour
@@ -114,7 +115,8 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
       setStatus("idle");
       refresh();
       onChange?.();
-    } catch {
+    } catch (err) {
+      setErrorMessage(err instanceof ApiError ? err.message : null);
       setStatus("error");
     }
   }
@@ -227,7 +229,7 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
                       </Button>
                     </div>
                     {status === "error" && (
-                      <p className="mt-2 font-mono text-xs text-accent">Erreur — réessayer.</p>
+                      <p className="mt-2 font-mono text-xs text-accent">{errorMessage ?? "Erreur — réessayer."}</p>
                     )}
                   </div>
                 )}
