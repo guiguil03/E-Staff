@@ -143,7 +143,12 @@ export class CockpitController {
     @Headers("x-formateur-matricule") formateurMatricule: string,
     @Body() dto: CreateDiffusionDto
   ) {
-    return this.service.createDiffusion(formateurMatricule, dto.groupeId ?? null, dto.message);
+    return this.service.createDiffusion(
+      formateurMatricule,
+      dto.groupeId ?? null,
+      dto.message,
+      dto.apprenantMatricule ?? null
+    );
   }
 
   @Get("diffusions")

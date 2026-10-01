@@ -35,6 +35,7 @@ interface ApprenantDashboardData {
   tauxEvolutionMensuel: number;
   alerteCompetence: { key: string; score: number } | null;
   commentaireFormateur: { text: string; author: string } | null;
+  messagesFormateur: { id: string; text: string; author: string; createdAt: string }[];
   assiduite: {
     semaine: string;
     tauxAbsence: number;
@@ -136,6 +137,7 @@ export default function ApprenantDashboard() {
                   : null
               }
               commentaire={data.commentaireFormateur}
+              messages={data.messagesFormateur ?? []}
             />
             <MesNotationsTable className="flex-1" />
           </div>
