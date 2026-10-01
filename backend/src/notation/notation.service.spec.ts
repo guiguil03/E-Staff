@@ -12,7 +12,7 @@ function makePrismaMock() {
     formateur: { findUnique: jest.fn() },
     notation: { findUnique: jest.fn(), findMany: jest.fn(), upsert: jest.fn() },
     presence: { findMany: jest.fn() },
-    diffusion: { findMany: jest.fn() },
+    diffusion: { findMany: jest.fn().mockResolvedValue([]) },
     tarifFormation: { findUnique: jest.fn() },
   };
 }
@@ -635,6 +635,14 @@ describe("NotationService", () => {
         author: "Hasina R., Formateur",
       });
 
+      // Aucun message privé enregistré pour cet apprenant.
+      expect(result.messagesFormateur).toEqual([]);
+      expect(prisma.diffusion.findMany).toHaveBeenCalledWith({
+        where: { apprenantId: "app-1" },
+        include: { formateur: true },
+        orderBy: { createdAt: "desc" },
+      });
+
       // 3 séances passées le même jour (même semaine ISO) : 1 absence, 1 retard.
       expect(result.seancesEffectuees).toBe(3);
       expect(result.seancesTotal).toBe(4);
@@ -726,6 +734,7 @@ describe("NotationService", () => {
 
       expect(prisma.diffusion.findMany).toHaveBeenCalledWith({
         where: {
+          apprenantId: null,
           OR: [{ groupeId: GROUPE.id }, { groupeId: null, formateurId: "f-1" }],
         },
         include: { formateur: true },
@@ -745,7 +754,7 @@ describe("NotationService", () => {
       await service.listAnnoncesForApprenant(APPRENANT.matricule);
 
       expect(prisma.diffusion.findMany).toHaveBeenCalledWith({
-        where: { OR: [{ groupeId: groupeSansFormateur.id }] },
+        where: { apprenantId: null, OR: [{ groupeId: groupeSansFormateur.id }] },
         include: { formateur: true },
         orderBy: { createdAt: "desc" },
       });
