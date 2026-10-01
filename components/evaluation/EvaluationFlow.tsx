@@ -13,7 +13,7 @@ const REQUIRED_SITUATIONS = 5;
 // Vidéo de contexte diffusée en direct (Range requests natives, pas de
 // blob chargé en mémoire) — endpoint public, pas besoin de passer par
 // apiGetBlob comme pour les enregistrements des candidats.
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+const API_URL = (process.env.NEXT_PUBLIC_API_URL_Dev ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
 
 interface QcmQuestion {
   id: string;
@@ -116,7 +116,7 @@ const EVALUATION_BLOCKS = [
   },
   {
     number: 4,
-    title: "Compréhension Orale (Podcasts B2 & C1)",
+    title: "Compréhension Orale (Audio + QCM)",
     available: true,
   },
   {
@@ -125,6 +125,13 @@ const EVALUATION_BLOCKS = [
     available: true,
   },
 ];
+
+interface EvaluationQuestions {
+  lexique: QcmQuestion[];
+  oral: QcmQuestion[];
+  // Extrait audio du Bloc 4 (voir ORAL_AUDIO_KEY côté backend, questions.ts).
+  oralMedia?: { audioPath: string };
+}
 
 // Affiche une question à la fois plutôt que la liste complète du bloc — plus
 // digeste pour le candidat qu'un long formulaire à faire défiler (retour
@@ -218,10 +225,9 @@ export default function EvaluationFlow() {
   const [error, setError] = useState<string | null>(null);
   const [agents, setAgents] = useState<AgentAcquisition[]>([]);
 
-  const [questions, setQuestions] = useState<{
-    lexique: QcmQuestion[];
-    oral: QcmQuestion[];
-  } | null>(null);
+  const [questions, setQuestions] = useState<EvaluationQuestions | null>(null);
+  // Bloc 4 : l'extrait audio est écouté d'abord, les questions ensuite.
+  const [oralAudioHeard, setOralAudioHeard] = useState(false);
   const [situations, setSituations] = useState<Situation[]>([]);
   const [videoTasks, setVideoTasks] = useState<VideoTask[]>([]);
   const [essaySubjects, setEssaySubjects] = useState<EssaySubject[]>([]);
@@ -255,7 +261,7 @@ export default function EvaluationFlow() {
     lexiqueSubmitted && oralSubmitted && situationsDone && videosDone && essayDone;
 
   useEffect(() => {
-    apiGet<{ lexique: QcmQuestion[]; oral: QcmQuestion[] }>("/evaluation/questions")
+    apiGet<EvaluationQuestions>("/evaluation/questions")
       .then(setQuestions)
       .catch(() => setError("Impossible de charger les épreuves."));
     apiGet<Situation[]>("/evaluation/situations")
@@ -628,7 +634,7 @@ export default function EvaluationFlow() {
       },
       {
         number: 4,
-        title: "Compréhension Orale (Podcasts B2 & C1)",
+        title: "Compréhension Orale (Audio + QCM)",
         done: oralSubmitted,
         onClick: () => setStep("oral"),
       },
@@ -868,17 +874,62 @@ export default function EvaluationFlow() {
   }
 
   if (step === "oral") {
+    const media = questions.oralMedia;
+    // Premier écran : l'extrait audio seul, puis les questions — épreuve
+    // purement auditive (consigne cliente du 2026-09-24). Le candidat peut
+    // revenir réécouter depuis les questions.
+    if (media && !oralAudioHeard) {
+      return (
+        <div className="mx-auto max-w-lg rounded border border-white/10 bg-obsidianCard p-6">
+          <button
+            onClick={() => setStep("menu")}
+            className="mb-3 block font-sans text-xs text-accent hover:underline"
+          >
+            ← Retour au menu
+          </button>
+          <h3 className="font-display text-lg font-semibold text-white">
+            Bloc 4 — Compréhension Orale (Audio + QCM)
+          </h3>
+          <p className="mt-2 font-sans text-sm text-white/70">
+            Écoutez attentivement l&apos;extrait audio ci-dessous, puis répondez aux{" "}
+            {questions.oral.length} questions. Vous pourrez le réécouter pendant le questionnaire.
+          </p>
+          <audio
+            controls
+            preload="metadata"
+            src={`${API_URL}${media.audioPath}`}
+            className="mt-4 w-full"
+          />
+          <div className="mt-6">
+            <Button variant="dark" onClick={() => setOralAudioHeard(true)}>
+              J&apos;ai écouté l&apos;extrait — passer aux questions
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="mx-auto max-w-lg">
-        <button
-          onClick={() => setStep("menu")}
-          className="mb-3 font-sans text-xs text-accent hover:underline"
-        >
-          ← Retour au menu
-        </button>
+        <div className="mb-3 flex items-center justify-between">
+          <button
+            onClick={() => setStep("menu")}
+            className="font-sans text-xs text-accent hover:underline"
+          >
+            ← Retour au menu
+          </button>
+          {media && (
+            <button
+              onClick={() => setOralAudioHeard(false)}
+              className="font-sans text-xs text-accent hover:underline"
+            >
+              Réécouter l&apos;extrait
+            </button>
+          )}
+        </div>
         <QcmBlock
           key="oral"
-          title="Bloc 4 — Compréhension Orale (Podcasts B2 & C1)"
+          title="Bloc 4 — Compréhension Orale (Audio + QCM)"
           questions={questions.oral}
           answers={oralAnswers}
           onChange={(id, v) => setOralAnswers((a) => ({ ...a, [id]: v }))}

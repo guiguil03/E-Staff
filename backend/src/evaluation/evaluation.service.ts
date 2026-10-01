@@ -2,13 +2,15 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Logger,
 } from "@nestjs/common";
 import * as path from "path";
 import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
+import { nouveauLienToken, whereLien } from "../common/lien-token";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../common/email.service";
-import { renderEmailHtml, emailParagraph, ctaButton, credentialsBox } from "../common/email-template";
+import { escapeHtml, renderEmailHtml, emailParagraph, ctaButton, credentialsBox } from "../common/email-template";
 import { StorageService } from "../common/storage.service";
 import { CreateCandidatDto } from "./dto/create-candidat.dto";
 import { SubmitAnswersDto } from "./dto/submit-answers.dto";
@@ -22,6 +24,7 @@ import { computeTier, computeTotalScore } from "./scoring";
 import {
   LEXIQUE_QUESTIONS,
   ORAL_QUESTIONS,
+  ORAL_AUDIO_KEY,
   scoreQcm,
 } from "./questions";
 import {
@@ -80,6 +83,8 @@ export const TIER_LABELS: Record<string, string> = {
 
 @Injectable()
 export class EvaluationService {
+  private readonly logger = new Logger(EvaluationService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
@@ -121,6 +126,11 @@ export class EvaluationService {
     return this.storage.getObjectStream(subject.referenceVideoKey);
   }
 
+  // Extrait audio du Bloc 4 (voir ORAL_AUDIO_KEY, questions.ts).
+  async getOralAudioStream() {
+    return this.storage.getObjectStream(ORAL_AUDIO_KEY);
+  }
+
   getVideoGradingCriteria() {
     return VIDEO_GRADING_CRITERIA;
   }
@@ -151,6 +161,7 @@ export class EvaluationService {
     return {
       lexique: LEXIQUE_QUESTIONS.map(strip),
       oral: ORAL_QUESTIONS.map(strip),
+      oralMedia: { audioPath: "/evaluation/oral-audio" },
     };
   }
 
@@ -219,11 +230,71 @@ export class EvaluationService {
         ecritOuvertResponse: true,
         candidat: true,
         apprenant: true,
+        correcteur: { select: { prenom: true, nom: true, matricule: true } },
       },
     });
     if (!attempt) throw new NotFoundException("Tentative introuvable.");
     return attempt;
   }
+  // Routes publiques du contrat (lien envoyé par e-mail) : par jeton, voir
+  // common/lien-token.ts.
+  private async getAttemptByLienOrThrow(lien: string) {
+    const attempt = await this.prisma.evaluationAttempt.findFirst({
+      where: whereLien(lien),
+      include: {
+        situationResponses: true,
+        videoResponses: true,
+        essayResponse: true,
+        ecritOuvertResponse: true,
+        candidat: true,
+        apprenant: true,
+        correcteur: { select: { prenom: true, nom: true, matricule: true } },
+      },
+    });
+    if (!attempt) throw new NotFoundException("Contrat introuvable.");
+    return attempt;
+  }
+
+  // Accès authentifié (Compte Apprenant, voir ApprenantGuard) — l'apprenant
+  // retrouve son propre contrat sans le lien reçu par e-mail à l'inscription
+  // (contrairement à getContractInfo/getContractPdfStream ci-dessus, pas de
+  // jeton à vérifier ici : la session fait foi, la tentative est résolue
+  // depuis SON matricule, jamais depuis un id transmis par le client).
+  private async getMyAttemptOrThrow(apprenantMatricule: string) {
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { matricule: apprenantMatricule },
+      include: { evaluationAttempt: true },
+    });
+    if (!apprenant?.evaluationAttempt) {
+      throw new NotFoundException("Aucun contrat associé à ce compte.");
+    }
+    return apprenant.evaluationAttempt;
+  }
+
+  async getContractForApprenant(apprenantMatricule: string) {
+    const attempt = await this.getMyAttemptOrThrow(apprenantMatricule);
+    if (!attempt.contractPdfKey) {
+      throw new NotFoundException("Votre contrat n'est pas encore disponible.");
+    }
+    return {
+      duree: attempt.contractDuree,
+      frais: attempt.contractFrais,
+      conditions: attempt.contractConditions,
+    };
+  }
+
+  async streamContractPdfForApprenant(apprenantMatricule: string) {
+    const attempt = await this.getMyAttemptOrThrow(apprenantMatricule);
+    if (!attempt.contractPdfKey) {
+      throw new NotFoundException("Votre contrat n'est pas encore disponible.");
+    }
+    try {
+      return await this.storage.getObjectStream(attempt.contractPdfKey);
+    } catch {
+      throw new NotFoundException("Fichier de contrat introuvable.");
+    }
+  }
+
 
   // Les 5 blocs construits (1 Lexique, 2 Commentaire Argumentatif, 3 Mises
   // en Situation, 4 Compréhension Orale, 5 Vidéo) sont indépendants et
@@ -249,6 +320,38 @@ export class EvaluationService {
         where: { id: attemptId },
         data: { status: "soumis", submittedAt: new Date() },
       });
+      await this.notifierFormateursTestSoumis(attempt.candidat);
+    }
+  }
+
+  // Prévient les formateurs qu'un test d'admission attend une correction —
+  // la file « Tests d'admission » est commune à tous les formateurs (voir
+  // listAttemptsForGrading), qui devaient jusqu'ici aller vérifier d'eux-
+  // mêmes. Un échec d'envoi ne bloque jamais la soumission du candidat.
+  private async notifierFormateursTestSoumis(candidat: { firstName: string; lastName: string }) {
+    try {
+      const formateurs = await this.prisma.formateur.findMany({ select: { prenom: true, email: true } });
+      const link = `${process.env.FRONTEND_URL ?? "http://localhost:3000"}/evaluation/formateur`;
+      const nom = `${candidat.firstName} ${candidat.lastName}`;
+      for (const formateur of formateurs.filter((f) => f.email?.trim())) {
+        await this.email.send({
+          to: formateur.email,
+          subject: `Nouveau test d'admission à corriger — ${nom}`,
+          text: `Bonjour ${formateur.prenom},\n\n${nom} vient de terminer son test d'admission. Il attend une correction (mises en situation, vidéos, écrits).\n\nCorriger le test :\n${link}\n\nL'équipe e-Staf`,
+          html: renderEmailHtml({
+            title: "Nouveau test d'admission à corriger",
+            preheader: `${nom} vient de terminer son test`,
+            bodyHtml:
+              emailParagraph(`Bonjour ${escapeHtml(formateur.prenom)},`) +
+              emailParagraph(
+                `<strong>${escapeHtml(nom)}</strong> vient de terminer son test d'admission. Il attend une correction (mises en situation, vidéos, écrits).`
+              ) +
+              ctaButton("Corriger le test", link),
+          }),
+        });
+      }
+    } catch (err) {
+      this.logger.error(`Notification formateurs (test soumis) impossible : ${String(err)}`);
     }
   }
 
@@ -438,7 +541,11 @@ export class EvaluationService {
     return response;
   }
 
-  async gradeEssayResponse(essayResponseId: string, criteria: Record<string, number>) {
+  async gradeEssayResponse(
+    essayResponseId: string,
+    criteria: Record<string, number>,
+    formateurMatricule?: string
+  ) {
     const response = await this.prisma.essayResponse.findUnique({
       where: { id: essayResponseId },
     });
@@ -464,6 +571,7 @@ export class EvaluationService {
       },
     });
 
+    await this.prendreCorrection(response.attemptId, formateurMatricule);
     await this.recomputeAttemptIfComplete(response.attemptId);
 
     return this.prisma.essayResponse.findUnique({ where: { id: essayResponseId } });
@@ -506,7 +614,11 @@ export class EvaluationService {
     return response;
   }
 
-  async gradePartieOuverte(ecritOuvertResponseId: string, criteria: Record<string, number>) {
+  async gradePartieOuverte(
+    ecritOuvertResponseId: string,
+    criteria: Record<string, number>,
+    formateurMatricule?: string
+  ) {
     const response = await this.prisma.ecritOuvertResponse.findUnique({
       where: { id: ecritOuvertResponseId },
     });
@@ -533,6 +645,7 @@ export class EvaluationService {
       },
     });
 
+    await this.prendreCorrection(response.attemptId, formateurMatricule);
     await this.recomputeAttemptIfComplete(response.attemptId);
 
     return this.prisma.ecritOuvertResponse.findUnique({ where: { id: ecritOuvertResponseId } });
@@ -545,6 +658,7 @@ export class EvaluationService {
       where: { status: { in: ["soumis", "en_correction"] } },
       include: {
         candidat: true,
+        correcteur: { select: { prenom: true, nom: true, matricule: true } },
         situationResponses: true,
         videoResponses: true,
         essayResponse: true,
@@ -572,7 +686,8 @@ export class EvaluationService {
 
   async gradeSituationResponse(
     situationResponseId: string,
-    criteria: Record<string, number>
+    criteria: Record<string, number>,
+    formateurMatricule?: string
   ) {
     const response = await this.prisma.situationResponse.findUnique({
       where: { id: situationResponseId },
@@ -602,6 +717,7 @@ export class EvaluationService {
       },
     });
 
+    await this.prendreCorrection(response.attemptId, formateurMatricule);
     await this.recomputeAttemptIfComplete(response.attemptId);
 
     return this.prisma.situationResponse.findUnique({
@@ -611,7 +727,8 @@ export class EvaluationService {
 
   async gradeVideoResponse(
     videoResponseId: string,
-    criteria: Record<string, number>
+    criteria: Record<string, number>,
+    formateurMatricule?: string
   ) {
     const response = await this.prisma.videoResponse.findUnique({
       where: { id: videoResponseId },
@@ -641,10 +758,29 @@ export class EvaluationService {
       },
     });
 
+    await this.prendreCorrection(response.attemptId, formateurMatricule);
     await this.recomputeAttemptIfComplete(response.attemptId);
 
     return this.prisma.videoResponse.findUnique({
       where: { id: videoResponseId },
+    });
+  }
+
+  // Le premier formateur qui pose une note sur un test en devient le
+  // correcteur (affiché « en cours de correction par X » dans la file
+  // commune). updateMany conditionné sur correcteurId = null : si deux
+  // formateurs notent en même temps, seul le premier est retenu. Purement
+  // indicatif — un autre formateur peut toujours noter ce test.
+  private async prendreCorrection(attemptId: string, formateurMatricule?: string) {
+    if (!formateurMatricule) return;
+    const formateur = await this.prisma.formateur.findUnique({
+      where: { matricule: formateurMatricule },
+      select: { id: true },
+    });
+    if (!formateur) return;
+    await this.prisma.evaluationAttempt.updateMany({
+      where: { id: attemptId, correcteurId: null },
+      data: { correcteurId: formateur.id, correctionPriseAt: new Date() },
     });
   }
 
@@ -781,7 +917,7 @@ export class EvaluationService {
       html: renderEmailHtml({
         title: "Résultat de votre évaluation",
         bodyHtml:
-          emailParagraph(`Bonjour ${attempt.candidat.firstName},`) +
+          emailParagraph(`Bonjour ${escapeHtml(attempt.candidat.firstName)},`) +
           emailParagraph("Nous vous remercions pour le temps consacré à notre évaluation.") +
           emailParagraph(
             "Après étude de votre dossier, nous ne sommes pas en mesure de vous proposer une place pour le moment. N'hésitez pas à retenter votre chance lors d'une prochaine session."
@@ -809,6 +945,16 @@ export class EvaluationService {
     ) {
       throw new BadRequestException(
         "Cette tentative n'est pas modifiable (correction non terminée, ou paiement déjà en cours)."
+      );
+    }
+    if (!attempt.candidat.cvKey) {
+      throw new BadRequestException(
+        "Impossible de valider : le CV du candidat n'a pas été déposé."
+      );
+    }
+    if (attempt.videoResponses.length < REQUIRED_VIDEO_COUNT) {
+      throw new BadRequestException(
+        "Impossible de valider : la vidéo de test du candidat est incomplète."
       );
     }
 
@@ -849,7 +995,8 @@ export class EvaluationService {
       );
     }
 
-    const link = `${process.env.FRONTEND_URL ?? "http://localhost:3000"}/evaluation/contrat/${attempt.id}`;
+    const lienToken = attempt.lienToken ?? nouveauLienToken();
+    const link = `${process.env.FRONTEND_URL ?? "http://localhost:3000"}/evaluation/contrat/${lienToken}`;
     const tierLabel = attempt.tier ? TIER_LABELS[attempt.tier] ?? attempt.tier : "";
 
     const result = await this.email.send({
@@ -860,7 +1007,7 @@ export class EvaluationService {
         title: "Votre résultat et votre contrat",
         preheader: `Résultat : ${tierLabel}`,
         bodyHtml:
-          emailParagraph(`Bonjour ${attempt.candidat.firstName},`) +
+          emailParagraph(`Bonjour ${escapeHtml(attempt.candidat.firstName)},`) +
           emailParagraph(`Votre évaluation a été traitée. Résultat : <strong>${tierLabel}</strong>.`) +
           emailParagraph("Votre contrat de formation (durée, frais, conditions) et les prochaines étapes vous attendent ici :") +
           ctaButton("Consulter mon contrat", link),
@@ -880,12 +1027,12 @@ export class EvaluationService {
 
     return this.prisma.evaluationAttempt.update({
       where: { id: attemptId },
-      data: { status: "contrat_envoye", contractSentAt: new Date() },
+      data: { status: "contrat_envoye", contractSentAt: new Date(), lienToken },
     });
   }
 
-  async getContractPdfStream(attemptId: string) {
-    const attempt = await this.getAttemptOrThrow(attemptId);
+  async getContractPdfStream(lien: string) {
+    const attempt = await this.getAttemptByLienOrThrow(lien);
     if (!attempt.contractPdfKey) {
       throw new NotFoundException("Contrat introuvable pour cette tentative.");
     }
@@ -897,10 +1044,10 @@ export class EvaluationService {
   }
 
   // Accès public (candidat) — la page contrat n'est accessible que via le
-  // lien envoyé par e-mail (attemptId comme jeton), même principe que le
-  // reste du parcours candidat sans compte.
-  async getContractInfo(attemptId: string) {
-    const attempt = await this.getAttemptOrThrow(attemptId);
+  // lien envoyé par e-mail (jeton), même principe que le reste du parcours
+  // candidat sans compte.
+  async getContractInfo(lien: string) {
+    const attempt = await this.getAttemptByLienOrThrow(lien);
     if (
       !["valide_pret_envoi", "contrat_envoye", "en_attente_paiement", "active"].includes(
         attempt.status
@@ -922,7 +1069,23 @@ export class EvaluationService {
     };
   }
 
-  async submitPaymentReference(attemptId: string, dto: SubmitPaymentReferenceDto) {
+  async submitPaymentReference(lien: string, dto: SubmitPaymentReferenceDto) {
+    const attempt = await this.getAttemptByLienOrThrow(lien);
+    if (attempt.status !== "contrat_envoye") {
+      throw new BadRequestException(
+        "Le contrat doit avoir été envoyé avant de transmettre une référence de paiement."
+      );
+    }
+    return this.prisma.evaluationAttempt.update({
+      where: { id: attempt.id },
+      data: { paymentReference: dto.reference, status: "en_attente_paiement" },
+    });
+  }
+
+  // Repli RH — au cas où le candidat transmet sa référence par téléphone
+  // plutôt que via sa page de contrat publique (même principe que
+  // RegistrationsService.submitPaymentReference).
+  async submitPaymentReferenceAdmin(attemptId: string, dto: SubmitPaymentReferenceDto) {
     const attempt = await this.getAttemptOrThrow(attemptId);
     if (attempt.status !== "contrat_envoye") {
       throw new BadRequestException(
@@ -930,7 +1093,7 @@ export class EvaluationService {
       );
     }
     return this.prisma.evaluationAttempt.update({
-      where: { id: attemptId },
+      where: { id: attempt.id },
       data: { paymentReference: dto.reference, status: "en_attente_paiement" },
     });
   }
@@ -1069,7 +1232,7 @@ export class EvaluationService {
         title: "Bienvenue chez e-Staf",
         preheader: `Votre place est validée dans le ${groupe.label}`,
         bodyHtml:
-          emailParagraph(`Bonjour ${attempt.candidat.firstName},`) +
+          emailParagraph(`Bonjour ${escapeHtml(attempt.candidat.firstName)},`) +
           emailParagraph(
             `Votre paiement a bien été confirmé et votre place est validée dans le <strong>${groupe.label}</strong>.`
           ) +

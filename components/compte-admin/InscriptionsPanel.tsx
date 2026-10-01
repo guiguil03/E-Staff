@@ -6,7 +6,7 @@ import Button from "@/components/ui/Button";
 import { apiGet, apiPostAuthed, ApiError } from "@/lib/api";
 import { adminHeaders } from "./adminHeaders";
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+const API_URL = (process.env.NEXT_PUBLIC_API_URL_Dev ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
 
 interface RegistrationApi {
   id: string;
@@ -15,6 +15,9 @@ interface RegistrationApi {
   email: string;
   phone: string;
   typeFormation: string | null;
+  // Offre d'emploi visée sur la vitrine Studio Métier (voir OffreEmploi).
+  offreEmploi: { id: string; titre: string } | null;
+  listeAttente: boolean;
   status: string;
   contractSentAt: string | null;
   paymentReference: string | null;
@@ -48,6 +51,39 @@ const STATUS_TONE: Record<string, string> = {
   converti: "text-success",
 };
 
+// Candidats du pipeline recrutement (EvaluationAttempt — voir
+// PipelineOverviewPanel) affichés ici en lecture seule à partir du moment où
+// ils ont un contrat en cours : ce sont les mêmes personnes que "inscrites"
+// du point de vue RH, même si techniquement Registration et EvaluationAttempt
+// restent deux tables Prisma séparées, sans fusion ni duplication de
+// données. Les actions (envoi de contrat, confirmation de paiement) restent
+// gérées depuis l'onglet Recrutement, d'où le tiret dans la colonne Action.
+interface PipelineAttempt {
+  id: string;
+  status: string;
+  tier: string | null;
+  totalScore: number | null;
+  candidat: { firstName: string; lastName: string; email: string; phone?: string };
+  apprenant: { matricule: string } | null;
+  createdAt: string;
+}
+
+const RECRUTEMENT_STATUS_LABELS: Record<string, string> = {
+  contrat_envoye: "Contrat envoyé — aucune référence reçue",
+  en_attente_paiement: "Référence reçue — à confirmer",
+  active: "Activé",
+};
+
+const RECRUTEMENT_STATUS_TONE: Record<string, string> = {
+  contrat_envoye: "text-accent",
+  en_attente_paiement: "text-accent",
+  active: "text-success",
+};
+
+type UnifiedRow =
+  | { source: "registration"; createdAt: string; data: RegistrationApi }
+  | { source: "recrutement"; createdAt: string; data: PipelineAttempt };
+
 // Portail RH — inscriptions tous funnels confondus (Examens, FOL,
 // Entreprises, Studio Métier). L'admin saisit les termes (durée, frais,
 // conditions — pas de modèle figé) : un vrai e-mail part avec le PDF et un
@@ -57,9 +93,7 @@ const STATUS_TONE: Record<string, string> = {
 // pas de webhook dans tous les cas, confirmation après vérification sur
 // votre compte (même principe que PaiementsPanel côté recrutement).
 export default function InscriptionsPanel() {
-  const [registrations, setRegistrations] = useState<RegistrationApi[] | "loading" | "erreur">(
-    "loading"
-  );
+  const [rows, setRows] = useState<UnifiedRow[] | "loading" | "erreur">("loading");
   const [contractOpenId, setContractOpenId] = useState<string | null>(null);
   const [contractDrafts, setContractDrafts] = useState<Record<string, ContractDraft>>({});
   const [referenceDrafts, setReferenceDrafts] = useState<Record<string, string>>({});
@@ -67,10 +101,27 @@ export default function InscriptionsPanel() {
   const [errorId, setErrorId] = useState<string | null>(null);
 
   function refresh() {
-    setRegistrations("loading");
-    apiGet<RegistrationApi[]>("/registrations", adminHeaders())
-      .then(setRegistrations)
-      .catch(() => setRegistrations("erreur"));
+    setRows("loading");
+    Promise.all([
+      apiGet<RegistrationApi[]>("/registrations", adminHeaders()),
+      apiGet<PipelineAttempt[]>("/evaluation/pipeline-overview", adminHeaders()).catch(() => []),
+    ])
+      .then(([registrations, attempts]) => {
+        const registrationRows: UnifiedRow[] = registrations.map((data) => ({
+          source: "registration",
+          createdAt: data.createdAt,
+          data,
+        }));
+        const recrutementRows: UnifiedRow[] = attempts
+          .filter((data) => data.status in RECRUTEMENT_STATUS_LABELS)
+          .map((data) => ({ source: "recrutement", createdAt: data.createdAt, data }));
+        setRows(
+          [...registrationRows, ...recrutementRows].sort((a, b) =>
+            b.createdAt.localeCompare(a.createdAt)
+          )
+        );
+      })
+      .catch(() => setRows("erreur"));
   }
 
   useEffect(refresh, []);
@@ -119,6 +170,18 @@ export default function InscriptionsPanel() {
     return runAction(id, () => apiPostAuthed(`/registrations/${id}/confirm-payment`, {}, adminHeaders()));
   };
 
+  // Repli RH pour un candidat recruté qui transmet sa référence par
+  // téléphone plutôt que via sa page de contrat publique — symétrique à
+  // submitReference ci-dessus, mais sur /evaluation plutôt que /registrations
+  // (voir EvaluationService.submitPaymentReferenceAdmin).
+  const submitReferenceRecrutement = (id: string) => {
+    const reference = (referenceDrafts[id] ?? "").trim();
+    if (!reference) return;
+    return runAction(id, () =>
+      apiPostAuthed(`/evaluation/attempts/${id}/payment-reference`, { reference }, adminHeaders())
+    );
+  };
+
   return (
     <Reveal>
       <div className="rounded border border-white/10 bg-obsidianCard p-6">
@@ -128,17 +191,15 @@ export default function InscriptionsPanel() {
           consulte son contrat et transmet sa référence de paiement.
         </p>
 
-        {registrations === "loading" && (
-          <p className="mt-4 font-sans text-sm text-white/50">Chargement...</p>
-        )}
-        {registrations === "erreur" && (
+        {rows === "loading" && <p className="mt-4 font-sans text-sm text-white/50">Chargement...</p>}
+        {rows === "erreur" && (
           <p className="mt-4 font-sans text-sm text-white/50">Erreur de chargement.</p>
         )}
-        {Array.isArray(registrations) && registrations.length === 0 && (
+        {Array.isArray(rows) && rows.length === 0 && (
           <p className="mt-4 font-sans text-sm text-white/50">Aucune inscription pour le moment.</p>
         )}
 
-        {Array.isArray(registrations) && registrations.length > 0 && (
+        {Array.isArray(rows) && rows.length > 0 && (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[720px] font-sans text-sm">
               <thead>
@@ -150,13 +211,77 @@ export default function InscriptionsPanel() {
                 </tr>
               </thead>
               <tbody>
-                {registrations.map((r) => {
+                {rows.map((row) => {
+                  if (row.source === "recrutement") {
+                    const a = row.data;
+                    const isPendingA = pendingId === a.id;
+                    return (
+                      <tr key={`recrutement-${a.id}`} className="border-b border-white/5 align-top">
+                        <td className="py-2 pr-2 text-white">
+                          {a.candidat.firstName} {a.candidat.lastName}
+                          <span className="block font-mono text-[10px] text-white/40">
+                            {a.candidat.email}
+                            {a.candidat.phone ? ` · ${a.candidat.phone}` : ""}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-2 text-white/70">
+                          Recrutement
+                          <span className="block font-mono text-[10px] text-accent">
+                            {a.tier ?? "—"}
+                            {a.totalScore !== null ? ` (${a.totalScore}/100)` : ""}
+                          </span>
+                        </td>
+                        <td
+                          className={`py-2 pr-2 font-mono text-xs ${
+                            RECRUTEMENT_STATUS_TONE[a.status] ?? "text-white/60"
+                          }`}
+                        >
+                          {RECRUTEMENT_STATUS_LABELS[a.status] ?? a.status}
+                          {a.apprenant && (
+                            <span className="block text-white/40">Matricule : {a.apprenant.matricule}</span>
+                          )}
+                          {errorId === a.id && <span className="block text-accent">Échec — réessayer.</span>}
+                        </td>
+                        <td className="py-2 text-right">
+                          {a.status === "contrat_envoye" ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <input
+                                type="text"
+                                placeholder="Référence"
+                                value={referenceDrafts[a.id] ?? ""}
+                                onChange={(e) =>
+                                  setReferenceDrafts((d) => ({ ...d, [a.id]: e.target.value }))
+                                }
+                                className="w-32 rounded border border-white/20 bg-obsidian px-2 py-1 font-sans text-xs text-white outline-none focus:border-accent"
+                              />
+                              <Button
+                                variant="ghostDark"
+                                disabled={isPendingA || !(referenceDrafts[a.id] ?? "").trim()}
+                                onClick={() => submitReferenceRecrutement(a.id)}
+                              >
+                                Enregistrer
+                              </Button>
+                            </div>
+                          ) : (
+                            <span
+                              className="font-mono text-xs text-white/30"
+                              title="Confirmation du paiement gérée depuis l'onglet Recrutement (choix du groupe)"
+                            >
+                              —
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  const r = row.data;
                   const isPending = pendingId === r.id;
                   const draft = contractDrafts[r.id] ?? EMPTY_DRAFT;
                   const draftValid =
                     draft.duree.trim() && draft.frais.trim() && draft.conditions.trim();
                   return (
-                    <tr key={r.id} className="border-b border-white/5 align-top">
+                    <tr key={`registration-${r.id}`} className="border-b border-white/5 align-top">
                       <td className="py-2 pr-2 text-white">
                         {r.firstName}
                         <span className="block font-mono text-[10px] text-white/40">
@@ -165,6 +290,12 @@ export default function InscriptionsPanel() {
                       </td>
                       <td className="py-2 pr-2 text-white/70">
                         {r.typeFormation ?? r.segment}
+                        {r.offreEmploi && (
+                          <span className="block font-mono text-[10px] text-accent">
+                            Offre : {r.offreEmploi.titre}
+                            {r.listeAttente && " — liste d'attente"}
+                          </span>
+                        )}
                       </td>
                       <td className={`py-2 pr-2 font-mono text-xs ${STATUS_TONE[r.status] ?? "text-white/60"}`}>
                         {STATUS_LABELS[r.status] ?? r.status}

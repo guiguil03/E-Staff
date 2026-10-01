@@ -12,13 +12,20 @@ import { PARTIE_OUVERTE_GRADING_CRITERIA } from "./partie-ouverte";
 
 function makePrismaMock() {
   return {
-    evaluationAttempt: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), count: jest.fn() },
+    evaluationAttempt: {
+      findUnique: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+    },
     situationResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     videoResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     essayResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     ecritOuvertResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
-    apprenant: { findMany: jest.fn(), create: jest.fn() },
+    apprenant: { findMany: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
     groupe: { findUnique: jest.fn() },
+    formateur: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
   };
 }
 
@@ -139,6 +146,51 @@ describe("EvaluationService", () => {
       expect(finalizeCall.data.status).toBe("soumis");
       expect(finalizeCall.data.submittedAt).toBeInstanceOf(Date);
     });
+
+    it("prévient chaque formateur par e-mail quand un test passe en 'soumis'", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({
+          lexiqueAnswers: "{}",
+          ecritOuvertResponse: { score: 8 },
+          oralAnswers: "{}",
+          situationResponses: new Array(5).fill({}),
+          videoResponses: new Array(2).fill({}),
+          essayResponse: { score: 9 },
+          candidat: CANDIDAT,
+        })
+      );
+      prisma.formateur.findMany.mockResolvedValue([
+        { prenom: "Ravaka", email: "ravaka@example.com" },
+        { prenom: "Sans", email: "" },
+      ]);
+
+      await service.submitAnswers("attempt-1", { oralAnswers: { q1: "a" } });
+
+      expect(email.send).toHaveBeenCalledTimes(1);
+      expect(email.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: "ravaka@example.com",
+          subject: "Nouveau test d'admission à corriger — Awa Diallo",
+        })
+      );
+    });
+
+    it("ne bloque pas la soumission si l'envoi aux formateurs échoue", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({
+          lexiqueAnswers: "{}",
+          ecritOuvertResponse: { score: 8 },
+          oralAnswers: "{}",
+          situationResponses: new Array(5).fill({}),
+          videoResponses: new Array(2).fill({}),
+          essayResponse: { score: 9 },
+          candidat: CANDIDAT,
+        })
+      );
+      prisma.formateur.findMany.mockRejectedValue(new Error("db down"));
+
+      await expect(service.submitAnswers("attempt-1", { oralAnswers: { q1: "a" } })).resolves.not.toThrow();
+    });
   });
 
   describe("gradeSituationResponse — validation", () => {
@@ -178,6 +230,22 @@ describe("EvaluationService", () => {
       expect(prisma.evaluationAttempt.update).toHaveBeenCalledWith({
         where: { id: "attempt-1" },
         data: { status: "en_correction" },
+      });
+    });
+
+    it("enregistre le premier formateur qui note comme correcteur (sans écraser un correcteur existant)", async () => {
+      prisma.videoResponse.findUnique.mockResolvedValue({ id: "v-1", attemptId: "attempt-1" });
+      prisma.videoResponse.update.mockResolvedValue({});
+      prisma.formateur.findUnique.mockResolvedValue({ id: "form-1" });
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({ status: "en_correction", situationResponses: [], videoResponses: [] })
+      );
+
+      await service.gradeVideoResponse("v-1", maxVideoCriteria(), "ETF-FORM-2026-0001");
+
+      expect(prisma.evaluationAttempt.updateMany).toHaveBeenCalledWith({
+        where: { id: "attempt-1", correcteurId: null },
+        data: { correcteurId: "form-1", correctionPriseAt: expect.any(Date) },
       });
     });
 
@@ -305,6 +373,81 @@ describe("EvaluationService", () => {
     });
   });
 
+  describe("validateContract", () => {
+    const dto = { duree: "6 mois", frais: "500 000 Ar", conditions: "RAS" };
+
+    it("rejette si le CV du candidat n'a pas été déposé", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({
+          status: "corrige",
+          tier: "placement_direct",
+          candidat: { ...CANDIDAT, cvKey: null },
+          videoResponses: new Array(2).fill({}),
+        })
+      );
+      await expect(service.validateContract("attempt-1", dto)).rejects.toThrow(BadRequestException);
+      expect(storage.uploadBuffer).not.toHaveBeenCalled();
+    });
+
+    it("rejette si les vidéos de test sont incomplètes", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({
+          status: "corrige",
+          tier: "placement_direct",
+          candidat: { ...CANDIDAT, cvKey: "candidats/cand-1/cv.pdf" },
+          videoResponses: [{}],
+        })
+      );
+      await expect(service.validateContract("attempt-1", dto)).rejects.toThrow(BadRequestException);
+      expect(storage.uploadBuffer).not.toHaveBeenCalled();
+    });
+
+    it("valide le contrat quand le CV et les 2 vidéos sont présents", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({
+          status: "corrige",
+          tier: "placement_direct",
+          totalScore: 82,
+          candidat: { ...CANDIDAT, cvKey: "candidats/cand-1/cv.pdf" },
+          videoResponses: new Array(2).fill({}),
+        })
+      );
+      prisma.evaluationAttempt.update.mockResolvedValue({});
+
+      await service.validateContract("attempt-1", dto);
+
+      expect(storage.uploadBuffer).toHaveBeenCalledTimes(1);
+      expect(prisma.evaluationAttempt.update).toHaveBeenCalledWith({
+        where: { id: "attempt-1" },
+        data: expect.objectContaining({ status: "valide_pret_envoi" }),
+      });
+    });
+  });
+
+  describe("submitPaymentReferenceAdmin", () => {
+    it("rejette si le contrat n'a pas été envoyé", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(baseAttempt({ status: "corrige" }));
+      await expect(
+        service.submitPaymentReferenceAdmin("attempt-1", { reference: "MVOLA-123" })
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.evaluationAttempt.update).not.toHaveBeenCalled();
+    });
+
+    it("enregistre la référence et passe en en_attente_paiement", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({ status: "contrat_envoye" })
+      );
+      prisma.evaluationAttempt.update.mockResolvedValue({});
+
+      await service.submitPaymentReferenceAdmin("attempt-1", { reference: "MVOLA-123" });
+
+      expect(prisma.evaluationAttempt.update).toHaveBeenCalledWith({
+        where: { id: "attempt-1" },
+        data: { paymentReference: "MVOLA-123", status: "en_attente_paiement" },
+      });
+    });
+  });
+
   describe("confirmPayment", () => {
     it("rejette si la tentative n'est pas en_attente_paiement", async () => {
       prisma.evaluationAttempt.findUnique.mockResolvedValue(baseAttempt({ status: "corrige" }));
@@ -407,6 +550,55 @@ describe("EvaluationService", () => {
           paymentConfirmedAt: expect.any(Date),
         },
       });
+    });
+  });
+
+  describe("getContractForApprenant / streamContractPdfForApprenant", () => {
+    it("lève NotFoundException si l'apprenant n'a pas de tentative d'évaluation associée", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({ evaluationAttempt: null });
+      await expect(service.getContractForApprenant("ETF-2026-0001")).rejects.toThrow(
+        NotFoundException
+      );
+    });
+
+    it("lève NotFoundException si le contrat n'a pas encore été envoyé (pas de contractPdfKey)", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({
+        evaluationAttempt: baseAttempt({ contractPdfKey: null }),
+      });
+      await expect(service.getContractForApprenant("ETF-2026-0001")).rejects.toThrow(
+        NotFoundException
+      );
+    });
+
+    it("renvoie durée/frais/conditions pour l'apprenant propriétaire de la tentative", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({
+        evaluationAttempt: baseAttempt({
+          contractPdfKey: "evaluations/attempt-1/contrat.pdf",
+          contractDuree: "6 semaines",
+          contractFrais: "120 000 Ar",
+          contractConditions: "Paiement intégral avant le début.",
+        }),
+      });
+
+      const result = await service.getContractForApprenant("ETF-2026-0001");
+
+      expect(result).toEqual({
+        duree: "6 semaines",
+        frais: "120 000 Ar",
+        conditions: "Paiement intégral avant le début.",
+      });
+    });
+
+    it("streame le PDF stocké pour la tentative de l'apprenant", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({
+        evaluationAttempt: baseAttempt({ contractPdfKey: "evaluations/attempt-1/contrat.pdf" }),
+      });
+      storage.getObjectStream.mockResolvedValue({ stream: "fake-stream", contentType: "application/pdf" });
+
+      const result = await service.streamContractPdfForApprenant("ETF-2026-0001");
+
+      expect(storage.getObjectStream).toHaveBeenCalledWith("evaluations/attempt-1/contrat.pdf");
+      expect(result).toEqual({ stream: "fake-stream", contentType: "application/pdf" });
     });
   });
 });

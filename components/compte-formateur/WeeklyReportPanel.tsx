@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPostAuthed } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 
 interface WeeklyReportPanelProps {
@@ -36,9 +36,10 @@ function statsRows(stats: RapportHebdoApi): { label: string; value: string }[] {
 
 // Rapport Hebdomadaire — chiffres branchés sur les vraies données (table
 // Notation/Presence, voir /cockpit/rapport-hebdo) depuis 2026-08-24, +
-// 3 blocs qualitatifs obligatoires demandés par la cliente. Pas de vrai
-// export PDF/Excel ni d'envoi à la direction pour l'instant — le contenu
-// qualitatif reste consultable ici, honnêtement présenté comme non transmis.
+// 3 blocs qualitatifs obligatoires demandés par la cliente. La validation
+// persiste le bilan (POST /cockpit/bilan-hebdo, voir BilanFormateur dans
+// schema.prisma) et le rend visible dans le Casier Formateur côté RH —
+// toujours pas d'export PDF/Excel ni d'e-mail automatique pour l'instant.
 // Deux chiffres de l'ancienne maquette ("Évolution vs semaine N-1",
 // "Groupes en baisse de tendance") ont été retirés : ils nécessitent un
 // historique semaine par semaine qui n'existe pas encore côté backend
@@ -49,6 +50,17 @@ export default function WeeklyReportPanel({ onClose }: WeeklyReportPanelProps) {
   const [analyse, setAnalyse] = useState("");
   const [axes, setAxes] = useState("");
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSubmit() {
+    setSending(true);
+    setError(null);
+    apiPostAuthed("/cockpit/bilan-hebdo", { constat, analyse, axes }, formateurHeaders())
+      .then(() => setSent(true))
+      .catch(() => setError("Échec de l'envoi du bilan. Réessayez."))
+      .finally(() => setSending(false));
+  }
 
   useEffect(() => {
     apiGet<RapportHebdoApi>("/cockpit/rapport-hebdo", formateurHeaders())
@@ -135,17 +147,18 @@ export default function WeeklyReportPanel({ onClose }: WeeklyReportPanelProps) {
         <div className="mt-5 flex items-center gap-3">
           <Button
             variant="dark"
-            onClick={() => setSent(true)}
-            disabled={!constat.trim() || !analyse.trim() || !axes.trim()}
+            onClick={handleSubmit}
+            disabled={sending || sent || !constat.trim() || !analyse.trim() || !axes.trim()}
           >
-            Valider &amp; Envoyer le Rapport
+            {sending ? "Envoi..." : "Valider & Envoyer le Rapport"}
           </Button>
           {sent && (
             <p className="font-sans text-xs text-white/50">
-              Export PDF/Excel et envoi automatique à la direction — fonctionnalité en cours de
-              construction. Votre rapport reste visible ici pour l&apos;instant.
+              Bilan enregistré — visible dans votre Casier côté RH. Pas encore d&apos;export
+              PDF/Excel ni d&apos;e-mail automatique.
             </p>
           )}
+          {error && <p className="font-sans text-xs text-red-400">{error}</p>}
         </div>
       </div>
     </Reveal>

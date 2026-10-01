@@ -9,6 +9,7 @@ import {
   UploadedFile,
   UseGuards,
   UseInterceptors,
+  Headers,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiTags } from "@nestjs/swagger";
@@ -31,12 +32,19 @@ import { CreateGroupeDto } from "./dto/create-groupe.dto";
 import { RhGuard } from "../common/rh.guard";
 import { StaffGuard } from "../common/staff.guard";
 import { FormateurGuard } from "../common/formateur.guard";
+import { FormateurOuRhGuard } from "../common/formateur-ou-rh.guard";
+import { ApprenantGuard } from "../common/apprenant.guard";
+import { RateLimitGuard } from "../common/rate-limit.guard";
+import { isAudio, isPdf, isVideo } from "../common/file-signature";
 
 // Les vidéos sont bien plus volumineuses que l'audio — Multer bufférise en
 // mémoire (pas de config disque ici, cohérent avec l'upload audio existant),
 // donc une limite explicite est nécessaire pour éviter un upload sans borne.
 const MAX_VIDEO_UPLOAD_BYTES = 300 * 1024 * 1024; // 300 Mo
 const MAX_CV_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
+// Aucune limite n'existait avant (audit du 2026-09-21) — un enregistrement
+// audio de mise en situation dure quelques minutes, 50 Mo est très large.
+const MAX_AUDIO_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 @ApiTags("Évaluation")
 @Controller("evaluation")
@@ -72,6 +80,15 @@ export class EvaluationController {
     stream.pipe(res);
   }
 
+  // Extrait audio du Bloc 4 (compréhension orale), écouté avant le QCM —
+  // public pour la même raison que reference-video ci-dessus.
+  @Get("oral-audio")
+  async streamOralAudio(@Res() res: Response) {
+    const { stream, contentType } = await this.service.getOralAudioStream();
+    res.set("Content-Type", contentType ?? "audio/mpeg");
+    stream.pipe(res);
+  }
+
   @Get("questions")
   getQuestions() {
     return this.service.getQuestions();
@@ -92,11 +109,13 @@ export class EvaluationController {
     return this.service.listAgentsAcquisition();
   }
 
+  @UseGuards(RateLimitGuard("evaluation-create-candidat", 5))
   @Post("candidats")
   createCandidat(@Body() dto: CreateCandidatDto) {
     return this.service.createCandidat(dto);
   }
 
+  @UseGuards(RateLimitGuard("evaluation-upload-cv", 10))
   @Post("candidats/:id/cv")
   @UseInterceptors(
     FileInterceptor("cv", {
@@ -112,12 +131,19 @@ export class EvaluationController {
         "Fichier CV manquant, trop volumineux (10 Mo max) ou pas au format PDF."
       );
     }
+    // Vérifie le contenu réel du fichier (signature binaire), pas juste le
+    // Content-Type déclaré par le client — voir common/file-signature.ts.
+    if (!isPdf(file.buffer)) {
+      throw new BadRequestException("Le fichier ne semble pas être un PDF valide.");
+    }
     return this.service.uploadCv(id, file);
   }
 
-  // Consultation du CV depuis la fiche RH (Cycle complet) — même principe
-  // que le streaming audio/vidéo existant, pas de garde (voir commentaire
-  // TrainerGuard plus bas).
+  // Consultation du CV depuis la fiche RH (Cycle complet) — gardé RhGuard
+  // depuis le 2026-09-21 (audit sécurité) : seul appelant identifié
+  // (CoordonneesPanel), pas de raison de laisser ça accessible à qui trouve
+  // l'URL.
+  @UseGuards(RhGuard)
   @Get("candidats/:id/cv")
   async streamCv(@Param("id") id: string, @Res() res: Response) {
     const { stream, contentType } = await this.service.getCvStream(id);
@@ -125,31 +151,45 @@ export class EvaluationController {
     stream.pipe(res);
   }
 
+  @UseGuards(RateLimitGuard("evaluation-submit", 10))
   @Post("attempts/:id/submit")
   submitAnswers(@Param("id") id: string, @Body() dto: SubmitAnswersDto) {
     return this.service.submitAnswers(id, dto);
   }
 
+  @UseGuards(RateLimitGuard("evaluation-essay", 10))
   @Post("attempts/:id/essay")
   submitEssay(@Param("id") id: string, @Body() dto: SubmitEssayDto) {
     return this.service.submitEssay(id, dto);
   }
 
+  @UseGuards(RateLimitGuard("evaluation-partie-ouverte", 10))
   @Post("attempts/:id/partie-ouverte")
   submitPartieOuverte(@Param("id") id: string, @Body() dto: SubmitPartieOuverteDto) {
     return this.service.submitPartieOuverte(id, dto);
   }
 
+  // Aucune limite de taille ni de type n'existait avant (audit du
+  // 2026-09-21) — n'importe quel fichier, de n'importe quelle taille,
+  // pouvait être déposé ici sous couvert d'être un "audio".
+  @UseGuards(RateLimitGuard("evaluation-upload-audio", 20))
   @Post("attempts/:id/situations")
-  @UseInterceptors(FileInterceptor("audio"))
+  @UseInterceptors(FileInterceptor("audio", { limits: { fileSize: MAX_AUDIO_UPLOAD_BYTES } }))
   uploadSituationAudio(
     @Param("id") id: string,
     @Body() dto: UploadSituationDto,
     @UploadedFile() file: Express.Multer.File
   ) {
+    if (!file) {
+      throw new BadRequestException("Fichier audio manquant ou trop volumineux (50 Mo max).");
+    }
+    if (!isAudio(file.buffer)) {
+      throw new BadRequestException("Le fichier ne semble pas être un enregistrement audio valide.");
+    }
     return this.service.saveSituationAudio(id, dto.situationIndex, file);
   }
 
+  @UseGuards(RateLimitGuard("evaluation-upload-video", 10))
   @Post("attempts/:id/videos")
   @UseInterceptors(
     FileInterceptor("video", {
@@ -169,17 +209,26 @@ export class EvaluationController {
         "Fichier vidéo manquant, trop volumineux (300 Mo max) ou format non supporté."
       );
     }
+    if (!isVideo(file.buffer)) {
+      throw new BadRequestException("Le fichier ne semble pas être une vidéo valide.");
+    }
     return this.service.saveVideoResponse(id, dto.taskIndex, file, dto.subjectKey, dto.optionKey);
   }
 
   // ---- Interface formateur ------------------------------------------------
-  // Code formateur (TrainerGuard) retiré temporairement le 2026-08-25 à la
-  // demande du client — trop de friction pour l'usage actuel (une poignée
-  // de personnes connues). La page reste hors nav, accessible par URL
-  // directe uniquement. À réintroduire une vraie auth avant d'ouvrir l'accès
-  // plus largement (voir TrainerGuard, toujours défini dans common/, pas
-  // supprimé).
+  // Code formateur partagé (ex-TrainerGuard) retiré temporairement le
+  // 2026-08-25 à la demande du client — trop de friction pour l'usage
+  // actuel (une poignée de personnes connues). La page reste hors nav,
+  // accessible par URL directe uniquement — mais tout le bloc ci-dessous
+  // est désormais gardé par FormateurGuard (2026-09-21, audit sécurité) :
+  // en s'appuyant sur la session signée (voir common/session.ts), un
+  // formateur déjà connecté au Cockpit n'a AUCUNE friction supplémentaire
+  // (même cookie), alors qu'avant ce bloc entier — dont le corrigé du test
+  // d'admission (questions-corrigees) et la possibilité de noter une
+  // réponse candidat — était accessible à quiconque trouvait l'URL, sans
+  // même avoir besoin de deviner un identifiant.
 
+  @UseGuards(FormateurGuard)
   @Get("attempts")
   listAttemptsForGrading() {
     return this.service.listAttemptsForGrading();
@@ -195,64 +244,89 @@ export class EvaluationController {
     return this.service.countAttemptsForGrading();
   }
 
+  @UseGuards(FormateurGuard)
   @Get("attempts/:id")
   getAttempt(@Param("id") id: string) {
     return this.service.getAttemptForGrading(id);
   }
 
+  @UseGuards(FormateurGuard)
   @Post("attempts/:id/notify-rh")
   notifyRh(@Param("id") id: string) {
     return this.service.notifyRh(id);
   }
 
+  @UseGuards(FormateurGuard)
   @Get("questions-corrigees")
   getQuestionsWithAnswerKey() {
     return this.service.getQuestionsWithAnswerKey();
   }
 
+  @UseGuards(FormateurGuard)
   @Get("grading-criteria")
   getGradingCriteria() {
     return this.service.getGradingCriteria();
   }
 
+  @UseGuards(FormateurGuard)
   @Get("video-grading-criteria")
   getVideoGradingCriteria() {
     return this.service.getVideoGradingCriteria();
   }
 
+  @UseGuards(FormateurGuard)
   @Get("essay-grading-criteria")
   getEssayGradingCriteria() {
     return this.service.getEssayGradingCriteria();
   }
 
+  @UseGuards(FormateurGuard)
   @Get("partie-ouverte-grading-criteria")
   getPartieOuverteGradingCriteria() {
     return this.service.getPartieOuverteGradingCriteria();
   }
 
+  @UseGuards(FormateurGuard)
   @Post("situation-responses/:id/grade")
   gradeSituationResponse(
     @Param("id") id: string,
-    @Body() dto: GradeSituationDto
+    @Body() dto: GradeSituationDto,
+    @Headers("x-formateur-matricule") formateurMatricule: string
   ) {
-    return this.service.gradeSituationResponse(id, dto.criteria);
+    return this.service.gradeSituationResponse(id, dto.criteria, formateurMatricule);
   }
 
+  @UseGuards(FormateurGuard)
   @Post("video-responses/:id/grade")
-  gradeVideoResponse(@Param("id") id: string, @Body() dto: GradeVideoDto) {
-    return this.service.gradeVideoResponse(id, dto.criteria);
+  gradeVideoResponse(
+    @Param("id") id: string,
+    @Body() dto: GradeVideoDto,
+    @Headers("x-formateur-matricule") formateurMatricule: string
+  ) {
+    return this.service.gradeVideoResponse(id, dto.criteria, formateurMatricule);
   }
 
+  @UseGuards(FormateurGuard)
   @Post("essay-responses/:id/grade")
-  gradeEssayResponse(@Param("id") id: string, @Body() dto: GradeEssayDto) {
-    return this.service.gradeEssayResponse(id, dto.criteria);
+  gradeEssayResponse(
+    @Param("id") id: string,
+    @Body() dto: GradeEssayDto,
+    @Headers("x-formateur-matricule") formateurMatricule: string
+  ) {
+    return this.service.gradeEssayResponse(id, dto.criteria, formateurMatricule);
   }
 
+  @UseGuards(FormateurGuard)
   @Post("partie-ouverte-responses/:id/grade")
-  gradePartieOuverte(@Param("id") id: string, @Body() dto: GradePartieOuverteDto) {
-    return this.service.gradePartieOuverte(id, dto.criteria);
+  gradePartieOuverte(
+    @Param("id") id: string,
+    @Body() dto: GradePartieOuverteDto,
+    @Headers("x-formateur-matricule") formateurMatricule: string
+  ) {
+    return this.service.gradePartieOuverte(id, dto.criteria, formateurMatricule);
   }
 
+  @UseGuards(FormateurGuard)
   @Get("situation-responses/:id/audio")
   async streamAudio(@Param("id") id: string, @Res() res: Response) {
     const { stream, contentType } = await this.service.getSituationAudioStream(id);
@@ -260,6 +334,9 @@ export class EvaluationController {
     stream.pipe(res);
   }
 
+  // FormateurOuRhGuard (pas FormateurGuard seul) : appelé aussi par
+  // CoordonneesPanel (Portail RH), pas seulement par l'interface formateur.
+  @UseGuards(FormateurOuRhGuard)
   @Get("video-responses/:id/video")
   async streamVideo(@Param("id") id: string, @Res() res: Response) {
     const { stream, contentType } = await this.service.getVideoStream(id);
@@ -332,6 +409,15 @@ export class EvaluationController {
     return this.service.confirmPayment(id, dto);
   }
 
+  // Repli RH — au cas où le candidat transmet sa référence par téléphone
+  // plutôt que via sa page de contrat publique (voir /registrations/:id/payment-reference
+  // pour l'équivalent côté Inscriptions).
+  @UseGuards(RhGuard)
+  @Post("attempts/:id/payment-reference")
+  submitPaymentReferenceAdmin(@Param("id") id: string, @Body() dto: SubmitPaymentReferenceDto) {
+    return this.service.submitPaymentReferenceAdmin(id, dto);
+  }
+
   // ---- Parcours candidat (public) — contrat + paiement -------------------
   // Accessible uniquement via le lien envoyé par e-mail (attemptId comme
   // jeton), même principe que le reste du parcours candidat sans compte.
@@ -348,8 +434,27 @@ export class EvaluationController {
     stream.pipe(res);
   }
 
+  @UseGuards(RateLimitGuard("evaluation-paiement-public", 10))
   @Post("contrats/:id/paiement")
   submitPaymentReference(@Param("id") id: string, @Body() dto: SubmitPaymentReferenceDto) {
     return this.service.submitPaymentReference(id, dto);
+  }
+
+  // ---- Compte Apprenant (authentifié) — retrouver son propre contrat -----
+  // Même contrat que ci-dessus, mais sans avoir à ressortir le lien reçu par
+  // e-mail à l'inscription : la session apprenant (ApprenantGuard) suffit.
+
+  @UseGuards(ApprenantGuard)
+  @Get("apprenants/:matricule/contrat")
+  getMyContract(@Param("matricule") matricule: string) {
+    return this.service.getContractForApprenant(matricule);
+  }
+
+  @UseGuards(ApprenantGuard)
+  @Get("apprenants/:matricule/contrat/pdf")
+  async streamMyContractPdf(@Param("matricule") matricule: string, @Res() res: Response) {
+    const { stream, contentType } = await this.service.streamContractPdfForApprenant(matricule);
+    res.set("Content-Type", contentType ?? "application/pdf");
+    stream.pipe(res);
   }
 }

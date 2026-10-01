@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Button from "@/components/ui/Button";
-import { apiPost, apiUpload } from "@/lib/api";
+import { apiPost, apiUpload, ApiError } from "@/lib/api";
 import type { ProgramTypeOption } from "@/components/examens/programTypes";
 
 interface RegistrationFormProps {
@@ -22,6 +22,10 @@ interface RegistrationFormProps {
   /** When true, renders an optional CV (PDF) upload input next to the "Type
    * de formation" dropdown — only the Examens funnel uses this. */
   showCv?: boolean;
+  /** Studio Métier : offre d'emploi précise visée (voir OffreEmploi). */
+  offreEmploiId?: string;
+  /** Studio Métier : candidature en liste d'attente sur une offre clôturée. */
+  listeAttente?: boolean;
 }
 
 export default function RegistrationForm({
@@ -32,6 +36,8 @@ export default function RegistrationForm({
   typeFormationOptions,
   defaultTypeFormation,
   showCv = false,
+  offreEmploiId,
+  listeAttente = false,
 }: RegistrationFormProps) {
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
@@ -43,6 +49,7 @@ export default function RegistrationForm({
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
     "idle"
   );
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isDark = tone === "dark";
 
@@ -52,6 +59,10 @@ export default function RegistrationForm({
     try {
       const body: Record<string, unknown> = { segment, firstName, email, phone };
       if (typeFormationOptions) body.typeFormation = typeFormation;
+      if (offreEmploiId) {
+        body.offreEmploiId = offreEmploiId;
+        body.listeAttente = listeAttente;
+      }
       const res = await apiPost<{ id: string }>("/registrations", body);
       if (cvFile) {
         // Dépôt facultatif — un échec ici ne doit pas empêcher l'inscription
@@ -62,7 +73,8 @@ export default function RegistrationForm({
         await apiUpload(`/registrations/${res.id}/cv`, formData).catch(() => {});
       }
       setStatus("sent");
-    } catch {
+    } catch (err) {
+      setErrorMessage(err instanceof ApiError ? err.message : null);
       setStatus("error");
     }
   }
@@ -191,7 +203,7 @@ export default function RegistrationForm({
 
       {status === "error" && (
         <p className={`mt-3 text-sm ${isDark ? "text-accent" : "text-primary"}`}>
-          Une erreur est survenue. Merci de réessayer plus tard.
+          {errorMessage ?? "Une erreur est survenue. Merci de réessayer plus tard."}
         </p>
       )}
 

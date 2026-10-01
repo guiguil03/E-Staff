@@ -22,7 +22,7 @@ interface Stats {
 const STATUS_LABELS: Record<string, string> = {
   corrige: "Corrigé — à valider",
   valide_pret_envoi: "Validé — envoi ce soir (20h)",
-  contrat_envoye: "Contrat envoyé — en attente de paiement",
+  contrat_envoye: "Contrat envoyé — aucune référence reçue",
   en_attente_paiement: "Référence reçue — à confirmer",
   active: "Activé",
   rejete: "Non retenu",

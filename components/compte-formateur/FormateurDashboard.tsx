@@ -13,9 +13,11 @@ import {
   BroadcastCard,
   VivierC1Card,
   WeeklyReportCard,
+  MesFichesCard,
 } from "./AdminColumn";
 import GroupDetailPanel from "./GroupDetailPanel";
 import WeeklyReportPanel from "./WeeklyReportPanel";
+import FichesPreparationPanel from "./FichesPreparationPanel";
 import PaymentAlertsTable from "./PaymentAlertsTable";
 import { apiGet } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
@@ -28,7 +30,7 @@ function formateurHeaders(): HeadersInit {
   return matricule ? { "x-formateur-matricule": matricule } : {};
 }
 
-type PanelState = { type: "group"; key: string } | { type: "report" } | null;
+type PanelState = { type: "group"; key: string } | { type: "report" } | { type: "fiches" } | null;
 
 // Garde d'accès + assemblage du Cockpit Formateur. Même stopgap que le
 // Compte Apprenant : rôle posé en sessionStorage par LoginForm après le
@@ -42,6 +44,7 @@ export default function FormateurDashboard() {
   const [panel, setPanel] = useState<PanelState>(null);
   const [groupes, setGroupes] = useState<CockpitGroupe[]>([]);
   const [globalC1Rate, setGlobalC1Rate] = useState(0);
+  const [prenom, setPrenom] = useState<string | null>(null);
 
   useEffect(() => {
     if (!checked) return;
@@ -51,6 +54,9 @@ export default function FormateurDashboard() {
     apiGet<{ globalRate: number }>("/cockpit/vivier-c1", formateurHeaders())
       .then((data) => setGlobalC1Rate(data.globalRate))
       .catch(() => setGlobalC1Rate(0));
+    apiGet<{ prenom: string }>("/cockpit/profil", formateurHeaders())
+      .then((data) => setPrenom(data.prenom))
+      .catch(() => setPrenom(null));
   }, [checked]);
 
   function goToApprenant(id: string) {
@@ -74,7 +80,7 @@ export default function FormateurDashboard() {
             Cockpit Formateur
           </p>
           <h1 className="mt-1 font-display text-xl font-semibold text-white sm:text-2xl">
-            Bonjour, Hasina
+            {prenom ? `Bonjour, ${prenom}` : "Bonjour"}
           </h1>
         </Reveal>
 
@@ -118,6 +124,9 @@ export default function FormateurDashboard() {
           <div className="lg:col-span-2">
             <WeeklyReportCard onOpenReport={() => setPanel({ type: "report" })} />
           </div>
+          <div className="lg:col-span-2">
+            <MesFichesCard onOpenFiches={() => setPanel({ type: "fiches" })} />
+          </div>
         </div>
 
         {panel?.type === "group" && (
@@ -128,6 +137,7 @@ export default function FormateurDashboard() {
           />
         )}
         {panel?.type === "report" && <WeeklyReportPanel onClose={() => setPanel(null)} />}
+        {panel?.type === "fiches" && <FichesPreparationPanel onClose={() => setPanel(null)} />}
       </div>
     </div>
   );

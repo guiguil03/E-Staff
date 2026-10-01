@@ -766,6 +766,14 @@ export class ProductionService {
   // tableau global), et par quel moyen. Matérialise (get-or-create) une
   // ligne PaiementAgent par mission active et par période au premier accès,
   // comme pour DecaissementProduction — la RH corrige ensuite le réel.
+  //
+  // Get-or-create GROUPÉ (2026-09-21, corrige un N+1 repéré à l'audit perf) :
+  // un createMany({skipDuplicates: true}) avec les valeurs par défaut de
+  // TOUTES les missions, suivi d'un seul findMany, remplace ce qui était un
+  // aller-retour DB par mission (findUnique puis create éventuel). Le
+  // createMany ignore silencieusement les lignes déjà en base (contrainte
+  // @@unique([missionId, periode])) — une ligne déjà corrigée par la RH
+  // n'est donc jamais écrasée, même comportement qu'avant, juste regroupé.
   async getDetailPaieAgents(periode?: string) {
     const p = periode ?? currentPeriode();
     const primePct = POSTES_BUDGET.find((x) => x.key === "primes_performance")?.pct ?? 0;
@@ -781,83 +789,89 @@ export class ProductionService {
       orderBy: { dateDebut: "desc" },
     });
 
-    const lignes = await Promise.all(
-      missions.map(async (m) => {
-        // Agrège le pointage/les métriques de toutes les semaines
-        // rattachées à ce mois de paie (voir moisDeLaSemaine).
-        const suivisDuMois = m.suivisHebdo.filter((s) => moisDeLaSemaine(s.semaine) === p);
-        const heuresAbsence = suivisDuMois.reduce((sum, s) => sum + s.heuresAbsenceNonJustifiee, 0);
-        const heuresRetard = suivisDuMois.reduce((sum, s) => sum + s.heuresRetardCumulees, 0);
-        const heuresSup = suivisDuMois.reduce((sum, s) => sum + s.heuresSupValidees, 0);
-        const caRealiseMois = round2(suivisDuMois.reduce((sum, s) => sum + s.caRealise, 0));
+    const computed = missions.map((m) => {
+      // Agrège le pointage/les métriques de toutes les semaines rattachées
+      // à ce mois de paie (voir moisDeLaSemaine).
+      const suivisDuMois = m.suivisHebdo.filter((s) => moisDeLaSemaine(s.semaine) === p);
+      const heuresAbsence = suivisDuMois.reduce((sum, s) => sum + s.heuresAbsenceNonJustifiee, 0);
+      const heuresRetard = suivisDuMois.reduce((sum, s) => sum + s.heuresRetardCumulees, 0);
+      const heuresSup = suivisDuMois.reduce((sum, s) => sum + s.heuresSupValidees, 0);
+      const caRealiseMois = round2(suivisDuMois.reduce((sum, s) => sum + s.caRealise, 0));
 
-        const tarif = m.tarifNegocie ?? 0;
-        const tauxHoraire = m.tarifNegocie ? round2(tarif / HEURES_MENSUELLES_STANDARD) : null;
-        // Retenue sur salaire — absences non justifiées ET retards cumulés,
-        // au même taux horaire (voir la maquette "FENÊTRE DÉTAILLÉE : PAIE
-        // ET PERFORMANCES AGENTS", qui déduit aussi les retards).
-        const retenue =
-          tauxHoraire !== null ? round2(tauxHoraire * (heuresAbsence + heuresRetard)) : 0;
-        const primeHeuresSup =
-          tauxHoraire !== null ? round2(tauxHoraire * heuresSup * MAJORATION_HEURES_SUP) : 0;
+      const tarif = m.tarifNegocie ?? 0;
+      const tauxHoraire = m.tarifNegocie ? round2(tarif / HEURES_MENSUELLES_STANDARD) : null;
+      // Retenue sur salaire — absences non justifiées ET retards cumulés, au
+      // même taux horaire (voir la maquette "FENÊTRE DÉTAILLÉE : PAIE ET
+      // PERFORMANCES AGENTS", qui déduit aussi les retards).
+      const retenue = tauxHoraire !== null ? round2(tauxHoraire * (heuresAbsence + heuresRetard)) : 0;
+      const primeHeuresSup =
+        tauxHoraire !== null ? round2(tauxHoraire * heuresSup * MAJORATION_HEURES_SUP) : 0;
 
-        // Prime de performance suggérée — basée sur le CA réalisé si des
-        // métriques de télévente ont été saisies ce mois, sinon repli sur le
-        // qualityScore (proxy de taux d'atteinte, faute de mieux).
-        const primeSuggeree =
-          caRealiseMois > 0
-            ? round2(caRealiseMois * primePct)
-            : m.qualityScore !== null
-              ? round2(tarif * primePct * (m.qualityScore / 5))
-              : 0;
+      // Prime de performance suggérée — basée sur le CA réalisé si des
+      // métriques de télévente ont été saisies ce mois, sinon repli sur le
+      // qualityScore (proxy de taux d'atteinte, faute de mieux).
+      const primeSuggeree =
+        caRealiseMois > 0
+          ? round2(caRealiseMois * primePct)
+          : m.qualityScore !== null
+            ? round2(tarif * primePct * (m.qualityScore / 5))
+            : 0;
 
-        const existing = await this.prisma.paiementAgent.findUnique({
-          where: { missionId_periode: { missionId: m.id, periode: p } },
-        });
-        const row =
-          existing ??
-          (await this.prisma.paiementAgent.create({
-            data: {
-              missionId: m.id,
-              periode: p,
-              montantBase: tarif,
-              montantPrime: primeSuggeree,
-            },
-          }));
+      return { m, tarif, caRealiseMois, heuresAbsence, heuresRetard, heuresSup, retenue, primeHeuresSup, primeSuggeree };
+    });
 
-        const netAPayer = round2(row.montantBase - retenue + primeHeuresSup + row.montantPrime);
+    if (computed.length > 0) {
+      await this.prisma.paiementAgent.createMany({
+        data: computed.map((c) => ({
+          missionId: c.m.id,
+          periode: p,
+          montantBase: c.tarif,
+          montantPrime: c.primeSuggeree,
+        })),
+        skipDuplicates: true,
+      });
+    }
 
-        return {
-          missionId: m.id,
-          agentNom: `${m.apprenant.prenom} ${m.apprenant.nom}`,
-          agentMatricule: m.apprenant.matricule,
-          clientNom: m.contrat.clientNom,
-          superviseurNom: m.superviseur ? `${m.superviseur.prenom} ${m.superviseur.nom}` : null,
-          tarifNegocie: m.tarifNegocie,
-          qualityScore: m.qualityScore,
-          tauxAtteinteObjectifs: m.qualityScore !== null ? round2((m.qualityScore / 5) * 100) : null,
-          caRealiseMois,
-          heuresAbsence,
-          heuresRetard,
-          heuresSup,
-          retenue,
-          primeHeuresSup,
-          montantBase: row.montantBase,
-          montantPrime: row.montantPrime,
-          netAPayer,
-          coordonneesPaiement:
-            m.apprenant.moyenPaiementType && m.apprenant.ribOuMobileMoney
-              ? {
-                  type: m.apprenant.moyenPaiementType,
-                  numero: m.apprenant.ribOuMobileMoney,
-                  verifieLe: m.apprenant.coordonneesVerifieesLe,
-                }
-              : null,
-          statut: row.statut,
-          datePaiement: row.datePaiement,
-        };
-      })
-    );
+    const rows = await this.prisma.paiementAgent.findMany({
+      where: { missionId: { in: missions.map((m) => m.id) }, periode: p },
+    });
+    const rowByMissionId = new Map(rows.map((r) => [r.missionId, r]));
+
+    const lignes = computed.map((c) => {
+      const { m, caRealiseMois, heuresAbsence, heuresRetard, heuresSup, retenue, primeHeuresSup } = c;
+      const row = rowByMissionId.get(m.id)!;
+      const netAPayer = round2(row.montantBase - retenue + primeHeuresSup + row.montantPrime);
+
+      return {
+        missionId: m.id,
+        agentNom: `${m.apprenant.prenom} ${m.apprenant.nom}`,
+        agentMatricule: m.apprenant.matricule,
+        clientNom: m.contrat.clientNom,
+        superviseurNom: m.superviseur ? `${m.superviseur.prenom} ${m.superviseur.nom}` : null,
+        tarifNegocie: m.tarifNegocie,
+        qualityScore: m.qualityScore,
+        tauxAtteinteObjectifs: m.qualityScore !== null ? round2((m.qualityScore / 5) * 100) : null,
+        caRealiseMois,
+        heuresAbsence,
+        heuresRetard,
+        heuresSup,
+        retenue,
+        primeHeuresSup,
+        montantBase: row.montantBase,
+        montantPrime: row.montantPrime,
+        netAPayer,
+        coordonneesPaiement:
+          m.apprenant.moyenPaiementType && m.apprenant.ribOuMobileMoney
+            ? {
+                type: m.apprenant.moyenPaiementType,
+                numero: m.apprenant.ribOuMobileMoney,
+                verifieLe: m.apprenant.coordonneesVerifieesLe,
+              }
+            : null,
+        statut: row.statut,
+        datePaiement: row.datePaiement,
+      };
+    });
 
     return { periode: p, lignes };
   }
@@ -902,6 +916,14 @@ export class ProductionService {
   // par période (Fixe + somme des primes, voir PaiementSuperviseur).
   // Matérialise (get-or-create) les lignes au premier accès, comme pour
   // getDetailPaieAgents.
+  //
+  // Get-or-create GROUPÉ (2026-09-21, corrige un N+1 imbriqué repéré à
+  // l'audit perf — un aller-retour DB par couple superviseur/contrat PUIS un
+  // par superviseur) : même principe que getDetailPaieAgents, un
+  // createMany({skipDuplicates: true}) avec les valeurs par défaut de tous
+  // les couples/superviseurs, suivi d'un seul findMany chacun. Une ligne
+  // déjà corrigée par la RH n'est jamais écrasée (contrainte @@unique),
+  // même comportement qu'avant, juste regroupé.
   async getDetailPoolSuperviseurs(periode?: string) {
     const p = periode ?? currentPeriode();
     const poolPct = POSTES_BUDGET.find((x) => x.key === "pool_superviseurs")?.pct ?? 0;
@@ -911,8 +933,8 @@ export class ProductionService {
       orderBy: { nom: "asc" },
     });
 
-    return Promise.all(
-      superviseurs.map(async (s) => {
+    const parContratBySuperviseur = new Map(
+      superviseurs.map((s) => {
         const parContrat = new Map<
           string,
           { clientNom: string; scores: number[]; caSupervise: number }
@@ -927,80 +949,93 @@ export class ProductionService {
           entry.caSupervise += m.tarifNegocie ?? 0;
           parContrat.set(m.contratId, entry);
         }
+        return [s.id, parContrat] as const;
+      })
+    );
 
-        const clientsDetail = await Promise.all(
-          Array.from(parContrat.entries()).map(async ([contratId, c]) => {
-            const qualityScoreMoyen =
-              c.scores.length > 0
-                ? round2(c.scores.reduce((sum, v) => sum + v, 0) / c.scores.length)
-                : null;
-            const primeSuggeree =
-              qualityScoreMoyen !== null
-                ? round2(c.caSupervise * poolPct * (qualityScoreMoyen / 5))
-                : 0;
-
-            const existing = await this.prisma.performanceSuperviseurClient.findUnique({
-              where: {
-                superviseurId_contratId_periode: { superviseurId: s.id, contratId, periode: p },
-              },
-            });
-            const row =
-              existing ??
-              (await this.prisma.performanceSuperviseurClient.create({
-                data: {
-                  superviseurId: s.id,
-                  contratId,
-                  periode: p,
-                  tauxPerformance:
-                    qualityScoreMoyen !== null ? round2((qualityScoreMoyen / 5) * 100) : null,
-                  prime: primeSuggeree,
-                },
-              }));
-            return {
-              performanceId: row.id,
-              contratId,
-              clientNom: c.clientNom,
-              tauxPerformance: row.tauxPerformance,
-              prime: row.prime,
-            };
-          })
-        );
-
-        const existingPaiement = await this.prisma.paiementSuperviseur.findUnique({
-          where: { superviseurId_periode: { superviseurId: s.id, periode: p } },
-        });
-        const paiement =
-          existingPaiement ??
-          (await this.prisma.paiementSuperviseur.create({
-            data: { superviseurId: s.id, periode: p, montantFixe: s.tarifFixe ?? 0 },
-          }));
-
-        const totalPrimes = round2(clientsDetail.reduce((sum, c) => sum + c.prime, 0));
-        const netAPayer = round2(paiement.montantFixe + totalPrimes);
-
+    const performanceDefaults = superviseurs.flatMap((s) =>
+      Array.from(parContratBySuperviseur.get(s.id)!.entries()).map(([contratId, c]) => {
+        const qualityScoreMoyen =
+          c.scores.length > 0 ? round2(c.scores.reduce((sum, v) => sum + v, 0) / c.scores.length) : null;
         return {
           superviseurId: s.id,
-          matricule: s.matricule,
-          prenom: s.prenom,
-          nom: s.nom,
-          agentsActifs: s.missions.length,
-          clientsDetail,
-          montantFixe: paiement.montantFixe,
-          totalPrimes,
-          netAPayer,
-          coordonneesPaiement:
-            s.moyenPaiementType && s.ribOuMobileMoney
-              ? {
-                  type: s.moyenPaiementType,
-                  numero: s.ribOuMobileMoney,
-                  verifieLe: s.coordonneesVerifieesLe,
-                }
-              : null,
-          statut: paiement.statut,
-          datePaiement: paiement.datePaiement,
+          contratId,
+          periode: p,
+          tauxPerformance: qualityScoreMoyen !== null ? round2((qualityScoreMoyen / 5) * 100) : null,
+          prime:
+            qualityScoreMoyen !== null ? round2(c.caSupervise * poolPct * (qualityScoreMoyen / 5)) : 0,
         };
       })
     );
+
+    if (performanceDefaults.length > 0) {
+      await this.prisma.performanceSuperviseurClient.createMany({
+        data: performanceDefaults,
+        skipDuplicates: true,
+      });
+    }
+    if (superviseurs.length > 0) {
+      await this.prisma.paiementSuperviseur.createMany({
+        data: superviseurs.map((s) => ({
+          superviseurId: s.id,
+          periode: p,
+          montantFixe: s.tarifFixe ?? 0,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    const superviseurIds = superviseurs.map((s) => s.id);
+    const [performanceRows, paiementRows] = await Promise.all([
+      this.prisma.performanceSuperviseurClient.findMany({
+        where: { superviseurId: { in: superviseurIds }, periode: p },
+      }),
+      this.prisma.paiementSuperviseur.findMany({
+        where: { superviseurId: { in: superviseurIds }, periode: p },
+      }),
+    ]);
+    const performanceByKey = new Map(performanceRows.map((r) => [`${r.superviseurId}:${r.contratId}`, r]));
+    const paiementBySuperviseurId = new Map(paiementRows.map((r) => [r.superviseurId, r]));
+
+    return superviseurs.map((s) => {
+      const parContrat = parContratBySuperviseur.get(s.id)!;
+      const clientsDetail = Array.from(parContrat.entries()).map(([contratId, c]) => {
+        const row = performanceByKey.get(`${s.id}:${contratId}`)!;
+        return {
+          performanceId: row.id,
+          contratId,
+          clientNom: c.clientNom,
+          tauxPerformance: row.tauxPerformance,
+          prime: row.prime,
+        };
+      });
+
+      const paiement = paiementBySuperviseurId.get(s.id)!;
+      const totalPrimes = round2(clientsDetail.reduce((sum, c) => sum + c.prime, 0));
+      const netAPayer = round2(paiement.montantFixe + totalPrimes);
+
+      return {
+        superviseurId: s.id,
+        matricule: s.matricule,
+        prenom: s.prenom,
+        nom: s.nom,
+        agentsActifs: s.missions.length,
+        clientsDetail,
+        montantFixe: paiement.montantFixe,
+        totalPrimes,
+        netAPayer,
+        coordonneesPaiement:
+          s.moyenPaiementType && s.ribOuMobileMoney
+            ? {
+                type: s.moyenPaiementType,
+                numero: s.ribOuMobileMoney,
+                verifieLe: s.coordonneesVerifieesLe,
+              }
+            : null,
+        statut: paiement.statut,
+        datePaiement: paiement.datePaiement,
+      };
+    });
   }
 
   async updatePerformanceSuperviseurClient(id: string, dto: UpdatePerformanceSuperviseurClientDto) {

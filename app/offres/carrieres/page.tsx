@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import StudioMetier from "@/components/studio-metier/StudioMetier";
 
 export const metadata: Metadata = {
-  title: "Studio Métier — Candidater | e-Staf",
+  title: "Ma carrière — Offres d'emploi | e-Staf",
   description:
-    "Choisissez votre voie parmi nos missions à long terme et à court terme, passez le test de sélection C1, et déposez votre candidature.",
+    "Découvrez nos offres d'emploi ouvertes, postulez en quelques clics et lisez le parcours de ceux qui ont trouvé leur emploi grâce à e-Staf.",
 };
 
 export default function CarrieresPage() {

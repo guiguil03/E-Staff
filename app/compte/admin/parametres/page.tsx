@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import RhShell from "@/components/compte-admin/RhShell";
 import ForumLivePanel from "@/components/compte-admin/ForumLivePanel";
+import ComptesStaffPanel from "@/components/compte-admin/ComptesStaffPanel";
 
 export const metadata: Metadata = {
   title: "Paramètres RH — Portail RH — e-Staf",
@@ -11,10 +12,13 @@ export default function Page() {
   return (
     <RhShell
       title="Paramètres RH"
-      subtitle="Planification du Live mensuel du Forum public."
+      subtitle="Comptes d'accès Admin & RH, et planification du Live mensuel du Forum public."
       roles={["admin"]}
     >
-      <ForumLivePanel />
+      <div className="space-y-10">
+        <ComptesStaffPanel />
+        <ForumLivePanel />
+      </div>
     </RhShell>
   );
 }

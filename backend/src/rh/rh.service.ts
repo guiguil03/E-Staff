@@ -5,11 +5,13 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
+import * as path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { CockpitService } from '../cockpit/cockpit.service';
 import { NotationService } from '../notation/notation.service';
 import { EmailService } from '../common/email.service';
-import { renderEmailHtml, emailParagraph, emailParagraphsFromText, credentialsBox } from '../common/email-template';
+import { StorageService } from '../common/storage.service';
+import { escapeHtml, renderEmailHtml, emailParagraph, emailParagraphsFromText, credentialsBox } from '../common/email-template';
 import { TIER_LABELS } from '../evaluation/evaluation.service';
 import { EnvoyerResultatsDto } from './dto/envoyer-resultats.dto';
 import { UpsertReunionDto } from './dto/upsert-reunion.dto';
@@ -131,6 +133,7 @@ export class RhService {
     private readonly cockpit: CockpitService,
     private readonly notation: NotationService,
     private readonly email: EmailService,
+    private readonly storage: StorageService,
   ) {}
 
   // ---- Vue d'ensemble -----------------------------------------------------
@@ -206,15 +209,19 @@ export class RhService {
 
   // ---- Registre global des agents & apprenants -----------------------------
 
+  // Registre global — un formateur assigné, une date de test (soumission),
+  // un niveau et une entrée en prod (première mission, distincte de la
+  // dernière utilisée pour le statut/client courant) en plus des champs
+  // déjà là, demandés par la cliente le 2026-09-20 pour donner une vraie
+  // traçabilité de bout en bout (test -> inscription -> formation -> prod).
   async getRegistre() {
     const apprenants = await this.prisma.apprenant.findMany({
       include: {
-        groupe: true,
+        groupe: { include: { formateur: true } },
         evaluationAttempt: true,
         missions: {
           include: { contrat: true },
-          orderBy: { dateDebut: 'desc' },
-          take: 1,
+          orderBy: { dateDebut: 'asc' },
         },
       },
       orderBy: { matricule: 'asc' },
@@ -222,8 +229,9 @@ export class RhService {
 
     return apprenants.map((a) => {
       const tier = a.evaluationAttempt?.tier ?? null;
-      const derniereMission = a.missions[0];
-      const enProduction = derniereMission && derniereMission.dateFin === null;
+      const premiereMission = a.missions[0] ?? null;
+      const derniereMission = a.missions[a.missions.length - 1] ?? null;
+      const enProduction = !!derniereMission && derniereMission.dateFin === null;
       return {
         matricule: a.matricule,
         prenom: a.prenom,
@@ -235,7 +243,15 @@ export class RhService {
             ? 'Certifié'
             : 'En Formation',
         formation: a.groupe.label,
+        niveau: tier ? TIER_LABELS[tier] ?? tier : null,
+        dateTest: a.evaluationAttempt?.submittedAt ?? null,
         dateAdmission: a.evaluationAttempt?.gradedAt ?? null,
+        dateInscription: a.createdAt,
+        finInscription: a.abonnementExpireAt,
+        formateurAssigne: a.groupe.formateur
+          ? `${a.groupe.formateur.prenom} ${a.groupe.formateur.nom}`
+          : null,
+        dateEntreeProd: premiereMission?.dateDebut ?? null,
         derniereMissionClient: derniereMission?.contrat.clientNom ?? null,
       };
     });
@@ -367,7 +383,7 @@ export class RhService {
         title: 'Bienvenue chez e-Staf',
         preheader: 'Vos identifiants pour votre Cockpit Formateur',
         bodyHtml:
-          emailParagraph(`Bonjour ${dto.prenom},`) +
+          emailParagraph(`Bonjour ${escapeHtml(dto.prenom)},`) +
           emailParagraph('Un compte formateur a été créé pour vous sur e-Staf.') +
           credentialsBox([
             { label: 'Matricule', value: dto.matricule },
@@ -391,9 +407,10 @@ export class RhService {
     if (!formateur) throw new NotFoundException('Formateur introuvable.');
 
     const temporaryPassword = generateTemporaryPassword();
+    // Nouveau mot de passe = anciennes sessions coupées (audit 2026-09-28).
     await this.prisma.formateur.update({
       where: { id },
-      data: { password: await bcrypt.hash(temporaryPassword, 10) },
+      data: { password: await bcrypt.hash(temporaryPassword, 10), sessionsRevoqueesAt: new Date() },
     });
 
     await this.email.send({
@@ -404,7 +421,7 @@ export class RhService {
         title: 'Vos nouveaux identifiants',
         preheader: 'Mot de passe régénéré pour votre Cockpit Formateur',
         bodyHtml:
-          emailParagraph(`Bonjour ${formateur.prenom},`) +
+          emailParagraph(`Bonjour ${escapeHtml(formateur.prenom)},`) +
           emailParagraph('Voici vos nouveaux identifiants pour vous connecter à votre Cockpit Formateur :') +
           credentialsBox([
             { label: 'Matricule', value: formateur.matricule },
@@ -432,6 +449,29 @@ export class RhService {
     return this.prisma.formateur.update({ where: { id }, data: dto });
   }
 
+  // Un formateur n'encadre qu'un seul type de cours à la fois (règle métier
+  // du 2026-09-20 : les critères d'évaluation diffèrent entre DELF/DALF,
+  // TEF, FOL...) — vérifié ici plutôt qu'en base (pas de contrainte SQL
+  // simple pour "au plus une valeur distincte parmi les groupes liés"). Ne
+  // bloque rien tant que le groupe cible n'a pas encore de typeCours
+  // renseigné : la règle ne s'applique qu'aux types réellement engagés.
+  private async assertFormateurTypeCoursCompatible(
+    formateurId: string,
+    groupeId: string,
+    typeCours: string | null,
+  ) {
+    if (!typeCours) return;
+    const autresGroupes = await this.prisma.groupe.findMany({
+      where: { formateurId, id: { not: groupeId }, typeCours: { not: null } },
+    });
+    const conflit = autresGroupes.find((g) => g.typeCours !== typeCours);
+    if (conflit) {
+      throw new BadRequestException(
+        `Ce formateur encadre déjà un groupe de type "${conflit.typeCours}" — un formateur ne peut être assigné qu'à un seul type de cours.`,
+      );
+    }
+  }
+
   async assignFormateur(groupeId: string, formateurId: string | null) {
     const groupe = await this.prisma.groupe.findUnique({
       where: { id: groupeId },
@@ -442,6 +482,7 @@ export class RhService {
         where: { id: formateurId },
       });
       if (!formateur) throw new NotFoundException('Formateur introuvable.');
+      await this.assertFormateurTypeCoursCompatible(formateurId, groupeId, groupe.typeCours);
     }
     return this.prisma.groupe.update({
       where: { id: groupeId },
@@ -455,6 +496,9 @@ export class RhService {
       where: { id: groupeId },
     });
     if (!groupe) throw new NotFoundException('Groupe introuvable.');
+    if (groupe.formateurId) {
+      await this.assertFormateurTypeCoursCompatible(groupe.formateurId, groupeId, typeCours);
+    }
     return this.prisma.groupe.update({
       where: { id: groupeId },
       data: { typeCours },
@@ -481,12 +525,14 @@ export class RhService {
   // CockpitService.getTauxReussiteParGroupe). Remplace la simple liste de
   // chips A-F par une vraie table de pilotage.
   async getVagues() {
-    const [groupes, tauxReussiteParGroupe] = await Promise.all([
+    const now = new Date();
+    const [groupes, tauxReussiteParGroupe, eloquenceParGroupe] = await Promise.all([
       this.prisma.groupe.findMany({
         include: { formateur: true, _count: { select: { apprenants: true } } },
         orderBy: { cle: 'asc' },
       }),
       this.cockpit.getTauxReussiteParGroupe(),
+      this.cockpit.getEloquenceParGroupe(),
     ]);
 
     return groupes.map((g) => ({
@@ -496,9 +542,14 @@ export class RhService {
       typeCours: g.typeCours,
       dateDebut: g.dateDebut,
       dateFin: g.dateFin,
+      // "cloturee" dès que dateFin est passée — même convention que le
+      // commentaire du modèle Groupe (schema.prisma). Une vague sans dateFin
+      // reste "active" par défaut (pas de clôture implicite).
+      statut: g.dateFin && g.dateFin < now ? ('cloturee' as const) : ('active' as const),
       formateurNom: g.formateur ? `${g.formateur.prenom} ${g.formateur.nom}` : null,
       apprenantsCount: g._count.apprenants,
       tauxReussite: tauxReussiteParGroupe.get(g.cle) ?? 0,
+      scoreEloquenceMoyen: eloquenceParGroupe.get(g.cle) ?? null,
     }));
   }
 
@@ -697,6 +748,7 @@ export class RhService {
         email: attempt.candidat.email,
         phone: attempt.candidat.phone,
         coordonneesRecuesLe: attempt.candidat.createdAt,
+        dataPurgedAt: attempt.candidat.dataPurgedAt,
       },
       test: {
         statut: attempt.status,
@@ -728,6 +780,65 @@ export class RhService {
       formation,
       production,
     };
+  }
+
+  // Purge RGPD manuelle (Cycle complet — bouton "Supprimer les données
+  // personnelles") : supprime du stockage S3 le CV, les enregistrements
+  // audio/vidéo des mises en situation et le PDF de contrat, puis anonymise
+  // les coordonnées du candidat en base. Volontairement limité aux données
+  // directement identifiantes et aux fichiers ; les réponses texte (essai,
+  // partie ouverte) portent sur des sujets imposés et gardent leur valeur
+  // d'audit de notation, elles ne sont pas touchées. Irréversible — pas de
+  // "undo" possible une fois les fichiers supprimés du bucket.
+  async purgeCandidatData(attemptId: string) {
+    const attempt = await this.prisma.evaluationAttempt.findUnique({
+      where: { id: attemptId },
+      include: { candidat: true, situationResponses: true, videoResponses: true },
+    });
+    if (!attempt) throw new NotFoundException('Tentative introuvable.');
+    if (attempt.candidat.dataPurgedAt) {
+      throw new BadRequestException('Les données de ce candidat ont déjà été supprimées.');
+    }
+
+    const keysToDelete = [
+      attempt.candidat.cvKey,
+      attempt.contractPdfKey,
+      ...attempt.situationResponses.map((s) => s.audioUrl),
+      ...attempt.videoResponses.map((v) => v.videoUrl),
+    ].filter((key): key is string => Boolean(key));
+
+    // Pas de rattrapage silencieux : si un fichier ne peut pas être
+    // supprimé (droit d'accès, clé déjà absente...), la purge s'arrête et
+    // remonte l'erreur plutôt que de marquer le candidat "purgé" alors que
+    // des données personnelles subsistent réellement dans le bucket.
+    await Promise.all(keysToDelete.map((key) => this.storage.deleteObject(key)));
+
+    const dataPurgedAt = new Date();
+    await this.prisma.$transaction([
+      this.prisma.candidat.update({
+        where: { id: attempt.candidat.id },
+        data: {
+          firstName: 'Anonymisé',
+          lastName: '',
+          email: `anonymise-${attempt.candidat.id}@e-staf.local`,
+          phone: '',
+          cvKey: null,
+          dataPurgedAt,
+        },
+      }),
+      this.prisma.evaluationAttempt.update({
+        where: { id: attempt.id },
+        data: { contractPdfKey: attempt.contractPdfKey ? null : undefined },
+      }),
+      ...attempt.situationResponses.map((s) =>
+        this.prisma.situationResponse.update({ where: { id: s.id }, data: { audioUrl: 'SUPPRIME_RGPD' } })
+      ),
+      ...attempt.videoResponses.map((v) =>
+        this.prisma.videoResponse.update({ where: { id: v.id }, data: { videoUrl: 'SUPPRIME_RGPD' } })
+      ),
+    ]);
+
+    return { ok: true, dataPurgedAt };
   }
 
   // ---- Envoi des résultats au candidat (Cycle complet) ---------------------
@@ -1013,7 +1124,7 @@ export class RhService {
         title: 'Bienvenue chez e-Staf',
         preheader: `Vos identifiants pour le ${groupe.label}`,
         bodyHtml:
-          emailParagraph(`Bonjour ${dto.prenom},`) +
+          emailParagraph(`Bonjour ${escapeHtml(dto.prenom)},`) +
           emailParagraph(`Un compte apprenant a été créé pour vous dans le <strong>${groupe.label}</strong>.`) +
           credentialsBox([
             { label: 'Matricule', value: matricule },
@@ -1033,13 +1144,22 @@ export class RhService {
     });
     if (!formateur) throw new NotFoundException('Formateur introuvable.');
 
-    const tauxParGroupe = await this.cockpit.getTauxReussiteParGroupe();
+    const [tauxParGroupe, vivierCount, documents, bilans] = await Promise.all([
+      this.cockpit.getTauxReussiteParGroupe(),
+      this.cockpit.getVivierCountForFormateur(id),
+      this.prisma.formateurDocument.findMany({
+        where: { formateurId: id },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.cockpit.listBilansFormateur(id),
+    ]);
 
     return {
       matricule: formateur.matricule,
       prenom: formateur.prenom,
       nom: formateur.nom,
       email: formateur.email,
+      vivierCount,
       vagues: formateur.groupes.map((g) => ({
         label: g.label,
         typeCours: g.typeCours,
@@ -1048,7 +1168,43 @@ export class RhService {
         apprenantsCount: g._count.apprenants,
         tauxReussite: tauxParGroupe.get(g.cle) ?? 0,
       })),
+      // Le contrat est un FormateurDocument comme les fiches de prép (voir
+      // schema.prisma), distingué par type — le plus récent fait foi en cas
+      // de renouvellement, pas d'historique de versions pour l'instant.
+      contrat: documents.find((d) => d.type === 'contrat') ?? null,
+      fichesPreparation: documents.filter((d) => d.type === 'fiche_preparation'),
+      bilans,
     };
+  }
+
+  // Contrat déposé par la RH sur la fiche du formateur (voir
+  // FormateurDocument dans schema.prisma) — même stockage S3-compatible que
+  // les fiches de prép, distingué par type/uploadedBy.
+  async uploadFormateurContrat(id: string, file: Express.Multer.File) {
+    const formateur = await this.prisma.formateur.findUnique({ where: { id } });
+    if (!formateur) throw new NotFoundException('Formateur introuvable.');
+
+    const extension = path.extname(file.originalname) || '';
+    const key = `formateurs/${formateur.id}/contrat/${Date.now()}${extension}`;
+    await this.storage.uploadBuffer(key, file.buffer, file.mimetype || 'application/octet-stream');
+    return this.prisma.formateurDocument.create({
+      data: {
+        formateurId: formateur.id,
+        type: 'contrat',
+        filename: file.originalname,
+        storageKey: key,
+        uploadedBy: 'rh',
+      },
+    });
+  }
+
+  // Téléchargement générique (contrat ou fiche de prép) depuis le Casier RH
+  // — pas de restriction par type, StaffGuard suffit au contrôle d'accès
+  // (voir rh.controller.ts).
+  async getFormateurDocumentStream(documentId: string) {
+    const doc = await this.prisma.formateurDocument.findUnique({ where: { id: documentId } });
+    if (!doc) throw new NotFoundException('Document introuvable.');
+    return this.storage.getObjectStream(doc.storageKey);
   }
 
   async getPartenaireCasier(id: string) {
@@ -1091,7 +1247,10 @@ export class RhService {
           where: { formateurId: null },
           include: { _count: { select: { apprenants: true } } },
         }),
-        this.prisma.formateur.findMany({ orderBy: { nom: 'asc' } }),
+        this.prisma.formateur.findMany({
+          orderBy: { nom: 'asc' },
+          include: { groupes: { where: { typeCours: { not: null } }, take: 1 } },
+        }),
         this.prisma.reunion.findMany({
           where: { statut: 'planifiee', startAt: { gte: new Date() } },
           orderBy: { startAt: 'asc' },
@@ -1114,9 +1273,14 @@ export class RhService {
           typeCours: g.typeCours,
           nbApprenants: g._count.apprenants,
         })),
+      // typeCoursActuel : le type de cours déjà engagé par ce formateur, s'il
+      // en encadre déjà un (voir assertFormateurTypeCoursCompatible) — sert
+      // au front à ne proposer que des formateurs compatibles avec le type
+      // du groupe à pourvoir.
       formateursDisponibles: formateurs.map((f) => ({
         id: f.id,
         nom: `${f.prenom} ${f.nom}`,
+        typeCoursActuel: f.groupes[0]?.typeCours ?? null,
       })),
       reunionsAVenir: reunionsAVenir.map((r) => ({
         id: r.id,
@@ -1346,30 +1510,56 @@ export class RhService {
   // une ligne PaiementFormateur par formateur et par période au premier
   // accès, base initiale = Formateur.tarifFixe.
 
-  private async getOrCreatePaiementFormateur(formateurId: string, periode: string) {
-    const existing = await this.prisma.paiementFormateur.findUnique({
-      where: { formateurId_periode: { formateurId, periode } },
+  // Get-or-create GROUPÉ (2026-09-21, corrige un N+1 repéré à l'audit perf —
+  // même famille que ProductionService.getDetailPaieAgents) : un
+  // createMany({skipDuplicates: true}) avec le montantBase par défaut de
+  // TOUS les formateurs concernés, suivi d'un seul findMany, remplace ce qui
+  // était un aller-retour DB (findUnique, puis formateur.findUnique +
+  // create éventuels) par formateur. Une ligne déjà corrigée par la RH
+  // n'est jamais écrasée (contrainte @@unique([formateurId, periode])).
+  private async getOrCreatePaiementFormateurRows(
+    formateurs: { id: string; tarifFixe: number | null }[],
+    periode: string,
+  ) {
+    // Pas de garde sur formateurs.length === 0 : createMany({data: []}) et
+    // findMany({where: {formateurId: {in: []}}}) sont des no-op valides côté
+    // Prisma, inutile de complexifier le typage pour ce cas.
+    await this.prisma.paiementFormateur.createMany({
+      data: formateurs.map((f) => ({
+        formateurId: f.id,
+        periode,
+        montantBase: f.tarifFixe ?? 0,
+      })),
+      skipDuplicates: true,
     });
-    if (existing) return existing;
-    const formateur = await this.prisma.formateur.findUnique({ where: { id: formateurId } });
-    return this.prisma.paiementFormateur.create({
-      data: { formateurId, periode, montantBase: formateur?.tarifFixe ?? 0 },
+
+    const rows = await this.prisma.paiementFormateur.findMany({
+      where: { formateurId: { in: formateurs.map((f) => f.id) }, periode },
     });
+    return new Map(rows.map((r) => [r.formateurId, r]));
   }
 
   // Heures réellement programmées (Seance.dureeMinutes, startAt renseigné)
-  // sur un groupe pendant le mois de paie — seule donnée fiable pour "heures
-  // effectuées" (la Presence issue des webhooks Daily n'est pas rattachée à
-  // un Formateur par id, seulement à un rôle/displayName, trop fragile pour
-  // servir de base de paie).
-  private async heuresGroupeSurPeriode(groupeId: string, periode: string): Promise<number> {
+  // pour plusieurs groupes pendant le mois de paie, en un seul aller-retour
+  // DB (2026-09-21 — un appel par groupe auparavant) — seule donnée fiable
+  // pour "heures effectuées" (la Presence issue des webhooks Daily n'est pas
+  // rattachée à un Formateur par id, seulement à un rôle/displayName, trop
+  // fragile pour servir de base de paie).
+  private async heuresParGroupeSurPeriode(groupeIds: string[], periode: string) {
+    const heures = new Map<string, number>();
+    if (groupeIds.length === 0) return heures;
+
     const [year, month] = periode.split('-').map(Number);
     const debut = new Date(Date.UTC(year, month - 1, 1));
     const fin = new Date(Date.UTC(year, month, 1));
     const seances = await this.prisma.seance.findMany({
-      where: { groupeId, startAt: { gte: debut, lt: fin } },
+      where: { groupeId: { in: groupeIds }, startAt: { gte: debut, lt: fin } },
     });
-    return round2(seances.reduce((sum, s) => sum + s.dureeMinutes, 0) / 60);
+    for (const s of seances) {
+      heures.set(s.groupeId, (heures.get(s.groupeId) ?? 0) + s.dureeMinutes / 60);
+    }
+    for (const [id, total] of heures) heures.set(id, round2(total));
+    return heures;
   }
 
   async getTableauPaieFormateurs(periode?: string) {
@@ -1379,6 +1569,8 @@ export class RhService {
       orderBy: { nom: 'asc' },
     });
 
+    const rowByFormateurId = await this.getOrCreatePaiementFormateurRows(formateurs, p);
+
     const parBucket = new Map<string, typeof formateurs>();
     for (const f of formateurs) {
       const bucket = bucketFormateur(f.groupes);
@@ -1387,25 +1579,23 @@ export class RhService {
       parBucket.set(bucket, list);
     }
 
-    return Promise.all(
-      BUCKETS_PAIE_FORMATEURS.map(async (bucket) => {
-        const list = parBucket.get(bucket) ?? [];
-        let netAPayerTotal = 0;
-        let payes = 0;
-        for (const f of list) {
-          const row = await this.getOrCreatePaiementFormateur(f.id, p);
-          netAPayerTotal += row.montantBase + row.montantPrime - row.retenue;
-          if (row.statut === 'paye') payes += 1;
-        }
-        return {
-          bucket,
-          nbFormateurs: list.length,
-          netAPayerTotal: round2(netAPayerTotal),
-          payes,
-          enAttente: list.length - payes,
-        };
-      }),
-    );
+    return BUCKETS_PAIE_FORMATEURS.map((bucket) => {
+      const list = parBucket.get(bucket) ?? [];
+      let netAPayerTotal = 0;
+      let payes = 0;
+      for (const f of list) {
+        const row = rowByFormateurId.get(f.id)!;
+        netAPayerTotal += row.montantBase + row.montantPrime - row.retenue;
+        if (row.statut === 'paye') payes += 1;
+      }
+      return {
+        bucket,
+        nbFormateurs: list.length,
+        netAPayerTotal: round2(netAPayerTotal),
+        payes,
+        enAttente: list.length - payes,
+      };
+    });
   }
 
   async getDetailPaieFormateurs(bucket: string, periode?: string) {
@@ -1416,36 +1606,37 @@ export class RhService {
     });
     const filtres = formateurs.filter((f) => bucketFormateur(f.groupes) === bucket);
 
-    const lignes = await Promise.all(
-      filtres.map(async (f) => {
-        const groupesDetail = await Promise.all(
-          f.groupes.map(async (g) => ({
-            groupeLabel: g.label,
-            typeCours: g.typeCours,
-            heuresEffectuees: await this.heuresGroupeSurPeriode(g.id, p),
-          })),
-        );
-        const heuresTotal = round2(groupesDetail.reduce((sum, g) => sum + g.heuresEffectuees, 0));
+    const [rowByFormateurId, heuresByGroupeId] = await Promise.all([
+      this.getOrCreatePaiementFormateurRows(filtres, p),
+      this.heuresParGroupeSurPeriode(filtres.flatMap((f) => f.groupes.map((g) => g.id)), p),
+    ]);
 
-        const row = await this.getOrCreatePaiementFormateur(f.id, p);
-        const netAPayer = round2(row.montantBase + row.montantPrime - row.retenue);
+    const lignes = filtres.map((f) => {
+      const groupesDetail = f.groupes.map((g) => ({
+        groupeLabel: g.label,
+        typeCours: g.typeCours,
+        heuresEffectuees: heuresByGroupeId.get(g.id) ?? 0,
+      }));
+      const heuresTotal = round2(groupesDetail.reduce((sum, g) => sum + g.heuresEffectuees, 0));
 
-        return {
-          formateurId: f.id,
-          matricule: f.matricule,
-          formateurNom: `${f.prenom} ${f.nom}`,
-          groupes: groupesDetail,
-          heuresTotal,
-          montantBase: row.montantBase,
-          montantPrime: row.montantPrime,
-          retenue: row.retenue,
-          moyenPaiement: row.moyenPaiement,
-          netAPayer,
-          statut: row.statut,
-          datePaiement: row.datePaiement,
-        };
-      }),
-    );
+      const row = rowByFormateurId.get(f.id)!;
+      const netAPayer = round2(row.montantBase + row.montantPrime - row.retenue);
+
+      return {
+        formateurId: f.id,
+        matricule: f.matricule,
+        formateurNom: `${f.prenom} ${f.nom}`,
+        groupes: groupesDetail,
+        heuresTotal,
+        montantBase: row.montantBase,
+        montantPrime: row.montantPrime,
+        retenue: row.retenue,
+        moyenPaiement: row.moyenPaiement,
+        netAPayer,
+        statut: row.statut,
+        datePaiement: row.datePaiement,
+      };
+    });
 
     return { periode: p, bucket, lignes };
   }

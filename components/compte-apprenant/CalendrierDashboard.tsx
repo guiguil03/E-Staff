@@ -5,8 +5,9 @@ import Link from "next/link";
 import Reveal from "@/components/Reveal";
 import CalendarMonthView, { type CalendarEvent } from "@/components/ui/CalendarMonthView";
 import { useRequireRole } from "@/lib/useRequireRole";
-import { apiGet, ApiError } from "@/lib/api";
+import { apiGet } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
+import EnregistrementsLecteur, { type EnregistrementApi } from "@/components/ui/EnregistrementsLecteur";
 
 interface SeanceApi {
   groupeCle: string;
@@ -23,6 +24,11 @@ interface SeanceApi {
 export default function CalendrierDashboard() {
   const checked = useRequireRole("apprenant");
   const [seances, setSeances] = useState<SeanceApi[] | "loading" | "erreur">("loading");
+  const [matricule, setMatricule] = useState<string | null>(null);
+  // Enregistrements des séances passées (revisionnage) — absents tant que
+  // l'enregistrement n'est pas activé ; une erreur ici n'affecte pas le
+  // calendrier.
+  const [enregistrements, setEnregistrements] = useState<(EnregistrementApi & { numero: number })[]>([]);
 
   useEffect(() => {
     if (!checked) return;
@@ -31,9 +37,17 @@ export default function CalendrierDashboard() {
       setSeances("erreur");
       return;
     }
+    // Toute erreur (401/403, 5xx, réseau) doit remonter comme une vraie
+    // erreur, jamais comme "aucune séance" — un calendrier vide en cas de
+    // panne backend a l'air normal et masque le vrai problème (voir
+    // signalement du 2026-09-22).
+    setMatricule(matricule);
+    apiGet<(EnregistrementApi & { numero: number })[]>(`/apprenants/${matricule}/enregistrements`)
+      .then((data) => setEnregistrements(data ?? []))
+      .catch(() => setEnregistrements([]));
     apiGet<SeanceApi[]>(`/apprenants/${matricule}/seances`)
       .then(setSeances)
-      .catch((err) => setSeances(err instanceof ApiError ? [] : "erreur"));
+      .catch(() => setSeances("erreur"));
   }, [checked]);
 
   if (!checked) {
@@ -113,6 +127,12 @@ export default function CalendrierDashboard() {
                     <p className="mt-2 font-sans text-sm text-white/70">
                       {s.objectifs ?? "Thème à venir — le formateur n'a pas encore précisé les objectifs."}
                     </p>
+                    {matricule && (
+                      <EnregistrementsLecteur
+                        enregistrements={enregistrements.filter((e) => e.numero === s.numero)}
+                        lienPath={(id) => `/apprenants/${matricule}/enregistrements/${id}/lien`}
+                      />
+                    )}
                   </div>
                 ))}
               </div>

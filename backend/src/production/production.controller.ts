@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -15,6 +16,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { RhGuard } from "../common/rh.guard";
+import { isImage, isPdf } from "../common/file-signature";
 import { ProductionService } from "./production.service";
 import { UpsertSuperviseurDto } from "./dto/upsert-superviseur.dto";
 import { UpsertContratDto } from "./dto/upsert-contrat.dto";
@@ -29,6 +31,11 @@ import { UpdatePaiementAgentDto } from "./dto/update-paiement-agent.dto";
 import { UpdatePerformanceSuperviseurClientDto } from "./dto/update-performance-superviseur-client.dto";
 import { UpdatePaiementSuperviseurDto } from "./dto/update-paiement-superviseur.dto";
 import { UpsertChargeInfrastructureDto } from "./dto/upsert-charge-infrastructure.dto";
+
+// Ni limite de taille ni de type n'existaient avant (audit du 2026-09-21) —
+// une pièce justificative est une facture/reçu, PDF ou photo comme pour le
+// reçu de paiement d'inscription (voir registrations.controller.ts).
+const MAX_PIECE_JUSTIFICATIVE_BYTES = 10 * 1024 * 1024; // 10 Mo
 
 @ApiTags("Production")
 @Controller("production")
@@ -288,11 +295,17 @@ export class ProductionController {
   }
 
   @Post("charges-infrastructure/:id/piece-justificative")
-  @UseInterceptors(FileInterceptor("fichier"))
+  @UseInterceptors(FileInterceptor("fichier", { limits: { fileSize: MAX_PIECE_JUSTIFICATIVE_BYTES } }))
   uploadPieceJustificative(
     @Param("id") id: string,
     @UploadedFile() file: Express.Multer.File
   ) {
+    if (!file) {
+      throw new BadRequestException("Fichier manquant ou trop volumineux (10 Mo max).");
+    }
+    if (!isPdf(file.buffer) && !isImage(file.buffer)) {
+      throw new BadRequestException("Le fichier ne semble pas être un PDF ou une image valide.");
+    }
     return this.service.uploadPieceJustificative(id, file);
   }
 

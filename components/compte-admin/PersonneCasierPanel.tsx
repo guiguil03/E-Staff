@@ -44,6 +44,7 @@ interface PersonneCasier {
     email: string;
     phone: string;
     coordonneesRecuesLe: string;
+    dataPurgedAt: string | null;
   };
   test: {
     statut: string;
@@ -175,6 +176,11 @@ export default function PersonneCasierPanel({ attemptId }: { attemptId: string }
               </p>
             </div>
           </div>
+          <PurgeCandidatButton
+            attemptId={attemptId}
+            dataPurgedAt={casier.candidat.dataPurgedAt}
+            onPurged={refresh}
+          />
         </div>
       </Reveal>
 
@@ -409,6 +415,87 @@ function EnvoyerResultatsForm({
         </p>
       )}
       <p className="mt-1 font-mono text-[11px] text-white/30">Téléphone : {phone}</p>
+    </div>
+  );
+}
+
+// Purge RGPD manuelle — supprime CV/audio/vidéo du bucket et anonymise les
+// coordonnées (voir RhService.purgeCandidatData). Irréversible : double
+// confirmation (checkbox + double-clic sur le bouton) plutôt qu'un simple
+// window.confirm, pour qu'un clic accidentel ne déclenche jamais ça.
+function PurgeCandidatButton({
+  attemptId,
+  dataPurgedAt,
+  onPurged,
+}: {
+  attemptId: string;
+  dataPurgedAt: string | null;
+  onPurged: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [status, setStatus] = useState<"idle" | "sending" | "error">("idle");
+
+  if (dataPurgedAt) {
+    return (
+      <p className="mt-2 border-t border-white/10 pt-3 font-mono text-[11px] text-white/40">
+        Données personnelles supprimées le {fmtDate(dataPurgedAt)}.
+      </p>
+    );
+  }
+
+  async function purger() {
+    setStatus("sending");
+    try {
+      await apiPostAuthed(`/rh/cycle/${attemptId}/purge`, {}, adminHeaders());
+      setStatus("idle");
+      setConfirming(false);
+      onPurged();
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  if (!confirming) {
+    return (
+      <div className="mt-2 border-t border-white/10 pt-3">
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          className="font-mono text-[11px] uppercase tracking-widest text-white/40 hover:text-red-400"
+        >
+          Supprimer les données personnelles (RGPD)
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 space-y-2 border-t border-white/10 pt-3">
+      <p className="font-mono text-xs text-red-400">
+        Supprime définitivement le CV, les enregistrements audio/vidéo et anonymise les
+        coordonnées de ce candidat. Action irréversible.
+      </p>
+      <div className="flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={purger}
+          disabled={status === "sending"}
+          className="rounded border border-red-400 px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest text-red-400 hover:bg-red-400 hover:text-obsidian disabled:opacity-50"
+        >
+          {status === "sending" ? "Suppression..." : "Confirmer la suppression"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirming(false)}
+          disabled={status === "sending"}
+          className="font-mono text-[11px] uppercase tracking-widest text-white/40 hover:text-white"
+        >
+          Annuler
+        </button>
+      </div>
+      {status === "error" && (
+        <p className="font-mono text-xs text-accent">Échec de la suppression — réessayer.</p>
+      )}
     </div>
   );
 }

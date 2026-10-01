@@ -6,12 +6,13 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function Page({
+export default async function Page({
   params,
 }: {
-  params: { groupeCle: string; numero: string };
+  params: Promise<{ groupeCle: string; numero: string }>;
 }) {
+  const { groupeCle, numero } = await params;
   return (
-    <ClasseVirtuelleFormateurPage groupeCle={params.groupeCle} numero={Number(params.numero)} />
+    <ClasseVirtuelleFormateurPage groupeCle={groupeCle} numero={Number(numero)} />
   );
 }

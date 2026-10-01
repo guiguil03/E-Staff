@@ -1,5 +1,5 @@
-import { IsNotEmpty, IsString } from "class-validator";
+import { IsNotEmpty, IsString, MaxLength } from "class-validator";
 
 export class ForgotPasswordDto {
-  @IsString() @IsNotEmpty() matricule!: string;
+  @IsString() @IsNotEmpty() @MaxLength(64) matricule!: string;
 }

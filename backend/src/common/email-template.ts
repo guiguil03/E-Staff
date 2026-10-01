@@ -176,7 +176,7 @@ export function escapeEmailHtml(value: string): string {
   return escapeHtml(value);
 }
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

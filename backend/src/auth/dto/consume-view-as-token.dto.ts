@@ -1,5 +1,5 @@
-import { IsNotEmpty, IsString } from "class-validator";
+import { IsNotEmpty, IsString, MaxLength } from "class-validator";
 
 export class ConsumeViewAsTokenDto {
-  @IsString() @IsNotEmpty() token!: string;
+  @IsString() @IsNotEmpty() @MaxLength(256) token!: string;
 }

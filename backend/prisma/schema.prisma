@@ -124,9 +124,9 @@ model Registration {
   // conservé mais inutilisé côté produit depuis le retour au flux
   // déclaratif ci-dessus (2026-09-09) ; réactivable plus tard sans
   // migration si un vrai compte marchand est ouvert.
-  paymentAmount          Int?
-  papiReference          String?
-  papiNotificationToken  String?
+  paymentAmount         Int?
+  papiReference         String?
+  papiNotificationToken String?
 
   // "papi" | "manuel" — renseigné à la confirmation, pour distinguer un
   // paiement auto-confirmé par webhook Papi d'une confirmation manuelle
@@ -143,6 +143,20 @@ model Registration {
   // au moment de la soumission de la référence de paiement — voir
   // /conditions-generales et submitPaymentReferencePublic.
   cguAcceptedAt DateTime?
+
+  // Offre d'emploi précise choisie sur la vitrine Studio Métier (voir
+  // OffreEmploi) — null pour les autres funnels et les candidatures
+  // spontanées. listeAttente : candidature déposée alors que l'offre était
+  // clôturée (bouton « Rejoindre la liste d'attente »).
+  offreEmploiId String?
+  offreEmploi   OffreEmploi? @relation(fields: [offreEmploiId], references: [id], onDelete: SetNull)
+  listeAttente  Boolean      @default(false)
+
+  // Jeton des liens publics (contrat, paiement) envoyés par e-mail — voir
+  // common/lien-token.ts. accesParIdAutorise : lignes antérieures aux
+  // jetons, dont les liens déjà envoyés contiennent l'identifiant.
+  lienToken          String?  @unique
+  accesParIdAutorise Boolean  @default(false)
 }
 
 // ---------------------------------------------------------------------------
@@ -194,8 +208,8 @@ model Connecteur {
   status    String   @default("nouveau")
   createdAt DateTime @default(now())
 
-  apprenantsApportes Apprenant[]
-  contratsApportes   ContratB2B[]
+  apprenantsApportes   Apprenant[]
+  contratsApportes     ContratB2B[]
   commissionsDemarrage CommissionDemarrageApporteur[]
 }
 
@@ -226,6 +240,15 @@ model Candidat {
   agentAcquisition   AgentAcquisition? @relation(fields: [agentAcquisitionId], references: [id])
 
   attempts EvaluationAttempt[]
+
+  // Purge RGPD manuelle déclenchée par la RH (voir RhService.
+  // purgeCandidatData) — non null = CV/audio/vidéo supprimés du stockage et
+  // coordonnées anonymisées. Conserve la date pour pouvoir justifier d'une
+  // suppression sur demande d'un candidat, sans perdre la trace statistique
+  // du passage dans le pipeline (voir RhService.getCycleComplet).
+  dataPurgedAt DateTime?
+
+  @@index([agentAcquisitionId])
 }
 
 // ---------------------------------------------------------------------------
@@ -282,7 +305,7 @@ model EvaluationAttempt {
   // prorata des scores définis par sécurité, mais couvre maintenant les 5.
   totalScore Float?
   // "refuse" | "formation_b1" | "niveau_b2" | "niveau_c1" | "placement_direct"
-  tier String?
+  tier       String?
 
   submittedAt       DateTime?
   gradedAt          DateTime?
@@ -334,6 +357,22 @@ model EvaluationAttempt {
   videoResponses      VideoResponse[]
   essayResponse       EssayResponse?
   ecritOuvertResponse EcritOuvertResponse?
+
+  // Formateur qui a commencé la correction (première note posée) — la file
+  // des tests est commune à tous les formateurs : affiché « en cours de
+  // correction par X » pour éviter que deux formateurs corrigent le même
+  // test. Indicatif, jamais bloquant (voir EvaluationService.prendreCorrection).
+  correcteurId      String?
+  correcteur        Formateur? @relation("CorrecteurTests", fields: [correcteurId], references: [id], onDelete: SetNull)
+  correctionPriseAt DateTime?
+
+  @@index([candidatId])
+
+  // Jeton des liens publics (contrat, paiement) envoyés par e-mail — voir
+  // common/lien-token.ts. accesParIdAutorise : lignes antérieures aux
+  // jetons, dont les liens déjà envoyés contiennent l'identifiant.
+  lienToken          String?  @unique
+  accesParIdAutorise Boolean  @default(false)
 }
 
 // Une réponse audio à une des 10 situations professionnelles (le candidat
@@ -419,11 +458,11 @@ model EcritOuvertResponse {
   attemptId String            @unique
   attempt   EvaluationAttempt @relation(fields: [attemptId], references: [id])
 
-  reformulationText String
-  plurielTexts      String // JSON string[3]
-  styleText         String
-  synonymeText      String
-  redactionText     String
+  reformulationText  String
+  plurielTexts       String // JSON string[3]
+  styleText          String
+  synonymeText       String
+  redactionText      String
   redactionWordCount Int
 
   score          Float? // 0 à 10
@@ -466,8 +505,29 @@ model Groupe {
   dateDebut DateTime?
   dateFin   DateTime?
 
-  apprenants Apprenant[]
-  seances    Seance[]
+  apprenants    Apprenant[]
+  seances       Seance[]
+  diffusions    Diffusion[]
+  supportsCours SupportCours[]
+}
+
+// Annonce diffusée par un formateur — jusqu'ici BroadcastCard (Cockpit
+// Formateur) ne faisait qu'un setState local, rien n'était sauvegardé ni
+// transmis. groupeId nul = tous les groupes de ce formateur (borné par la
+// règle d'exclusivité formateur/type de cours, voir
+// RhService.assertFormateurTypeCoursCompatible) plutôt qu'une vraie
+// diffusion académie entière.
+model Diffusion {
+  id          String    @id @default(cuid())
+  formateurId String
+  formateur   Formateur @relation(fields: [formateurId], references: [id])
+  groupeId    String?
+  groupe      Groupe?   @relation(fields: [groupeId], references: [id])
+  message     String
+  createdAt   DateTime  @default(now())
+
+  @@index([formateurId])
+  @@index([groupeId])
 }
 
 model Formateur {
@@ -486,14 +546,91 @@ model Formateur {
   password            String?
   resetToken          String?   @unique
   resetTokenExpiresAt DateTime?
+  // « Déconnecter partout » / changement de mot de passe : toute session
+  // émise avant cette date est refusée (voir common/session.ts).
+  sessionsRevoqueesAt DateTime?
 
   // Fixe mensuel négocié — base du Net à Payer (voir PaiementFormateur),
   // même principe que Superviseur.tarifFixe côté Production. Nullable tant
   // que la RH ne l'a pas renseigné.
   tarifFixe Float?
 
-  groupes   Groupe[]
-  paiements PaiementFormateur[]
+  groupes           Groupe[]
+  paiements         PaiementFormateur[]
+  documents         FormateurDocument[]
+  bilans            BilanFormateur[]
+  diffusions        Diffusion[]
+  supportsCours     SupportCours[]
+  // Tests d'admission dont ce formateur a commencé la correction.
+  testsEnCorrection EvaluationAttempt[] @relation("CorrecteurTests")
+}
+
+// Support de cours partagé par un formateur aux apprenants d'un groupe —
+// distinct de FormateurDocument (fiches de préparation, usage RH/perso, non
+// visible des apprenants). seanceNumero nul = document général du groupe
+// (pas rattaché à une séance précise) ; sinon 1..12, rattaché au créneau
+// structurel du groupe (même convention que Seance.numero — pas de FK vers
+// Seance, un support peut être déposé avant que la séance elle-même soit
+// planifiée). Le formateur choisit l'un ou l'autre au dépôt (décision
+// produit 2026-09-22, brainstorm "1er chose à mettre en place").
+model SupportCours {
+  id          String    @id @default(cuid())
+  formateurId String
+  formateur   Formateur @relation(fields: [formateurId], references: [id])
+  groupeId    String
+  groupe      Groupe    @relation(fields: [groupeId], references: [id])
+
+  seanceNumero Int?
+
+  filename   String
+  storageKey String
+  mimeType   String
+
+  createdAt DateTime @default(now())
+
+  @@index([formateurId])
+  @@index([groupeId])
+}
+
+// Bilan hebdomadaire validé par le formateur (voir CockpitService.submitBilanHebdo)
+// — jusqu'ici WeeklyReportPanel ne faisait qu'un setState local, rien n'était
+// sauvegardé ni transmis. statsSnapshot fige les chiffres du rapport hebdo
+// au moment de la validation (voir CockpitService.getRapportHebdo) pour que
+// l'historique reste lisible même si les chiffres bougent ensuite.
+model BilanFormateur {
+  id          String    @id @default(cuid())
+  formateurId String
+  formateur   Formateur @relation(fields: [formateurId], references: [id])
+
+  constat String
+  analyse String
+  axes    String
+
+  statsSnapshot Json
+
+  createdAt DateTime @default(now())
+
+  @@index([formateurId])
+}
+
+// Documents rattachés à un formateur — fiches de préparation (déposées
+// librement par le formateur lui-même) et contrat (déposé par la RH). Un
+// seul modèle pour les deux plutôt que deux tables quasi identiques ;
+// `type` distingue l'usage, `uploadedBy` qui l'a déposé. Fichier réel dans
+// le bucket S3-compatible (voir StorageService), storageKey seule en base.
+model FormateurDocument {
+  id          String    @id @default(cuid())
+  formateurId String
+  formateur   Formateur @relation(fields: [formateurId], references: [id])
+
+  type       String // "fiche_preparation" | "contrat"
+  filename   String
+  storageKey String
+  uploadedBy String // "formateur" | "rh"
+
+  createdAt DateTime @default(now())
+
+  @@index([formateurId])
 }
 
 // Paie individuelle d'un formateur pour une période — miroir de PaiementAgent
@@ -551,6 +688,9 @@ model Apprenant {
   // Mot de passe oublié : jeton à usage unique, expire 1h après génération.
   resetToken          String?   @unique
   resetTokenExpiresAt DateTime?
+  // « Déconnecter partout » / changement de mot de passe : toute session
+  // émise avant cette date est refusée (voir common/session.ts).
+  sessionsRevoqueesAt DateTime?
 
   // Échéance de l'abonnement en cours (renouvellement à date fixe, décision
   // produit du 2026-08-24) — saisie/mise à jour manuellement par le
@@ -559,6 +699,16 @@ model Apprenant {
   // affiche à part, ni "à jour" ni "en retard", plutôt que de leur prêter un
   // statut inventé.
   abonnementExpireAt DateTime?
+
+  // Renouvellement déclaratif (Compte Apprenant, 2026-09-29) — même
+  // principe que Registration/EvaluationAttempt : l'apprenant transmet
+  // lui-même sa référence de paiement (+ reçu facultatif), le formateur
+  // vérifie et fixe la nouvelle échéance (voir CockpitService.
+  // setAbonnementExpireAt, qui efface ces 3 champs à la confirmation — pas
+  // un historique, juste "une demande en attente" à la fois).
+  renewalPaymentReference  String?
+  renewalPaymentReceiptKey String?
+  renewalRequestedAt       DateTime?
 
   groupeId String
   groupe   Groupe @relation(fields: [groupeId], references: [id])
@@ -592,8 +742,8 @@ model Apprenant {
   moyenPaiementType      String? // "RIB" | "MVola" | "Orange Money" | "Airtel Money"
   coordonneesVerifieesLe DateTime?
 
-  presences Presence[]
-  notations Notation[]
+  presences         Presence[]
+  notations         Notation[]
   // Tentative d'évaluation à l'origine de la création de ce compte, quand
   // applicable (pipeline post-test) — absent pour les apprenants seedés/
   // créés manuellement.
@@ -619,18 +769,27 @@ model Apprenant {
   // Renouvellements d'abonnement FOL comptant comme "réinscription" pour la
   // commission de l'agent d'acquisition (voir RhService.renouvelerAbonnement).
   reinscriptions Reinscription[]
+
+  // Notes privées du formateur sur cet apprenant, par séance.
+  notesFormateur NoteFormateur[]
+
+  @@index([groupeId])
+  @@index([connecteurId])
+  @@index([agentAcquisitionId])
 }
 
 // Un renouvellement d'abonnement FOL déclenché par la RH — évènement tracé
 // (pas juste un écrasement de abonnementExpireAt) pour pouvoir compter le
 // nombre de réinscriptions dans le suivi des Agents d'Acquisition.
 model Reinscription {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   apprenantId String
   apprenant   Apprenant @relation(fields: [apprenantId], references: [id])
 
   renouveleLe      DateTime @default(now())
   nouvelleEcheance DateTime
+
+  @@index([apprenantId])
 }
 
 // Horaire réel d'une des 12 séances d'un groupe. startAt reste nullable :
@@ -658,6 +817,12 @@ model Seance {
 
   presences Presence[]
   notations Notation[]
+
+  // Enregistrements cloud Daily de la classe virtuelle (revisionnables par
+  // les apprenants du groupe) — voir model Enregistrement.
+  enregistrements Enregistrement[]
+  notesFormateur  NoteFormateur[]
+  tableauBlanc    TableauBlanc?
 
   @@unique([groupeId, numero])
 }
@@ -695,6 +860,7 @@ model Notation {
   gradedAt     DateTime?
 
   @@unique([seanceId, apprenantId, competence])
+  @@index([apprenantId])
 }
 
 // Présence en classe virtuelle — alimentée par les webhooks Daily
@@ -703,9 +869,9 @@ model Notation {
 // qu'on n'arrive pas à rattacher (ex. le formateur, ou un identifiant de
 // token corrompu) — on garde quand même la ligne plutôt que de la perdre.
 model Presence {
-  id       String  @id @default(cuid())
+  id       String @id @default(cuid())
   seanceId String
-  seance   Seance  @relation(fields: [seanceId], references: [id])
+  seance   Seance @relation(fields: [seanceId], references: [id])
 
   apprenantId String?
   apprenant   Apprenant? @relation(fields: [apprenantId], references: [id])
@@ -717,6 +883,9 @@ model Presence {
   joinedAt      DateTime
   leftAt        DateTime?
   dureeSecondes Int?
+
+  @@index([seanceId])
+  @@index([apprenantId])
 }
 
 // ---------------------------------------------------------------------------
@@ -800,10 +969,10 @@ model Superviseur {
   moyenPaiementType      String? // "RIB" | "MVola" | "Orange Money" | "Airtel Money"
   coordonneesVerifieesLe DateTime?
 
-  missions               Mission[]
-  rapportsHebdo          RapportHebdoSuperviseur[]
-  paiements              PaiementSuperviseur[]
-  performancesParClient  PerformanceSuperviseurClient[]
+  missions              Mission[]
+  rapportsHebdo         RapportHebdoSuperviseur[]
+  paiements             PaiementSuperviseur[]
+  performancesParClient PerformanceSuperviseurClient[]
 }
 
 // Paie d'un superviseur pour une période — le Fixe + la somme des primes
@@ -854,6 +1023,7 @@ model PerformanceSuperviseurClient {
   updatedAt DateTime @updatedAt
 
   @@unique([superviseurId, contratId, periode])
+  @@index([contratId])
 }
 
 model ContratB2B {
@@ -891,14 +1061,17 @@ model ContratB2B {
   // pas encore négocié/saisi.
   tarifMensuel Float?
 
-  missions                   Mission[]
-  factures                   Facture[]
-  objectifsJournaliers       ObjectifJournalier[]
-  rapportsHebdo              RapportHebdoSuperviseur[]
-  commissionDemarrage        CommissionDemarrageApporteur?
-  performancesSuperviseur    PerformanceSuperviseurClient[]
+  missions                Mission[]
+  factures                Facture[]
+  objectifsJournaliers    ObjectifJournalier[]
+  rapportsHebdo           RapportHebdoSuperviseur[]
+  commissionDemarrage     CommissionDemarrageApporteur?
+  performancesSuperviseur PerformanceSuperviseurClient[]
 
   createdAt DateTime @default(now())
+
+  @@index([entrepriseProjetId])
+  @@index([connecteurId])
 }
 
 model Mission {
@@ -927,10 +1100,14 @@ model Mission {
   // Nullable : pas toujours négocié/saisi au moment de la création.
   tarifNegocie Float?
 
-  suivisHebdo    SuiviAgentHebdo[]
-  paiements      PaiementAgent[]
+  suivisHebdo SuiviAgentHebdo[]
+  paiements   PaiementAgent[]
 
   createdAt DateTime @default(now())
+
+  @@index([apprenantId])
+  @@index([contratId])
+  @@index([superviseurId])
 }
 
 model Facture {
@@ -946,6 +1123,8 @@ model Facture {
   statut       String    @default("emise")
   dateEmission DateTime  @default(now())
   datePaiement DateTime?
+
+  @@index([contratId])
 }
 
 // Objectif journalier d'un contrat B2B — saisie manuelle par le superviseur
@@ -959,8 +1138,8 @@ model ObjectifJournalier {
   contratId String
   contrat   ContratB2B @relation(fields: [contratId], references: [id])
 
-  jour       DateTime // horodatage normalisé à minuit, un enregistrement par jour et par contrat
-  tauxAtteint Float   // % de l'objectif journalier atteint
+  jour        DateTime // horodatage normalisé à minuit, un enregistrement par jour et par contrat
+  tauxAtteint Float // % de l'objectif journalier atteint
 
   createdAt DateTime @default(now())
 
@@ -1024,6 +1203,7 @@ model RapportHebdoSuperviseur {
   updatedAt DateTime @updatedAt
 
   @@unique([contratId, semaine])
+  @@index([superviseurId])
 }
 
 // Ligne du "Tableau de bord financier global" — un poste de charge (sur les
@@ -1109,6 +1289,8 @@ model CommissionDemarrageApporteur {
   datePaiement DateTime?
 
   createdAt DateTime @default(now())
+
+  @@index([connecteurId])
 }
 
 // Ligne de charge sous le poste "Charges Fixes Infrastructure" — loyer,
@@ -1126,8 +1308,8 @@ model CommissionDemarrageApporteur {
 model TarifFormation {
   id String @id @default(cuid())
 
-  typeCours      String @unique
-  prixFormation  Float  @default(0)
+  typeCours     String @unique
+  prixFormation Float  @default(0)
 
   updatedAt DateTime @updatedAt
 }
@@ -1154,6 +1336,8 @@ model EncaissementFormation {
   moyenPaiement String? // "Mobile Money", "Virement bancaire", "Espèces", etc.
 
   createdAt DateTime @default(now())
+
+  @@index([apprenantId])
 }
 
 model ChargeInfrastructure {
@@ -1181,4 +1365,139 @@ model ChargeInfrastructure {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Offres d'emploi réelles affichées sur la vitrine Studio Métier
+// (/offres/carrieres) — gérées par la RH depuis le Portail RH, sans toucher
+// au code (demande cliente du 2026-09-19). Le statut affiché (places
+// disponibles / dernières places / complète) est calculé automatiquement à
+// partir des places et de la date limite, voir offres-emploi/statut.ts.
+model OffreEmploi {
+  id String @id @default(cuid())
+
+  // Métier Studio Métier auquel l'offre est rattachée (slug de
+  // components/studio-metier/data.ts, ex. "teleconseiller", "closer").
+  metierSlug String
+
+  titre        String // ex. "Téléprospecteur PAC — Marché Canadien"
+  drapeau      String? // emoji affiché devant le titre, ex. "🇨🇦"
+  // Étiquettes courtes affichées sous le titre, ex. ["Télétravail",
+  // "Temps plein", "GMT-5", "Niveau C1"].
+  modalites    String[] @default([])
+  projet       String?
+  remuneration String?
+  prerequis    String?
+
+  placesTotal    Int
+  placesPourvues Int       @default(0)
+  // Fermeture automatique de l'offre passé cette date.
+  dateLimite     DateTime?
+  // Fermeture manuelle par la RH, indépendamment des places.
+  cloturee       Boolean   @default(false)
+  // Masquée de la vitrine (brouillon / archivée) sans être supprimée.
+  publiee        Boolean   @default(true)
+  // Si renseigné, « Postuler » ouvre WhatsApp au lieu du formulaire.
+  lienWhatsapp   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  candidatures Registration[]
+
+  @@index([metierSlug])
+}
+
+// Enregistrement cloud d'une classe virtuelle (Daily « cloud recording »),
+// démarré automatiquement à l'arrivée du formateur quand
+// DAILY_RECORDING_ENABLED=true. Créé à la réception du webhook
+// recording.ready-to-download ; la vidéo reste stockée chez Daily, la
+// lecture passe par un lien d'accès temporaire demandé à la volée (GET
+// /recordings/:id/access-link) — jamais d'URL permanente stockée ici.
+model Enregistrement {
+  id               String    @id @default(cuid())
+  seanceId         String
+  seance           Seance    @relation(fields: [seanceId], references: [id], onDelete: Cascade)
+  dailyRecordingId String    @unique
+  dureeSecondes    Int?
+  debutAt          DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([seanceId])
+}
+
+// Notes privées prises par le formateur pendant/après une classe virtuelle
+// (panneau « Notes ») : une par apprenant et par séance, plus une note de
+// séance générale (apprenantId null). Jamais visibles des apprenants.
+model NoteFormateur {
+  id          String     @id @default(cuid())
+  seanceId    String
+  seance      Seance     @relation(fields: [seanceId], references: [id], onDelete: Cascade)
+  apprenantId String?
+  apprenant   Apprenant? @relation(fields: [apprenantId], references: [id], onDelete: Cascade)
+  contenu     String
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([seanceId, apprenantId])
+}
+
+// Tableau blanc partagé d'une classe virtuelle (Excalidraw) : le formateur
+// dessine/annote, les apprenants le voient en direct en lecture seule.
+// `elements` = scène Excalidraw sérialisée ; `version` incrémentée à chaque
+// sauvegarde pour que les apprenants ne rechargent que si elle a changé.
+// Les images (documents à annoter) sont stockées à part, voir
+// TableauFichier.
+model TableauBlanc {
+  seanceId  String   @id
+  seance    Seance   @relation(fields: [seanceId], references: [id], onDelete: Cascade)
+  elements  String   @default("[]")
+  version   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  fichiers TableauFichier[]
+}
+
+// Image posée sur le tableau blanc (id = identifiant de fichier Excalidraw),
+// stockée sur le bucket.
+model TableauFichier {
+  seanceId   String
+  tableau    TableauBlanc @relation(fields: [seanceId], references: [seanceId], onDelete: Cascade)
+  fileId     String
+  storageKey String
+  mimeType   String
+  createdAt  DateTime     @default(now())
+
+  @@id([seanceId, fileId])
+}
+
+// Comptes nominatifs Admin / RH (audit du 2026-09-28) — remplacent les
+// identifiants partagés ADMIN_TEST_* / RH_TEST_* : dès qu'un compte actif
+// existe pour un rôle, l'identifiant partagé de ce rôle est refusé (voir
+// AuthController.login). Gérés par l'admin (Paramètres > Comptes d'accès).
+model CompteStaff {
+  id        String   @id @default(cuid())
+  matricule String   @unique // ex. "ADM-2026-0001", "RH-2026-0001"
+  role      String // "admin" | "rh"
+  prenom    String
+  nom       String
+  email     String
+  password  String // hash bcrypt
+  actif     Boolean  @default(true)
+
+  resetToken          String?   @unique
+  resetTokenExpiresAt DateTime?
+  sessionsRevoqueesAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Compteurs anti-abus (limites de requêtes, verrouillage après échecs de
+// connexion) — en base plutôt qu'en mémoire du serveur (audit du
+// 2026-09-28) : partagés entre plusieurs instances Railway et conservés
+// après un redémarrage. Voir common/anti-abus.ts.
+model CompteurAbus {
+  cle              String    @id
+  compte           Int       @default(0)
+  debutFenetre     DateTime  @default(now())
+  verrouilleJusqua DateTime?
 }

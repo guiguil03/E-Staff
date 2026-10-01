@@ -1,5 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import * as path from "path";
 import { PrismaService } from "../prisma/prisma.service";
+import { StorageService } from "../common/storage.service";
+import { EmailService } from "../common/email.service";
+import { renderEmailHtml, emailQuote, emailParagraphsFromText } from "../common/email-template";
 
 // Agrégats réels du Cockpit Formateur — remplace les widgets qui tournaient
 // sur components/compte-formateur/exampleData.ts (Vivier C1, moyennes de
@@ -7,10 +11,9 @@ import { PrismaService } from "../prisma/prisma.service";
 // convention de "moyenne globale" que l'ancien mock : somme des 5 notes de
 // compétence (/20 chacune) de la séance la plus avancée où les 5 sont
 // notées pour cet apprenant — équivalent à l'ancien `moyenneGlobale`/100.
-// N'inclut PAS les "Alertes Paiements / renouvellements" : aucune donnée
-// d'abonnement/échéance n'existe en base (Apprenant n'a pas ces champs) —
-// nécessite une décision produit sur le modèle de renouvellement avant de
-// pouvoir les brancher, voir la conversation du 2026-08-24.
+// Les Alertes Paiements/Renouvellements sont couvertes séparément par
+// `Apprenant.abonnementExpireAt` (décision produit 2026-08-24) — voir
+// getPaiements/setAbonnementExpireAt plus bas dans ce service.
 const COMPETENCIES = [
   "comprehension_orale",
   "expression_orale",
@@ -40,7 +43,11 @@ interface RawApprenant {
 
 @Injectable()
 export class CockpitService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+    private readonly email: EmailService
+  ) {}
 
   private async findFormateurOrThrow(matricule: string) {
     const formateur = await this.prisma.formateur.findUnique({ where: { matricule } });
@@ -137,6 +144,35 @@ export class CockpitService {
     return result;
   }
 
+  // Identité du formateur connecté (prénom affiché en en-tête du Cockpit) —
+  // avant le 2026-09-22, le prénom du compte de démo ("Hasina") restait
+  // affiché en dur, y compris une fois de vrais comptes individuels en
+  // place (2026-09-16).
+  async getProfil(formateurMatricule: string) {
+    const formateur = await this.findFormateurOrThrow(formateurMatricule);
+    return { prenom: formateur.prenom, nom: formateur.nom };
+  }
+
+  // Liste plate de tous les apprenants du formateur, tous groupes confondus
+  // — sert la recherche d'apprenant du Cockpit (voir AdminColumn.tsx,
+  // SearchApprenantCard). Avant le 2026-09-22, cette recherche tournait sur
+  // exampleData.ts (30 faux noms) : chercher un vrai apprenant ne
+  // renvoyait jamais rien.
+  async listApprenants(formateurMatricule: string) {
+    const formateur = await this.findFormateurOrThrow(formateurMatricule);
+    const apprenants = await this.prisma.apprenant.findMany({
+      where: { groupe: { formateurId: formateur.id } },
+      select: { matricule: true, prenom: true, nom: true, groupe: { select: { cle: true } } },
+      orderBy: { prenom: "asc" },
+    });
+    return apprenants.map((a) => ({
+      matricule: a.matricule,
+      prenom: a.prenom,
+      nom: a.nom,
+      groupeCle: a.groupe.cle,
+    }));
+  }
+
   // Filtré aux groupes du formateur connecté (voir Groupe.formateurId) —
   // avant les comptes individuels (2026-09-16), un seul compte formateur
   // partagé voyait systématiquement tous les groupes.
@@ -150,9 +186,13 @@ export class CockpitService {
       : tousApprenants;
     const scoresParApprenant = this.buildScoresParApprenant(notations);
 
-    const parGroupe = new Map<string, { cle: string; label: string; moyennes: number[]; count: number }>();
+    const parGroupe = new Map<
+      string,
+      { id: string; cle: string; label: string; moyennes: number[]; count: number }
+    >();
     for (const a of apprenants) {
       const entry = parGroupe.get(a.groupe.cle) ?? {
+        id: a.groupe.id,
         cle: a.groupe.cle,
         label: a.groupe.label,
         moyennes: [],
@@ -171,7 +211,14 @@ export class CockpitService {
           g.moyennes.length > 0
             ? Math.round((g.moyennes.reduce((s, v) => s + v, 0) / g.moyennes.length) * 100) / 100
             : null;
-        return { cle: g.cle, label: g.label, moyenne, statut: this.statutFor(moyenne), apprenantsCount: g.count };
+        return {
+          id: g.id,
+          cle: g.cle,
+          label: g.label,
+          moyenne,
+          statut: this.statutFor(moyenne),
+          apprenantsCount: g.count,
+        };
       });
   }
 
@@ -227,6 +274,54 @@ export class CockpitService {
       result.set(cle, total > 0 ? Math.round((reussis / total) * 100) : 0);
     }
     return result;
+  }
+
+  // Score "posture & éloquence" moyen par groupe — /20, même convention que
+  // moyenneGlobale (retenu à la séance la plus avancée où les 5 compétences
+  // sont notées pour l'apprenant). Sert au comparatif "Historique des
+  // vagues" (RhService.getVagues) — null pour un groupe sans aucun
+  // apprenant noté, plutôt qu'un 0 qui laisserait croire à un score réel.
+  async getEloquenceParGroupe(): Promise<Map<string, number | null>> {
+    const { apprenants, notations } = await this.loadRaw();
+    const scoresParApprenant = this.buildScoresParApprenant(notations);
+
+    const parGroupe = new Map<string, number[]>();
+    for (const a of apprenants) {
+      const bySeance = scoresParApprenant.get(a.id);
+      let best: number | null = null;
+      let bestNumero = -1;
+      if (bySeance) {
+        for (const [numero, scores] of bySeance) {
+          if (numero > bestNumero && COMPETENCIES.every((c) => scores[c] !== undefined)) {
+            bestNumero = numero;
+            best = scores.posture_eloquence;
+          }
+        }
+      }
+      if (best === null) continue;
+      const scores = parGroupe.get(a.groupe.cle) ?? [];
+      scores.push(best);
+      parGroupe.set(a.groupe.cle, scores);
+    }
+
+    const result = new Map<string, number | null>();
+    for (const [cle, scores] of parGroupe) {
+      result.set(cle, Math.round((scores.reduce((s, v) => s + v, 0) / scores.length) * 100) / 100);
+    }
+    return result;
+  }
+
+  // Vivier d'un formateur — mêmes règle et seuil que getVivierC1 (cohorte
+  // entière), restreint aux apprenants de ses propres groupes. Sert au
+  // Casier Formateur RH (voir RhService.getFormateurCasier).
+  async getVivierCountForFormateur(formateurId: string): Promise<number> {
+    const { apprenants, notations } = await this.loadRaw();
+    const scoresParApprenant = this.buildScoresParApprenant(notations);
+    return apprenants.filter((a) => {
+      if (a.groupe.formateurId !== formateurId) return false;
+      const moyenne = this.moyenneGlobale(scoresParApprenant.get(a.id));
+      return moyenne !== null && moyenne >= VIVIER_C1_THRESHOLD;
+    }).length;
   }
 
   async getGroupeDetail(cle: string, formateurMatricule?: string) {
@@ -308,6 +403,81 @@ export class CockpitService {
     };
   }
 
+  // Fiche individuelle d'un apprenant — moyenne, compétences (dernière note
+  // connue par compétence, même logique que le radar de groupe), historique
+  // par séance (même séances que EVOLUTION_SEANCES, pour rester cohérent
+  // avec la courbe de groupe) et rendus en attente de correction. Branché
+  // depuis le 2026-09-22 (ApprenantFichePage.tsx tournait avant sur
+  // exampleData.ts, 30 faux apprenants).
+  async getApprenantFiche(matricule: string, formateurMatricule?: string) {
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { matricule },
+      include: { groupe: true },
+    });
+    if (!apprenant) throw new NotFoundException(`Apprenant ${matricule} introuvable.`);
+
+    if (formateurMatricule) {
+      const formateur = await this.findFormateurOrThrow(formateurMatricule);
+      if (apprenant.groupe.formateurId !== formateur.id) {
+        throw new ForbiddenException(`Vous n'encadrez pas cet apprenant.`);
+      }
+    }
+
+    const { apprenants: tousApprenants, notations, seancesPassees, presences } = await this.loadRaw();
+    const scoresParApprenant = this.buildScoresParApprenant(notations);
+    const tauxAbsenceParApprenant = this.buildTauxAbsence(tousApprenants, seancesPassees, presences);
+    const bySeance = scoresParApprenant.get(apprenant.id);
+
+    const competencies = COMPETENCIES.map((key) => {
+      let latest: number | null = null;
+      let latestNumero = -1;
+      if (bySeance) {
+        for (const [numero, scores] of bySeance) {
+          if (scores[key] !== undefined && numero > latestNumero) {
+            latestNumero = numero;
+            latest = scores[key];
+          }
+        }
+      }
+      return { key, score: latest ?? 0 };
+    });
+
+    const history = EVOLUTION_SEANCES.map((numero) => {
+      const scores = bySeance?.get(numero);
+      const complete = scores && COMPETENCIES.every((c) => scores[c] !== undefined);
+      const moyenne = complete
+        ? Math.round(COMPETENCIES.reduce((sum, c) => sum + scores![c], 0) * 100) / 100
+        : null;
+      return { label: `S${numero}`, moyenne };
+    });
+
+    const tauxAbsence = tauxAbsenceParApprenant.get(apprenant.id) ?? null;
+    const rendus = await this.prisma.notation.findMany({
+      where: { apprenantId: apprenant.id, fileKey: { not: null }, gradedAt: null },
+      include: { seance: true },
+      orderBy: { soumisAt: "asc" },
+    });
+
+    return {
+      matricule: apprenant.matricule,
+      prenom: apprenant.prenom,
+      nom: apprenant.nom,
+      groupeCle: apprenant.groupe.cle,
+      moyenneGlobale: this.moyenneGlobale(bySeance),
+      tauxAbsence,
+      alerteDecrochage: tauxAbsence !== null && tauxAbsence >= ALERTE_DECROCHAGE_TAUX_ABSENCE,
+      competencies,
+      history,
+      rendusEnAttente: rendus.map((r) => ({
+        id: r.id,
+        competence: r.competence,
+        numero: r.seance.numero,
+        fileName: r.fileName,
+        soumisAt: r.soumisAt,
+      })),
+    };
+  }
+
   // Courbe d'évolution des groupes — moyenne %, séances 1 à 4 (voir
   // EVOLUTION_SEANCES). Pour chaque groupe/séance, moyenne des apprenants
   // dont CETTE séance précise a ses 5 compétences notées (contrairement à
@@ -378,8 +548,12 @@ export class CockpitService {
   // mise à jour manuellement par le formateur (pas de facturation/webhook
   // automatique). "non_defini" pour les apprenants sans date encore fixée —
   // distinct de "en_retard", pour ne pas leur prêter un statut inventé.
-  async getPaiements() {
+  // Limité aux apprenants des groupes du formateur (audit du 2026-09-28 :
+  // tout formateur voyait et modifiait l'abonnement de toute l'académie).
+  async getPaiements(formateurMatricule?: string) {
+    const formateur = formateurMatricule ? await this.findFormateurOrThrow(formateurMatricule) : null;
     const apprenants = await this.prisma.apprenant.findMany({
+      where: formateur ? { groupe: { formateurId: formateur.id } } : undefined,
       include: { groupe: true },
       orderBy: { abonnementExpireAt: "asc" },
     });
@@ -389,15 +563,35 @@ export class CockpitService {
       nom: a.nom,
       groupeCle: a.groupe.cle,
       abonnementExpireAt: a.abonnementExpireAt,
+      // Renouvellement déclaratif soumis par l'apprenant (voir
+      // NotationService.submitRenewalPayment) — à vérifier avant de
+      // confirmer la nouvelle échéance ci-dessous.
+      renewalPaymentReference: a.renewalPaymentReference,
+      renewalRequestedAt: a.renewalRequestedAt,
     }));
   }
 
-  async setAbonnementExpireAt(matricule: string, expireAt: Date) {
-    const apprenant = await this.prisma.apprenant.findUnique({ where: { matricule } });
+  async setAbonnementExpireAt(matricule: string, expireAt: Date, formateurMatricule?: string) {
+    const apprenant = await this.prisma.apprenant.findUnique({ where: { matricule }, include: { groupe: true } });
     if (!apprenant) throw new NotFoundException(`Apprenant ${matricule} introuvable.`);
+    if (formateurMatricule) {
+      const formateur = await this.findFormateurOrThrow(formateurMatricule);
+      if (apprenant.groupe.formateurId !== formateur.id) {
+        throw new ForbiddenException(`Vous n'encadrez pas cet apprenant.`);
+      }
+    }
     const updated = await this.prisma.apprenant.update({
       where: { matricule },
-      data: { abonnementExpireAt: expireAt },
+      data: {
+        abonnementExpireAt: expireAt,
+        // Fixer une échéance VAUT confirmation de la demande de
+        // renouvellement en attente, s'il y en avait une — pas un
+        // historique à conserver (voir schema.prisma), juste "une demande à
+        // la fois".
+        renewalPaymentReference: null,
+        renewalPaymentReceiptKey: null,
+        renewalRequestedAt: null,
+      },
       include: { groupe: true },
     });
     return {
@@ -407,5 +601,119 @@ export class CockpitService {
       groupeCle: updated.groupe.cle,
       abonnementExpireAt: updated.abonnementExpireAt,
     };
+  }
+
+  // Bilan hebdomadaire — jusqu'ici WeeklyReportPanel ne faisait qu'un
+  // setState local à la validation, rien n'était sauvegardé ni transmis à
+  // la RH/direction (voir BilanFormateur dans schema.prisma). Le snapshot
+  // des chiffres est figé au moment de la validation pour rester lisible
+  // même si les chiffres globaux bougent ensuite.
+  async submitBilanHebdo(matricule: string, dto: { constat: string; analyse: string; axes: string }) {
+    const formateur = await this.findFormateurOrThrow(matricule);
+    const statsSnapshot = await this.getRapportHebdo();
+    return this.prisma.bilanFormateur.create({
+      data: {
+        formateurId: formateur.id,
+        constat: dto.constat,
+        analyse: dto.analyse,
+        axes: dto.axes,
+        statsSnapshot,
+      },
+    });
+  }
+
+  async listBilansFormateur(formateurId: string) {
+    return this.prisma.bilanFormateur.findMany({
+      where: { formateurId },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  // Fiches de préparation — upload libre par le formateur lui-même (voir
+  // FormateurDocument dans schema.prisma), consultables ensuite depuis son
+  // Casier RH (RhService.getFormateurCasier).
+  async uploadDocument(matricule: string, file: Express.Multer.File) {
+    const formateur = await this.findFormateurOrThrow(matricule);
+    const extension = path.extname(file.originalname) || "";
+    const key = `formateurs/${formateur.id}/fiches/${Date.now()}${extension}`;
+    await this.storage.uploadBuffer(key, file.buffer, file.mimetype || "application/octet-stream");
+    return this.prisma.formateurDocument.create({
+      data: {
+        formateurId: formateur.id,
+        type: "fiche_preparation",
+        filename: file.originalname,
+        storageKey: key,
+        uploadedBy: "formateur",
+      },
+    });
+  }
+
+  async listDocuments(matricule: string) {
+    const formateur = await this.findFormateurOrThrow(matricule);
+    return this.prisma.formateurDocument.findMany({
+      where: { formateurId: formateur.id, type: "fiche_preparation" },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async getDocumentStream(matricule: string, documentId: string) {
+    const formateur = await this.findFormateurOrThrow(matricule);
+    const doc = await this.prisma.formateurDocument.findUnique({ where: { id: documentId } });
+    if (!doc || doc.formateurId !== formateur.id) {
+      throw new NotFoundException("Document introuvable.");
+    }
+    return this.storage.getObjectStream(doc.storageKey);
+  }
+
+  // Diffusion — jusqu'ici BroadcastCard ne faisait qu'un setState local,
+  // rien n'était sauvegardé ni envoyé (voir Diffusion dans schema.prisma).
+  // groupeId absent = tous les groupes du formateur connecté (borné par la
+  // règle d'exclusivité formateur/type de cours, voir RhService) plutôt
+  // qu'une diffusion académie entière. Persistée ET envoyée par e-mail à
+  // chaque apprenant ciblé.
+  async createDiffusion(matricule: string, groupeId: string | null, message: string) {
+    const formateur = await this.findFormateurOrThrow(matricule);
+
+    let cibles;
+    if (groupeId) {
+      const groupe = await this.prisma.groupe.findUnique({ where: { id: groupeId } });
+      if (!groupe) throw new NotFoundException("Groupe introuvable.");
+      if (groupe.formateurId !== formateur.id) {
+        throw new BadRequestException("Vous ne pouvez diffuser que sur vos propres groupes.");
+      }
+      cibles = await this.prisma.apprenant.findMany({ where: { groupeId } });
+    } else {
+      cibles = await this.prisma.apprenant.findMany({
+        where: { groupe: { formateurId: formateur.id } },
+      });
+    }
+
+    const diffusion = await this.prisma.diffusion.create({
+      data: { formateurId: formateur.id, groupeId, message },
+    });
+
+    await Promise.all(
+      cibles.map((a) =>
+        this.email.send({
+          to: a.email,
+          subject: `Annonce de votre formateur — ${formateur.prenom} ${formateur.nom}`,
+          text: `Bonjour ${a.prenom},\n\n${message}\n\n— ${formateur.prenom} ${formateur.nom}`,
+          html: renderEmailHtml({
+            title: "Annonce de votre formateur",
+            bodyHtml: emailQuote(message) + emailParagraphsFromText(`— ${formateur.prenom} ${formateur.nom}`),
+          }),
+        })
+      )
+    );
+
+    return { ...diffusion, destinatairesCount: cibles.length };
+  }
+
+  async listAnnonces(matricule: string) {
+    const formateur = await this.findFormateurOrThrow(matricule);
+    return this.prisma.diffusion.findMany({
+      where: { formateurId: formateur.id },
+      orderBy: { createdAt: "desc" },
+    });
   }
 }

@@ -42,6 +42,7 @@ describe("AuthService", () => {
   let prisma: {
     apprenant: { findUnique: jest.Mock; update: jest.Mock };
     formateur: { findUnique: jest.Mock; update: jest.Mock };
+    compteStaff: { findUnique: jest.Mock; update: jest.Mock };
   };
   let email: { send: jest.Mock };
   let service: AuthService;
@@ -53,6 +54,10 @@ describe("AuthService", () => {
         update: jest.fn(),
       },
       formateur: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
+      },
+      compteStaff: {
         findUnique: jest.fn().mockResolvedValue(null),
         update: jest.fn(),
       },

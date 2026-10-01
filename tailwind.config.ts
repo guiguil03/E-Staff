@@ -20,6 +20,13 @@ const config: Config = {
       obsidianCard: "#131A2A", // slightly lighter dark blue-gray — card backgrounds in dark/elite universe
       muted: "#807A6E", // warm grey secondary text (light universe only)
       white: "#FFFFFF",
+      // Statuts (badges 🟢/🟠/🔴 des offres d'emploi Studio Métier, erreurs
+      // ponctuelles) — lisibles sur fond obsidian. La palette Tailwind par
+      // défaut étant remplacée ci-dessus, les classes emerald-*/orange-*/
+      // red-* n'existent pas ici.
+      statusGreen: "#34A56F",
+      statusOrange: "#E0913A",
+      statusRed: "#D8604F",
     },
     fontFamily: {
       display: ["var(--font-fraunces)", "serif"],

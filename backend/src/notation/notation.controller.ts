@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -16,8 +17,21 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { FormateurGuard } from "../common/formateur.guard";
+import { ApprenantGuard } from "../common/apprenant.guard";
+import { RateLimitGuard } from "../common/rate-limit.guard";
+import { isImage, isPdf } from "../common/file-signature";
 import { NotationService } from "./notation.service";
 import { GradeNotationDto } from "./dto/grade-notation.dto";
+import { SubmitRenewalPaymentDto } from "./dto/submit-renewal-payment.dto";
+
+// Devoirs apprenant : vidéo possible pour l'oral (exposé), d'où une limite
+// large — Multer bufférise en mémoire, sans limite un upload serait sans
+// borne (même logique que evaluation.controller.ts).
+const MAX_DEVOIR_UPLOAD_BYTES = 200 * 1024 * 1024; // 200 Mo
+// Reçu de paiement du renouvellement — mêmes limites que
+// registrations.controller.ts (reçu de paiement de l'inscription).
+const MAX_RECEIPT_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
+const RECEIPT_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
 
 @ApiTags("Notation")
 @Controller()
@@ -30,6 +44,12 @@ export class NotationController {
   @UseGuards(FormateurGuard)
   listACorriger(@Headers("x-formateur-matricule") formateurMatricule: string) {
     return this.service.listACorriger(formateurMatricule);
+  }
+
+  @Get("notations/corriges")
+  @UseGuards(FormateurGuard)
+  listCorriges(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.listCorriges(formateurMatricule);
   }
 
   @Get("notations/:id/devoir")
@@ -80,18 +100,29 @@ export class NotationController {
   }
 
   // ---- Apprenant (pas de guard — même niveau de protection stopgap que le
-  // reste du Compte Apprenant, matricule comme identifiant) ------------------
+  // reste du Compte Apprenant — désormais gardé par ApprenantGuard : la
+  // session doit correspondre exactement au matricule de l'URL (voir
+  // apprenant.guard.ts), ce qui ferme l'IDOR par itération de matricule.
 
+  @UseGuards(ApprenantGuard)
   @Get("apprenants/:matricule/dashboard")
   getApprenantDashboard(@Param("matricule") matricule: string) {
     return this.service.getApprenantDashboard(matricule);
   }
 
+  @UseGuards(ApprenantGuard)
+  @Get("apprenants/:matricule/annonces")
+  listAnnoncesForApprenant(@Param("matricule") matricule: string) {
+    return this.service.listAnnoncesForApprenant(matricule);
+  }
+
+  @UseGuards(ApprenantGuard)
   @Get("apprenants/:matricule/notations")
   listApprenantNotations(@Param("matricule") matricule: string) {
     return this.service.listApprenantNotations(matricule);
   }
 
+  @UseGuards(ApprenantGuard)
   @Get("apprenants/:matricule/notations/:numero/:competence")
   getApprenantNotationDetail(
     @Param("matricule") matricule: string,
@@ -101,8 +132,9 @@ export class NotationController {
     return this.service.getApprenantNotationDetail(matricule, numero, competence);
   }
 
+  @UseGuards(ApprenantGuard)
   @Post("apprenants/:matricule/notations/:numero/:competence/devoir")
-  @UseInterceptors(FileInterceptor("fichier"))
+  @UseInterceptors(FileInterceptor("fichier", { limits: { fileSize: MAX_DEVOIR_UPLOAD_BYTES } }))
   uploadDevoir(
     @Param("matricule") matricule: string,
     @Param("numero", ParseIntPipe) numero: number,
@@ -110,5 +142,34 @@ export class NotationController {
     @UploadedFile() file: Express.Multer.File
   ) {
     return this.service.uploadDevoir(matricule, numero, competence, file);
+  }
+
+  // ---- Renouvellement déclaratif — voir NotationService pour le détail --
+
+  @UseGuards(ApprenantGuard)
+  @Get("apprenants/:matricule/renouvellement")
+  getRenewalInfo(@Param("matricule") matricule: string) {
+    return this.service.getRenewalInfo(matricule);
+  }
+
+  @UseGuards(ApprenantGuard, RateLimitGuard("apprenant-renouvellement-paiement", 10))
+  @Post("apprenants/:matricule/renouvellement")
+  @UseInterceptors(
+    FileInterceptor("recu", {
+      limits: { fileSize: MAX_RECEIPT_UPLOAD_BYTES },
+      fileFilter: (_req, file, cb) => {
+        cb(null, RECEIPT_MIME_TYPES.includes(file.mimetype));
+      },
+    })
+  )
+  async submitRenewalPayment(
+    @Param("matricule") matricule: string,
+    @Body() dto: SubmitRenewalPaymentDto,
+    @UploadedFile() file?: Express.Multer.File
+  ) {
+    if (file && !isPdf(file.buffer) && !isImage(file.buffer)) {
+      throw new BadRequestException("Le fichier ne semble pas être un PDF ou une image valide.");
+    }
+    return this.service.submitRenewalPayment(matricule, dto.reference, file);
   }
 }

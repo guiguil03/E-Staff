@@ -96,7 +96,7 @@ export class ForumService {
     };
   }
 
-  async getLiveRoom(adminMatricule?: string) {
+  async getLiveRoom(isAdmin: boolean) {
     const live = await this.firstOngoingOrUpcoming();
     if (!live) return null;
 
@@ -108,7 +108,6 @@ export class ForumService {
 
     let roomUrl: string | null = withinJoinWindow && live.dailyRoomName ? live.dailyRoomUrl : null;
 
-    const isAdmin = Boolean(adminMatricule) && adminMatricule === process.env.ADMIN_TEST_MATRICULE;
     if (roomUrl && live.dailyRoomName) {
       const token = await this.daily.mintMeetingToken({
         roomName: live.dailyRoomName,

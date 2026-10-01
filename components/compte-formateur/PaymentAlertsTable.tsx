@@ -19,6 +19,8 @@ interface ApprenantPaiementApi {
   nom: string;
   groupeCle: string;
   abonnementExpireAt: string | null;
+  renewalPaymentReference: string | null;
+  renewalRequestedAt: string | null;
 }
 
 function formateurHeaders(): HeadersInit {
@@ -207,6 +209,11 @@ export default function PaymentAlertsTable({ onSelectApprenant }: PaymentAlertsT
                                 ? "Non défini"
                                 : "À jour"}
                         </span>
+                        {apprenant.renewalPaymentReference && (
+                          <span className="mt-1 block font-mono text-[10px] text-accent">
+                            Réf. reçue : {apprenant.renewalPaymentReference}
+                          </span>
+                        )}
                       </td>
                       <td className="py-2 text-right">
                         {isEditing ? (

@@ -20,6 +20,9 @@ import { SubmitPaymentPublicDto } from './submit-payment-public.dto';
 import { SendContractDto } from './send-contract.dto';
 import { PapiWebhookDto } from './papi-webhook.dto';
 import { RhGuard } from '../common/rh.guard';
+import { StaffGuard } from '../common/staff.guard';
+import { RateLimitGuard } from '../common/rate-limit.guard';
+import { isImage, isPdf } from '../common/file-signature';
 
 const MAX_CV_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
 const MAX_RECEIPT_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
@@ -30,6 +33,7 @@ const RECEIPT_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image
 export class RegistrationsController {
   constructor(private readonly service: RegistrationsService) {}
 
+  @UseGuards(RateLimitGuard('registrations-create', 5))
   @Post()
   create(@Body() dto: CreateRegistrationDto) {
     return this.service.create(dto);
@@ -79,7 +83,10 @@ export class RegistrationsController {
     stream.pipe(res);
   }
 
-  // Consultation du reçu par l'admin (lien affiché dans InscriptionsPanel).
+  // Consultation du reçu par l'admin/RH (lien affiché dans
+  // InscriptionsPanel). Était public (audit du 2026-09-28) : n'importe qui
+  // ayant l'identifiant pouvait télécharger la capture de paiement.
+  @UseGuards(StaffGuard)
   @Get('contrats/:id/recu')
   async streamPaymentReceipt(@Param('id') id: string, @Res() res: Response) {
     const { stream, contentType } = await this.service.getPaymentReceiptStream(id);
@@ -89,6 +96,7 @@ export class RegistrationsController {
 
   // Multipart : reçu optionnel (champ "recu") aux côtés de la référence et
   // de l'acceptation des CGU — un seul aller-retour pour l'inscrit.
+  @UseGuards(RateLimitGuard('registrations-paiement-public', 10))
   @Post('contrats/:id/paiement')
   @UseInterceptors(
     FileInterceptor('recu', {
@@ -105,6 +113,9 @@ export class RegistrationsController {
   ) {
     const registration = await this.service.submitPaymentReferencePublic(id, dto);
     if (file) {
+      if (!isPdf(file.buffer) && !isImage(file.buffer)) {
+        throw new BadRequestException("Le fichier ne semble pas être un PDF ou une image valide.");
+      }
       return this.service.uploadPaymentReceipt(id, file);
     }
     return registration;
@@ -113,6 +124,7 @@ export class RegistrationsController {
   // Génère un lien de paiement Papi (Mobile Money/carte) à la volée.
   // Backend conservé mais inutilisé côté produit depuis le retour au flux
   // déclaratif (2026-09-09) — voir schema.prisma.
+  @UseGuards(RateLimitGuard('registrations-paiement-en-ligne', 5))
   @Post('contrats/:id/paiement-en-ligne')
   createPaymentLinkPublic(@Param('id') id: string) {
     return this.service.createPaymentLinkPublic(id);
@@ -121,11 +133,13 @@ export class RegistrationsController {
   // Appelé par Papi (pas par le front) après chaque évolution de statut
   // de paiement — voir RegistrationsService.handlePapiWebhook pour
   // l'authentification (pas de header/signature, Papi n'en fournit pas).
+  @UseGuards(RateLimitGuard('registrations-papi-webhook', 30))
   @Post('contrats/:id/paiement-webhook')
   handlePapiWebhook(@Param('id') id: string, @Body() dto: PapiWebhookDto) {
     return this.service.handlePapiWebhook(id, dto);
   }
 
+  @UseGuards(RateLimitGuard('registrations-upload-cv', 10))
   @Post(':id/cv')
   @UseInterceptors(
     FileInterceptor('cv', {
@@ -140,6 +154,9 @@ export class RegistrationsController {
       throw new BadRequestException(
         'Fichier CV manquant, trop volumineux (10 Mo max) ou pas au format PDF.',
       );
+    }
+    if (!isPdf(file.buffer)) {
+      throw new BadRequestException('Le fichier ne semble pas être un PDF valide.');
     }
     return this.service.uploadCv(id, file);
   }

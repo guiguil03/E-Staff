@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { NotationService } from "./notation.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage.service";
@@ -8,10 +8,12 @@ function makePrismaMock() {
   return {
     groupe: { findUnique: jest.fn() },
     seance: { findUnique: jest.fn(), findMany: jest.fn() },
-    apprenant: { findUnique: jest.fn() },
+    apprenant: { findUnique: jest.fn(), update: jest.fn() },
     formateur: { findUnique: jest.fn() },
     notation: { findUnique: jest.fn(), findMany: jest.fn(), upsert: jest.fn() },
     presence: { findMany: jest.fn() },
+    diffusion: { findMany: jest.fn() },
+    tarifFormation: { findUnique: jest.fn() },
   };
 }
 
@@ -247,17 +249,24 @@ describe("NotationService", () => {
     it("regroupe les scoreOn20 par matricule puis par compétence", async () => {
       prisma.groupe.findUnique.mockResolvedValue(GROUPE);
       prisma.seance.findUnique.mockResolvedValue(SEANCE);
+      const soumis = new Date("2026-01-02");
+      const note = new Date("2026-01-03");
       prisma.notation.findMany.mockResolvedValue([
-        { apprenant: { matricule: "ETF-2026-0001" }, competence: "oral", scoreOn20: 14 },
-        { apprenant: { matricule: "ETF-2026-0001" }, competence: "ecrit", scoreOn20: 10 },
-        { apprenant: { matricule: "ETF-2026-0002" }, competence: "oral", scoreOn20: 8 },
+        { id: "n-1", apprenant: { matricule: "ETF-2026-0001" }, competence: "oral", scoreOn20: 14, fileKey: "devoirs/x.mp3", fileName: "x.mp3", soumisAt: soumis, gradedAt: note },
+        { id: "n-2", apprenant: { matricule: "ETF-2026-0001" }, competence: "ecrit", scoreOn20: 10, fileKey: null, fileName: null, soumisAt: null, gradedAt: note },
+        { id: "n-3", apprenant: { matricule: "ETF-2026-0002" }, competence: "oral", scoreOn20: null, fileKey: "devoirs/y.pdf", fileName: "y.pdf", soumisAt: soumis, gradedAt: null },
       ]);
 
       const result = await service.listNotationsForSeance("A", 3);
 
       expect(result).toEqual({
-        "ETF-2026-0001": { oral: { scoreOn20: 14 }, ecrit: { scoreOn20: 10 } },
-        "ETF-2026-0002": { oral: { scoreOn20: 8 } },
+        "ETF-2026-0001": {
+          oral: { id: "n-1", scoreOn20: 14, fileName: "x.mp3", soumisAt: soumis, gradedAt: note },
+          ecrit: { id: "n-2", scoreOn20: 10, fileName: null, soumisAt: null, gradedAt: note },
+        },
+        "ETF-2026-0002": {
+          oral: { id: "n-3", scoreOn20: null, fileName: "y.pdf", soumisAt: soumis, gradedAt: null },
+        },
       });
     });
   });
@@ -272,7 +281,7 @@ describe("NotationService", () => {
     it("lève NotFoundException si la séance de l'apprenant n'existe pas", async () => {
       prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
       prisma.seance.findUnique.mockResolvedValue(null);
-      await expect(service.uploadDevoir("ETF-2026-0001", 99, "oral", file)).rejects.toThrow(
+      await expect(service.uploadDevoir("ETF-2026-0001", 99, "expression_orale", file)).rejects.toThrow(
         NotFoundException
       );
       expect(storage.uploadBuffer).not.toHaveBeenCalled();
@@ -283,8 +292,8 @@ describe("NotationService", () => {
       prisma.seance.findUnique.mockResolvedValue(SEANCE);
       prisma.notation.upsert.mockResolvedValue({
         id: "n-1",
-        competence: "oral",
-        fileKey: `devoirs/${APPRENANT.id}/${SEANCE.id}-oral.pdf`,
+        competence: "expression_orale",
+        fileKey: `devoirs/${APPRENANT.id}/${SEANCE.id}-expression_orale.pdf`,
         fileName: "devoir.pdf",
         soumisAt: new Date(),
         gridData: null,
@@ -294,10 +303,10 @@ describe("NotationService", () => {
         gradedAt: null,
       });
 
-      await service.uploadDevoir("ETF-2026-0001", 3, "oral", file);
+      await service.uploadDevoir("ETF-2026-0001", 3, "expression_orale", file);
 
       expect(storage.uploadBuffer).toHaveBeenCalledWith(
-        `devoirs/${APPRENANT.id}/${SEANCE.id}-oral.pdf`,
+        `devoirs/${APPRENANT.id}/${SEANCE.id}-expression_orale.pdf`,
         file.buffer,
         "application/pdf"
       );
@@ -305,6 +314,48 @@ describe("NotationService", () => {
       expect(call.update.scoreOn20).toBeNull();
       expect(call.update.gradedAt).toBeNull();
       expect(call.update.fileName).toBe("devoir.pdf");
+    });
+  
+    it("prévient le formateur du groupe par e-mail qu'un rendu est à corriger", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
+      prisma.seance.findUnique.mockResolvedValue(SEANCE);
+      prisma.notation.upsert.mockResolvedValue({ id: "n-1", competence: "expression_orale", fileName: "devoir.pdf" });
+      prisma.groupe.findUnique.mockResolvedValue({
+        ...GROUPE,
+        label: "Groupe A",
+        formateur: { prenom: "Ravaka", email: "ravaka@example.com" },
+      });
+
+      await service.uploadDevoir("ETF-2026-0001", 3, "expression_orale", file);
+
+      expect(email.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: "ravaka@example.com",
+          subject: expect.stringContaining("Nouveau rendu à corriger"),
+        })
+      );
+    });
+
+    it("refuse le dépôt sur une séance pas encore planifiée (sans date)", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
+      prisma.seance.findUnique.mockResolvedValue({ ...SEANCE, startAt: null });
+      await expect(
+        service.uploadDevoir("ETF-2026-0001", 3, "expression_orale", file)
+      ).rejects.toThrow(BadRequestException);
+      expect(storage.uploadBuffer).not.toHaveBeenCalled();
+    });
+
+    it("refuse une compétence qui ne se dépose pas par l'apprenant", async () => {
+      await expect(
+        service.uploadDevoir("ETF-2026-0001", 3, "comprehension_orale", file)
+      ).rejects.toThrow(BadRequestException);
+      expect(storage.uploadBuffer).not.toHaveBeenCalled();
+    });
+
+    it("refuse une requête sans fichier", async () => {
+      await expect(
+        service.uploadDevoir("ETF-2026-0001", 3, "expression_orale", undefined as unknown as Express.Multer.File)
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -341,6 +392,37 @@ describe("NotationService", () => {
     });
   });
 
+  describe("listCorriges", () => {
+    it("liste les rendus déjà notés, plus récents d'abord, avec note et grille", async () => {
+      prisma.notation.findMany.mockResolvedValue([
+        {
+          id: "n-9",
+          apprenant: { matricule: "ETF-2026-0001", prenom: "Awa", nom: "Diallo" },
+          seance: { numero: 2, groupe: { cle: "A", label: "Groupe A" } },
+          competence: "expression_ecrite",
+          fileName: "redaction.pdf",
+          soumisAt: new Date("2026-01-01"),
+          gradedAt: new Date("2026-01-05"),
+          scoreOn20: 15,
+          gridData: JSON.stringify({ selections: { a: 2 } }),
+          commentaires: "Bien",
+        },
+      ]);
+
+      const result = await service.listCorriges();
+
+      expect(result[0]).toEqual(
+        expect.objectContaining({ id: "n-9", scoreOn20: 15, gridData: { selections: { a: 2 } }, commentaires: "Bien" })
+      );
+      expect(prisma.notation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { fileKey: { not: null }, gradedAt: { not: null } },
+          orderBy: { gradedAt: "desc" },
+        })
+      );
+    });
+  });
+
   describe("listACorriger", () => {
     it("aplatit les notations non corrigées avec fichier déposé", async () => {
       prisma.notation.findMany.mockResolvedValue([
@@ -351,6 +433,10 @@ describe("NotationService", () => {
           competence: "oral",
           fileName: "devoir.pdf",
           soumisAt: new Date("2026-01-01"),
+          gradedAt: null,
+          scoreOn20: null,
+          gridData: null,
+          commentaires: null,
         },
       ]);
 
@@ -368,6 +454,10 @@ describe("NotationService", () => {
           competence: "oral",
           fileName: "devoir.pdf",
           soumisAt: new Date("2026-01-01"),
+          gradedAt: null,
+          scoreOn20: null,
+          gridData: null,
+          commentaires: null,
         },
       ]);
       expect(prisma.notation.findMany).toHaveBeenCalledWith(
@@ -558,6 +648,44 @@ describe("NotationService", () => {
       });
     });
 
+    it("choisit la séance future la plus proche dans le temps, même si le formateur l'a programmée avec un numéro plus élevé qu'une autre séance future plus lointaine", async () => {
+      const now = Date.now();
+      const jour = 24 * 60 * 60 * 1000;
+
+      prisma.apprenant.findUnique.mockResolvedValue({
+        id: "app-3",
+        matricule: "ETF-2026-0003",
+        prenom: "Fy",
+        groupeId: "groupe-1",
+        createdAt: new Date(now - jour),
+        abonnementExpireAt: null,
+        groupe: { label: "Groupe A", typeCours: null, formateur: null },
+        evaluationAttempt: null,
+      });
+
+      // Le formateur a programmé la séance n°5 pour demain, mais la séance
+      // n°3 (numéro plus petit) est programmée dans 2 mois : .find() sur une
+      // liste triée par numéro renverrait à tort la séance n°3.
+      const seanceProche = { id: "s-5", numero: 5, startAt: new Date(now + jour), objectifs: null };
+      const seanceLointaine = {
+        id: "s-3",
+        numero: 3,
+        startAt: new Date(now + 60 * jour),
+        objectifs: null,
+      };
+      prisma.seance.findMany.mockResolvedValue([seanceLointaine, seanceProche]);
+      prisma.presence.findMany.mockResolvedValue([]);
+      prisma.notation.findMany.mockResolvedValue([]);
+
+      const result = await service.getApprenantDashboard("ETF-2026-0003");
+
+      expect(result.prochaineSeance).toEqual({
+        numero: 5,
+        titre: "Séance 5",
+        startAt: seanceProche.startAt,
+      });
+    });
+
     it("ne fabrique aucune donnée quand l'apprenant n'a ni test d'admission ni notation ni séance passée", async () => {
       prisma.apprenant.findUnique.mockResolvedValue({
         id: "app-2",
@@ -582,6 +710,138 @@ describe("NotationService", () => {
       expect(result.prochaineSeance).toBeNull();
       expect(result.tauxEvolutionMensuel).toBe(0);
       expect(result.assiduite).toEqual([]);
+    });
+  });
+
+  describe("listAnnoncesForApprenant", () => {
+    it("récupère les annonces ciblées sur son groupe et celles diffusées sur tous les groupes de son formateur", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({
+        matricule: APPRENANT.matricule,
+        groupeId: GROUPE.id,
+        groupe: GROUPE,
+      });
+      prisma.diffusion.findMany.mockResolvedValue([]);
+
+      await service.listAnnoncesForApprenant(APPRENANT.matricule);
+
+      expect(prisma.diffusion.findMany).toHaveBeenCalledWith({
+        where: {
+          OR: [{ groupeId: GROUPE.id }, { groupeId: null, formateurId: "f-1" }],
+        },
+        include: { formateur: true },
+        orderBy: { createdAt: "desc" },
+      });
+    });
+
+    it("ne cherche que les annonces de son propre groupe si aucun formateur n'est encore assigné", async () => {
+      const groupeSansFormateur = { ...GROUPE, formateurId: null };
+      prisma.apprenant.findUnique.mockResolvedValue({
+        matricule: APPRENANT.matricule,
+        groupeId: groupeSansFormateur.id,
+        groupe: groupeSansFormateur,
+      });
+      prisma.diffusion.findMany.mockResolvedValue([]);
+
+      await service.listAnnoncesForApprenant(APPRENANT.matricule);
+
+      expect(prisma.diffusion.findMany).toHaveBeenCalledWith({
+        where: { OR: [{ groupeId: groupeSansFormateur.id }] },
+        include: { formateur: true },
+        orderBy: { createdAt: "desc" },
+      });
+    });
+
+    it("lève une erreur si l'apprenant n'existe pas", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+
+      await expect(service.listAnnoncesForApprenant("inconnu")).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe("getRenewalInfo", () => {
+    it("lève NotFoundException si l'apprenant n'existe pas", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+      await expect(service.getRenewalInfo("inconnu")).rejects.toThrow(NotFoundException);
+    });
+
+    it("renvoie le tarif du type de cours du groupe, et null si aucun tarif fixé", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({
+        ...APPRENANT,
+        abonnementExpireAt: new Date("2026-12-01"),
+        renewalPaymentReference: null,
+        renewalRequestedAt: null,
+        groupe: { ...GROUPE, typeCours: "DELF/DALF" },
+      });
+      prisma.tarifFormation.findUnique.mockResolvedValue({ typeCours: "DELF/DALF", prixFormation: 120000 });
+
+      const result = await service.getRenewalInfo(APPRENANT.matricule);
+
+      expect(prisma.tarifFormation.findUnique).toHaveBeenCalledWith({ where: { typeCours: "DELF/DALF" } });
+      expect(result.frais).toBe(120000);
+      expect(result.typeCours).toBe("DELF/DALF");
+    });
+
+    it("ne cherche pas de tarif si le groupe n'a pas de type de cours renseigné", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({
+        ...APPRENANT,
+        abonnementExpireAt: null,
+        renewalPaymentReference: null,
+        renewalRequestedAt: null,
+        groupe: { ...GROUPE, typeCours: null },
+      });
+
+      const result = await service.getRenewalInfo(APPRENANT.matricule);
+
+      expect(prisma.tarifFormation.findUnique).not.toHaveBeenCalled();
+      expect(result.frais).toBeNull();
+    });
+  });
+
+  describe("submitRenewalPayment", () => {
+    it("enregistre la référence et l'horodatage, sans reçu si aucun fichier fourni", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
+      prisma.apprenant.update.mockResolvedValue({
+        renewalPaymentReference: "MVOLA-123",
+        renewalRequestedAt: new Date(),
+      });
+
+      await service.submitRenewalPayment(APPRENANT.matricule, "MVOLA-123");
+
+      expect(storage.uploadBuffer).not.toHaveBeenCalled();
+      expect(prisma.apprenant.update).toHaveBeenCalledWith({
+        where: { matricule: APPRENANT.matricule },
+        data: {
+          renewalPaymentReference: "MVOLA-123",
+          renewalPaymentReceiptKey: undefined,
+          renewalRequestedAt: expect.any(Date),
+        },
+        select: { renewalPaymentReference: true, renewalRequestedAt: true },
+      });
+    });
+
+    it("téléverse le reçu et enregistre sa clé quand un fichier est fourni", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
+      prisma.apprenant.update.mockResolvedValue({});
+      const file = {
+        originalname: "recu.pdf",
+        buffer: Buffer.from("fake-pdf"),
+        mimetype: "application/pdf",
+      } as Express.Multer.File;
+
+      await service.submitRenewalPayment(APPRENANT.matricule, "MVOLA-123", file);
+
+      const expectedKey = `apprenants/${APPRENANT.id}/renouvellement-recu.pdf`;
+      expect(storage.uploadBuffer).toHaveBeenCalledWith(expectedKey, file.buffer, "application/pdf");
+      expect(prisma.apprenant.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ renewalPaymentReceiptKey: expectedKey }) })
+      );
+    });
+
+    it("lève NotFoundException si l'apprenant n'existe pas", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+      await expect(service.submitRenewalPayment("inconnu", "MVOLA-123")).rejects.toThrow(
+        NotFoundException
+      );
     });
   });
 });

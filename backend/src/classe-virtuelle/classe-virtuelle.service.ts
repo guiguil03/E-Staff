@@ -1,21 +1,24 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { DailyService } from "./daily.service";
+import { DailyService, recordingEnabled } from "./daily.service";
 import { EmailService } from "../common/email.service";
 import { UpsertSeanceDto } from "./dto/upsert-seance.dto";
-import { renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
+import { escapeHtml, renderEmailHtml, emailParagraph, ctaButton } from "../common/email-template";
 
 // Le lien de la salle n'est jamais renvoyé en dehors de cette fenêtre —
 // c'est le backend qui garde le contrôle du "rejoin", pas juste l'UI.
 const JOIN_WINDOW_BEFORE_MINUTES = 10;
 const APP_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
+// Fuseau précisé dans le texte : les apprenants sont à Madagascar, mais un
+// destinataire ailleurs (ex. équipe en France, UTC+2) lisait sinon l'heure
+// comme la sienne, décalée d'une heure (signalement du 2026-09-25).
 function formatDateTime(date: Date): string {
-  return date.toLocaleString("fr-FR", {
+  return `${date.toLocaleString("fr-FR", {
     dateStyle: "full",
     timeStyle: "short",
     timeZone: "Indian/Antananarivo",
-  });
+  })} (heure de Madagascar)`;
 }
 
 export interface RoomStatus {
@@ -152,7 +155,7 @@ export class ClasseVirtuelleService {
             title: "Séance annulée",
             preheader: `${groupe!.label} — nouvelle date à venir`,
             bodyHtml:
-              emailParagraph(`Bonjour ${apprenant.prenom},`) +
+              emailParagraph(`Bonjour ${escapeHtml(apprenant.prenom)},`) +
               emailParagraph(
                 `La séance qui était programmée pour <strong>${groupe!.label}</strong> le ${formatDateTime(wasScheduled)} a été annulée par votre formateur.`
               ) +
@@ -265,7 +268,7 @@ export class ClasseVirtuelleService {
             title: "Nouvelle séance programmée",
             preheader: `${groupe!.label} — ${formatDateTime(nextStartAt)}`,
             bodyHtml:
-              emailParagraph(`Bonjour ${apprenant.prenom},`) +
+              emailParagraph(`Bonjour ${escapeHtml(apprenant.prenom)},`) +
               emailParagraph(
                 `Une séance vient d'être programmée pour <strong>${groupe!.label}</strong> : ${formatDateTime(nextStartAt)}.`
               ) +
@@ -314,6 +317,9 @@ export class ClasseVirtuelleService {
         userId: joiner.userId,
         userName: joiner.userName,
         isOwner: joiner.isOwner,
+        // L'arrivée du formateur (propriétaire) lance l'enregistrement cloud
+        // de la séance, si l'option est activée (DAILY_RECORDING_ENABLED).
+        startRecording: joiner.isOwner && recordingEnabled(),
       });
       if (token) roomUrl = `${roomUrl}?t=${token}`;
     }

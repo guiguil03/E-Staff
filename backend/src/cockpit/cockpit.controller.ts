@@ -1,8 +1,38 @@
-import { Body, Controller, Get, Headers, Param, Put, UseGuards } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Put,
+  Res,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiTags } from "@nestjs/swagger";
+import type { Response } from "express";
 import { FormateurGuard } from "../common/formateur.guard";
 import { CockpitService } from "./cockpit.service";
 import { SetAbonnementDto } from "./dto/set-abonnement.dto";
+import { SubmitBilanDto } from "./dto/submit-bilan.dto";
+import { CreateDiffusionDto } from "./dto/create-diffusion.dto";
+import { isOfficeDocument } from "../common/file-signature";
+
+// Fiche de préparation = document pédagogique (support de cours), pas une
+// vidéo/audio d'évaluation — mêmes types que le CV candidat plutôt que ceux
+// de l'évaluation.
+const MAX_DOCUMENT_UPLOAD_BYTES = 20 * 1024 * 1024; // 20 Mo
+const ALLOWED_DOCUMENT_MIMETYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+];
 
 // Agrégats réels du Cockpit Formateur (Vivier C1, moyennes de groupe,
 // courbe d'évolution, rapport hebdo) — voir cockpit.service.ts pour les
@@ -13,6 +43,16 @@ import { SetAbonnementDto } from "./dto/set-abonnement.dto";
 @UseGuards(FormateurGuard)
 export class CockpitController {
   constructor(private readonly service: CockpitService) {}
+
+  @Get("profil")
+  getProfil(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.getProfil(formateurMatricule);
+  }
+
+  @Get("apprenants")
+  listApprenants(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.listApprenants(formateurMatricule);
+  }
 
   @Get("groupes")
   getGroupes(@Headers("x-formateur-matricule") formateurMatricule: string) {
@@ -25,6 +65,14 @@ export class CockpitController {
     @Headers("x-formateur-matricule") formateurMatricule: string
   ) {
     return this.service.getGroupeDetail(cle, formateurMatricule);
+  }
+
+  @Get("apprenants/:matricule/fiche")
+  getApprenantFiche(
+    @Param("matricule") matricule: string,
+    @Headers("x-formateur-matricule") formateurMatricule: string
+  ) {
+    return this.service.getApprenantFiche(matricule, formateurMatricule);
   }
 
   @Get("vivier-c1")
@@ -42,13 +90,78 @@ export class CockpitController {
     return this.service.getRapportHebdo();
   }
 
+  @Post("bilan-hebdo")
+  submitBilanHebdo(
+    @Headers("x-formateur-matricule") formateurMatricule: string,
+    @Body() dto: SubmitBilanDto
+  ) {
+    return this.service.submitBilanHebdo(formateurMatricule, dto);
+  }
+
+  @Post("documents")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      limits: { fileSize: MAX_DOCUMENT_UPLOAD_BYTES },
+      fileFilter: (_req, file, cb) => {
+        cb(null, ALLOWED_DOCUMENT_MIMETYPES.includes(file.mimetype));
+      },
+    })
+  )
+  uploadDocument(
+    @Headers("x-formateur-matricule") formateurMatricule: string,
+    @UploadedFile() file: Express.Multer.File
+  ) {
+    if (!file) {
+      throw new BadRequestException(
+        "Fichier manquant, trop volumineux (20 Mo max) ou format non supporté (PDF, Word, PowerPoint)."
+      );
+    }
+    if (!isOfficeDocument(file.buffer)) {
+      throw new BadRequestException("Le fichier ne semble pas être un PDF, Word ou PowerPoint valide.");
+    }
+    return this.service.uploadDocument(formateurMatricule, file);
+  }
+
+  @Get("documents")
+  listDocuments(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.listDocuments(formateurMatricule);
+  }
+
+  @Get("documents/:id")
+  async streamDocument(
+    @Headers("x-formateur-matricule") formateurMatricule: string,
+    @Param("id") id: string,
+    @Res() res: Response
+  ) {
+    const { stream, contentType } = await this.service.getDocumentStream(formateurMatricule, id);
+    if (contentType) res.set("Content-Type", contentType);
+    stream.pipe(res);
+  }
+
+  @Post("diffusions")
+  createDiffusion(
+    @Headers("x-formateur-matricule") formateurMatricule: string,
+    @Body() dto: CreateDiffusionDto
+  ) {
+    return this.service.createDiffusion(formateurMatricule, dto.groupeId ?? null, dto.message);
+  }
+
+  @Get("diffusions")
+  listAnnonces(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.listAnnonces(formateurMatricule);
+  }
+
   @Get("paiements")
-  getPaiements() {
-    return this.service.getPaiements();
+  getPaiements(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.getPaiements(formateurMatricule);
   }
 
   @Put("apprenants/:matricule/abonnement")
-  setAbonnement(@Param("matricule") matricule: string, @Body() dto: SetAbonnementDto) {
-    return this.service.setAbonnementExpireAt(matricule, new Date(dto.expireAt));
+  setAbonnement(
+    @Param("matricule") matricule: string,
+    @Headers("x-formateur-matricule") formateurMatricule: string,
+    @Body() dto: SetAbonnementDto
+  ) {
+    return this.service.setAbonnementExpireAt(matricule, new Date(dto.expireAt), formateurMatricule);
   }
 }
