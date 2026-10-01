@@ -185,7 +185,8 @@ export class RhController {
     );
   }
 
-  @UseGuards(AdminGuard)
+  // Liste des vagues : Académie (Admin) ET Casier Apprenant (RH, réaffectation).
+  @UseGuards(StaffGuard)
   @Get('vagues')
   getVagues() {
     return this.service.getVagues();

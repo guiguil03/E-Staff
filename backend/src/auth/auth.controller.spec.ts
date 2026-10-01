@@ -40,6 +40,10 @@ describe("Gardes du Registre — Admin et RH", () => {
     expect(gardes(RhController.prototype, "getRegistre")).toContain(StaffGuard);
   });
 
+  it("GET /rh/vagues accepte le staff (le Casier Apprenant RH en charge la liste)", () => {
+    expect(gardes(RhController.prototype, "getVagues")).toContain(StaffGuard);
+  });
+
   it("POST /auth/view-as/:matricule accepte le staff (Admin ou RH)", () => {
     expect(gardes(AuthController.prototype, "createViewAs")).toContain(StaffGuard);
   });
