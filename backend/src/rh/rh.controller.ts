@@ -60,7 +60,9 @@ export class RhController {
     return this.service.getVueEnsemble();
   }
 
-  @UseGuards(RhGuard)
+  // Registre des apprenants : affiché par Académie (Admin) ET par le pilotage
+  // RH — StaffGuard, sinon l'Admin était refusé (401) sur sa propre page.
+  @UseGuards(StaffGuard)
   @Get('registre')
   getRegistre() {
     return this.service.getRegistre();
@@ -183,7 +185,8 @@ export class RhController {
     );
   }
 
-  @UseGuards(AdminGuard)
+  // Liste des vagues : Académie (Admin) ET Casier Apprenant (RH, réaffectation).
+  @UseGuards(StaffGuard)
   @Get('vagues')
   getVagues() {
     return this.service.getVagues();
