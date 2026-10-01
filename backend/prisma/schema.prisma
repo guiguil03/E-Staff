@@ -523,11 +523,16 @@ model Diffusion {
   formateur   Formateur @relation(fields: [formateurId], references: [id])
   groupeId    String?
   groupe      Groupe?   @relation(fields: [groupeId], references: [id])
+  // Renseigné = message privé du formateur à cet apprenant (jamais listé
+  // dans les annonces de groupe, visible dans "Commentaire du formateur").
+  apprenantId String?
+  apprenant   Apprenant? @relation(fields: [apprenantId], references: [id], onDelete: Cascade)
   message     String
   createdAt   DateTime  @default(now())
 
   @@index([formateurId])
   @@index([groupeId])
+  @@index([apprenantId])
 }
 
 model Formateur {
@@ -772,6 +777,9 @@ model Apprenant {
 
   // Notes privées du formateur sur cet apprenant, par séance.
   notesFormateur NoteFormateur[]
+
+  // Messages privés reçus de son formateur (voir Diffusion.apprenantId).
+  messagesPrives Diffusion[]
 
   @@index([groupeId])
   @@index([connecteurId])

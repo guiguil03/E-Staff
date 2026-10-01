@@ -132,6 +132,11 @@ export function SearchApprenantCard({ onSelectApprenant }: ApprenantPickerProps)
 // à ce qu'il encadre réellement.
 export function BroadcastCard() {
   const [groupes, setGroupes] = useState<GroupeOption[]>([]);
+  const [apprenants, setApprenants] = useState<ApprenantListApi[]>([]);
+  // "groupe" = annonce de groupe (comportement historique), "apprenant" =
+  // message privé à un seul apprenant (visible dans son "Commentaire du formateur").
+  const [mode, setMode] = useState<"groupe" | "apprenant">("groupe");
+  const [apprenantMatricule, setApprenantMatricule] = useState("");
   const [broadcastTarget, setBroadcastTarget] = useState("tous");
   const [broadcastMessage, setBroadcastMessage] = useState("");
   const [broadcastSent, setBroadcastSent] = useState(false);
@@ -142,6 +147,9 @@ export function BroadcastCard() {
     apiGet<GroupeOption[]>("/cockpit/groupes", formateurHeaders())
       .then(setGroupes)
       .catch(() => setGroupes([]));
+    apiGet<ApprenantListApi[]>("/cockpit/apprenants", formateurHeaders())
+      .then(setApprenants)
+      .catch(() => setApprenants([]));
   }, []);
 
   async function sendBroadcast() {
@@ -150,7 +158,9 @@ export function BroadcastCard() {
     try {
       await apiPostAuthed(
         "/cockpit/diffusions",
-        { groupeId: broadcastTarget === "tous" ? null : broadcastTarget, message: broadcastMessage },
+        mode === "apprenant"
+          ? { apprenantMatricule, message: broadcastMessage }
+          : { groupeId: broadcastTarget === "tous" ? null : broadcastTarget, message: broadcastMessage },
         formateurHeaders()
       );
       setBroadcastSent(true);
@@ -166,21 +176,64 @@ export function BroadcastCard() {
     <Reveal className="h-full">
       <div className="h-full rounded border border-white/10 bg-obsidianCard p-6">
         <h3 className="font-display text-base font-semibold text-white">Diffuser un message</h3>
-        <select
-          value={broadcastTarget}
-          onChange={(e) => {
-            setBroadcastTarget(e.target.value);
-            setBroadcastSent(false);
-          }}
-          className="mt-2 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
-        >
-          <option value="tous">Tous mes groupes</option>
-          {groupes.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.label} ({g.apprenantsCount})
-            </option>
+        <div className="mt-2 flex gap-2" role="group" aria-label="Destinataire">
+          {(
+            [
+              ["groupe", "Un groupe"],
+              ["apprenant", "Un apprenant"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={mode === value}
+              onClick={() => {
+                setMode(value);
+                setBroadcastSent(false);
+              }}
+              className={`rounded border px-3 py-1 font-sans text-xs ${
+                mode === value
+                  ? "border-accent text-accent"
+                  : "border-white/20 text-white/60 hover:text-white"
+              }`}
+            >
+              {label}
+            </button>
           ))}
-        </select>
+        </div>
+        {mode === "groupe" ? (
+          <select
+            value={broadcastTarget}
+            onChange={(e) => {
+              setBroadcastTarget(e.target.value);
+              setBroadcastSent(false);
+            }}
+            className="mt-2 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
+          >
+            <option value="tous">Tous mes groupes</option>
+            {groupes.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.label} ({g.apprenantsCount})
+              </option>
+            ))}
+          </select>
+        ) : (
+          <select
+            value={apprenantMatricule}
+            onChange={(e) => {
+              setApprenantMatricule(e.target.value);
+              setBroadcastSent(false);
+            }}
+            className="mt-2 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
+          >
+            <option value="">Choisir un apprenant…</option>
+            {apprenants.map((a) => (
+              <option key={a.matricule} value={a.matricule}>
+                {a.prenom} {a.nom} (groupe {a.groupeCle})
+              </option>
+            ))}
+          </select>
+        )}
         <textarea
           rows={3}
           value={broadcastMessage}
@@ -188,20 +241,24 @@ export function BroadcastCard() {
             setBroadcastMessage(e.target.value);
             setBroadcastSent(false);
           }}
-          placeholder="Votre annonce..."
+          placeholder={mode === "apprenant" ? "Votre message privé..." : "Votre annonce..."}
           className="mt-2 w-full rounded border border-white/20 bg-obsidian px-3 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
         />
         <div className="mt-2 flex items-center gap-3">
           <Button
             variant="ghostDark"
             onClick={sendBroadcast}
-            disabled={sending || !broadcastMessage.trim()}
+            disabled={
+              sending || !broadcastMessage.trim() || (mode === "apprenant" && !apprenantMatricule)
+            }
           >
-            {sending ? "Envoi..." : "Diffuser"}
+            {sending ? "Envoi..." : mode === "apprenant" ? "Envoyer" : "Diffuser"}
           </Button>
           {broadcastSent && (
             <p className="font-sans text-xs text-white/50">
-              Envoyé par e-mail et visible dans le Compte Apprenant des destinataires.
+              {mode === "apprenant"
+                ? "Envoyé par e-mail et visible dans « Commentaire du formateur » de l'apprenant."
+                : "Envoyé par e-mail et visible dans le Compte Apprenant des destinataires."}
             </p>
           )}
           {error && <p className="font-sans text-xs text-accent">{error}</p>}

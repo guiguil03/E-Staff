@@ -350,6 +350,9 @@ export class NotationService {
 
     return this.prisma.diffusion.findMany({
       where: {
+        // apprenantId: null — les messages privés (Diffusion.apprenantId) ne
+        // sont jamais des annonces, même pour le destinataire.
+        apprenantId: null,
         OR: apprenant.groupe.formateurId
           ? [
               { groupeId: apprenant.groupeId },
@@ -381,7 +384,7 @@ export class NotationService {
     });
     if (!apprenant) throw new NotFoundException(`Apprenant ${matricule} introuvable.`);
 
-    const [seances, presences, notationsNotees] = await Promise.all([
+    const [seances, presences, notationsNotees, messagesPrives] = await Promise.all([
       this.prisma.seance.findMany({
         where: { groupeId: apprenant.groupeId },
         orderBy: { numero: "asc" },
@@ -389,6 +392,11 @@ export class NotationService {
       this.prisma.presence.findMany({ where: { apprenantId: apprenant.id } }),
       this.prisma.notation.findMany({
         where: { apprenantId: apprenant.id, scoreOn20: { not: null } },
+      }),
+      this.prisma.diffusion.findMany({
+        where: { apprenantId: apprenant.id },
+        include: { formateur: true },
+        orderBy: { createdAt: "desc" },
       }),
     ]);
 
@@ -527,6 +535,13 @@ export class NotationService {
       tauxEvolutionMensuel,
       alerteCompetence,
       commentaireFormateur,
+      // Historique des messages privés du formateur, du plus récent au plus ancien.
+      messagesFormateur: messagesPrives.map((m) => ({
+        id: m.id,
+        text: m.message,
+        author: `${m.formateur.prenom} ${m.formateur.nom}, Formateur`,
+        createdAt: m.createdAt,
+      })),
       assiduite,
     };
   }

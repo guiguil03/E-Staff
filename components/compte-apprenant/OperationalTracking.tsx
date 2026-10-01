@@ -11,6 +11,8 @@ interface OperationalTrackingProps {
   assiduite: AssiduiteRow[];
   alerteCompetence: string | null;
   commentaire: { text: string; author: string } | null;
+  // Messages privés du formateur (historique, du plus récent au plus ancien).
+  messages: { id: string; text: string; author: string; createdAt: string }[];
 }
 
 const STATUT_DOT: Record<AssiduiteRow["statut"], string> = {
@@ -23,6 +25,7 @@ export default function OperationalTracking({
   assiduite,
   alerteCompetence,
   commentaire,
+  messages,
 }: OperationalTrackingProps) {
   return (
     <div className="grid gap-6 sm:grid-cols-2">
@@ -92,14 +95,33 @@ export default function OperationalTracking({
             <p className="font-mono text-xs uppercase tracking-widest text-white/50">
               Commentaire du formateur
             </p>
-            {commentaire ? (
+            {commentaire && (
               <>
                 <p className="mt-2 font-sans text-sm italic text-white/80">
                   &laquo; {commentaire.text} &raquo;
                 </p>
                 <p className="mt-3 font-sans text-xs text-accent">— {commentaire.author}</p>
               </>
-            ) : (
+            )}
+            {messages.length > 0 && (
+              <ul className="mt-4 max-h-64 space-y-3 overflow-y-auto pr-1">
+                {messages.map((m) => (
+                  <li key={m.id} className="border-t border-white/10 pt-3 first:border-t-0 first:pt-0">
+                    <p className="whitespace-pre-line font-sans text-sm text-white/80">{m.text}</p>
+                    <p className="mt-1 font-sans text-xs text-accent">
+                      — {m.author} ·{" "}
+                      {new Date(m.createdAt).toLocaleDateString("fr-FR", {
+                        day: "2-digit",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {!commentaire && messages.length === 0 && (
               <p className="mt-2 font-sans text-sm text-white/50">
                 Aucun commentaire du formateur pour le moment.
               </p>

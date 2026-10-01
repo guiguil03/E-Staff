@@ -671,8 +671,49 @@ export class CockpitService {
   // règle d'exclusivité formateur/type de cours, voir RhService) plutôt
   // qu'une diffusion académie entière. Persistée ET envoyée par e-mail à
   // chaque apprenant ciblé.
-  async createDiffusion(matricule: string, groupeId: string | null, message: string) {
+  // apprenantMatricule renseigné = message privé à un seul apprenant de ses
+  // groupes (groupeId ignoré) : stocké avec Diffusion.apprenantId, exclu des
+  // annonces de groupe, affiché dans "Commentaire du formateur".
+  async createDiffusion(
+    matricule: string,
+    groupeId: string | null,
+    message: string,
+    apprenantMatricule: string | null = null
+  ) {
     const formateur = await this.findFormateurOrThrow(matricule);
+
+    if (apprenantMatricule) {
+      const apprenant = await this.prisma.apprenant.findUnique({
+        where: { matricule: apprenantMatricule },
+        include: { groupe: true },
+      });
+      if (!apprenant) throw new NotFoundException("Apprenant introuvable.");
+      if (apprenant.groupe.formateurId !== formateur.id) {
+        throw new BadRequestException("Vous ne pouvez écrire qu'aux apprenants de vos propres groupes.");
+      }
+      const diffusion = await this.prisma.diffusion.create({
+        data: {
+          formateurId: formateur.id,
+          groupeId: apprenant.groupeId,
+          apprenantId: apprenant.id,
+          message,
+        },
+      });
+      await this.email.send({
+        to: apprenant.email,
+        subject: `Message de votre formateur — ${formateur.prenom} ${formateur.nom}`,
+        text: `Bonjour ${apprenant.prenom},
+
+${message}
+
+— ${formateur.prenom} ${formateur.nom}`,
+        html: renderEmailHtml({
+          title: "Message de votre formateur",
+          bodyHtml: emailQuote(message) + emailParagraphsFromText(`— ${formateur.prenom} ${formateur.nom}`),
+        }),
+      });
+      return { ...diffusion, destinatairesCount: 1 };
+    }
 
     let cibles;
     if (groupeId) {

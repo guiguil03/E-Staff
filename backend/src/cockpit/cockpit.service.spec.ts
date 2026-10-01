@@ -232,6 +232,52 @@ describe("CockpitService — scoping par formateur", () => {
       expect(result.destinatairesCount).toBe(1);
     });
 
+    it("envoie un message privé à un seul apprenant du formateur, sans passer par les annonces de groupe", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(formateur);
+      prisma.apprenant.findUnique.mockResolvedValue({
+        ...apprenant,
+        matricule: "ETF-2026-0001",
+        groupeId: "groupe-a",
+        groupe: GROUPE_A,
+      });
+      prisma.diffusion.create.mockResolvedValue({ id: "d-3", apprenantId: "app-1" });
+
+      const result = await service.createDiffusion(formateur.matricule, null, "Bravo", "ETF-2026-0001");
+
+      expect(prisma.diffusion.create).toHaveBeenCalledWith({
+        data: { formateurId: "f-1", groupeId: "groupe-a", apprenantId: "app-1", message: "Bravo" },
+      });
+      expect(prisma.apprenant.findMany).not.toHaveBeenCalled();
+      expect(email.send).toHaveBeenCalledTimes(1);
+      expect(email.send).toHaveBeenCalledWith(expect.objectContaining({ to: "awa@example.com" }));
+      expect(result.destinatairesCount).toBe(1);
+    });
+
+    it("refuse un message privé à un apprenant d'un autre formateur", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(formateur);
+      prisma.apprenant.findUnique.mockResolvedValue({
+        ...apprenant,
+        groupeId: "groupe-b",
+        groupe: GROUPE_B,
+      });
+
+      await expect(
+        service.createDiffusion(formateur.matricule, null, "Salut", "ETF-2026-0009")
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.diffusion.create).not.toHaveBeenCalled();
+      expect(email.send).not.toHaveBeenCalled();
+    });
+
+    it("lève NotFoundException si l'apprenant visé n'existe pas", async () => {
+      prisma.formateur.findUnique.mockResolvedValue(formateur);
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.createDiffusion(formateur.matricule, null, "Salut", "inconnu")
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.diffusion.create).not.toHaveBeenCalled();
+    });
+
     it("refuse de diffuser sur un groupe qui n'appartient pas au formateur", async () => {
       prisma.formateur.findUnique.mockResolvedValue(formateur);
       prisma.groupe.findUnique.mockResolvedValue(GROUPE_B);
