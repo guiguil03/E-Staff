@@ -53,6 +53,12 @@ const ALLOWED_VIDEO_LEVEL_VALUES: number[] = VIDEO_GRADING_LEVELS.map((l) => l.v
 const ALLOWED_ESSAY_LEVEL_VALUES: number[] = ESSAY_GRADING_LEVELS.map((l) => l.value);
 
 const REQUIRED_SITUATION_COUNT = 5;
+
+// Compare deux numéros malgré les écritures différentes (« 034 12 345 67 »,
+// « +261 34 12 345 67 ») : seuls les 9 derniers chiffres comptent.
+function chiffresTelephone(phone: string): string {
+  return phone.replace(/\D/g, "").slice(-9);
+}
 const REQUIRED_VIDEO_COUNT = 2;
 // Partie 1 (QCM) et Partie 2 (ouvert) du Bloc 1 pèsent chacune 10 pts sur
 // les 20 du bloc — voir questions.ts (scoreQcm(..., 10)) et
@@ -185,12 +191,55 @@ export class EvaluationService {
     });
   }
 
+  // Un candidat qui revient (même e-mail ET même téléphone) reprend sa
+  // tentative en cours au lieu d'en créer une nouvelle — il peut ainsi
+  // quitter le test et le terminer plus tard, depuis n'importe quel appareil,
+  // sans laisser de doublons à la RH. L'e-mail seul ne suffit pas : il est
+  // facile à connaître, et reprendre une tentative permet d'en modifier les
+  // réponses.
   async createCandidat(dto: CreateCandidatDto) {
+    const enCours = await this.trouverTentativeEnCours(dto.email, dto.phone);
+    if (enCours) {
+      return { candidatId: enCours.candidatId, attemptId: enCours.id, resumed: true };
+    }
+
     const candidat = await this.prisma.candidat.create({ data: dto });
     const attempt = await this.prisma.evaluationAttempt.create({
       data: { candidatId: candidat.id },
     });
-    return { candidatId: candidat.id, attemptId: attempt.id };
+    return { candidatId: candidat.id, attemptId: attempt.id, resumed: false };
+  }
+
+  private async trouverTentativeEnCours(email: string, phone: string) {
+    const telephone = chiffresTelephone(phone);
+    if (!telephone) return null;
+    const tentatives = await this.prisma.evaluationAttempt.findMany({
+      where: {
+        status: "en_cours",
+        candidat: { email: { equals: email.trim(), mode: "insensitive" }, dataPurgedAt: null },
+      },
+      include: { candidat: true },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+    return tentatives.find((t) => chiffresTelephone(t.candidat.phone) === telephone) ?? null;
+  }
+
+  // Avancement d'une tentative, pour que le front du candidat reprenne là où
+  // il s'était arrêté (menu des blocs). Ne renvoie que des indicateurs — jamais
+  // les réponses ni les notes.
+  async getAttemptProgress(attemptId: string) {
+    const attempt = await this.getAttemptOrThrow(attemptId);
+    return {
+      status: attempt.status,
+      lexique: attempt.lexiqueAnswers !== null && attempt.ecritOuvertResponse !== null,
+      oral: attempt.oralAnswers !== null,
+      essay: attempt.essayResponse !== null,
+      situationIndexes: attempt.situationResponses.map((r) => r.situationIndex),
+      videoTaskIndexes: attempt.videoResponses.map((r) => r.taskIndex),
+      requiredSituations: REQUIRED_SITUATION_COUNT,
+      requiredVideos: REQUIRED_VIDEO_COUNT,
+    };
   }
 
   // CV facultatif, déposé à l'étape "Coordonnées" — même stockage S3 que
