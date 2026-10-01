@@ -170,6 +170,18 @@ export default function InscriptionsPanel() {
     return runAction(id, () => apiPostAuthed(`/registrations/${id}/confirm-payment`, {}, adminHeaders()));
   };
 
+  // Repli RH pour un candidat recruté qui transmet sa référence par
+  // téléphone plutôt que via sa page de contrat publique — symétrique à
+  // submitReference ci-dessus, mais sur /evaluation plutôt que /registrations
+  // (voir EvaluationService.submitPaymentReferenceAdmin).
+  const submitReferenceRecrutement = (id: string) => {
+    const reference = (referenceDrafts[id] ?? "").trim();
+    if (!reference) return;
+    return runAction(id, () =>
+      apiPostAuthed(`/evaluation/attempts/${id}/payment-reference`, { reference }, adminHeaders())
+    );
+  };
+
   return (
     <Reveal>
       <div className="rounded border border-white/10 bg-obsidianCard p-6">
@@ -202,6 +214,7 @@ export default function InscriptionsPanel() {
                 {rows.map((row) => {
                   if (row.source === "recrutement") {
                     const a = row.data;
+                    const isPendingA = pendingId === a.id;
                     return (
                       <tr key={`recrutement-${a.id}`} className="border-b border-white/5 align-top">
                         <td className="py-2 pr-2 text-white">
@@ -227,11 +240,36 @@ export default function InscriptionsPanel() {
                           {a.apprenant && (
                             <span className="block text-white/40">Matricule : {a.apprenant.matricule}</span>
                           )}
+                          {errorId === a.id && <span className="block text-accent">Échec — réessayer.</span>}
                         </td>
                         <td className="py-2 text-right">
-                          <span className="font-mono text-xs text-white/30" title="Géré depuis l'onglet Recrutement">
-                            —
-                          </span>
+                          {a.status === "contrat_envoye" ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <input
+                                type="text"
+                                placeholder="Référence"
+                                value={referenceDrafts[a.id] ?? ""}
+                                onChange={(e) =>
+                                  setReferenceDrafts((d) => ({ ...d, [a.id]: e.target.value }))
+                                }
+                                className="w-32 rounded border border-white/20 bg-obsidian px-2 py-1 font-sans text-xs text-white outline-none focus:border-accent"
+                              />
+                              <Button
+                                variant="ghostDark"
+                                disabled={isPendingA || !(referenceDrafts[a.id] ?? "").trim()}
+                                onClick={() => submitReferenceRecrutement(a.id)}
+                              >
+                                Enregistrer
+                              </Button>
+                            </div>
+                          ) : (
+                            <span
+                              className="font-mono text-xs text-white/30"
+                              title="Confirmation du paiement gérée depuis l'onglet Recrutement (choix du groupe)"
+                            >
+                              —
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );

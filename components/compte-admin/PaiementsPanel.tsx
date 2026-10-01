@@ -12,6 +12,12 @@ interface PendingPayment {
   paymentReference: string | null;
 }
 
+interface PipelineAttemptLite {
+  id: string;
+  status: string;
+  candidat: { firstName: string; lastName: string; email: string };
+}
+
 interface GroupeAvecPlaces {
   id: string;
   cle: string;
@@ -43,6 +49,15 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
   const [groupeId, setGroupeId] = useState("");
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
 
+  // Candidats dont le contrat est envoyé mais qui n'ont transmis aucune
+  // référence (ni via leur page publique, ni en appelant) — repli RH pour
+  // les saisir à leur place (voir EvaluationService.submitPaymentReferenceAdmin).
+  const [awaitingReference, setAwaitingReference] = useState<PipelineAttemptLite[] | "loading" | "erreur">(
+    "loading"
+  );
+  const [referenceDrafts, setReferenceDrafts] = useState<Record<string, string>>({});
+  const [referencePendingId, setReferencePendingId] = useState<string | null>(null);
+
   function refresh() {
     setPayments("loading");
     apiGet<PendingPayment[]>("/evaluation/pending-payment", adminHeaders())
@@ -51,9 +66,26 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
     apiGet<GroupeAvecPlaces[]>("/evaluation/groupes-avec-places", adminHeaders())
       .then(setGroupes)
       .catch(() => setGroupes([]));
+    setAwaitingReference("loading");
+    apiGet<PipelineAttemptLite[]>("/evaluation/pipeline-overview", adminHeaders())
+      .then((attempts) => setAwaitingReference(attempts.filter((a) => a.status === "contrat_envoye")))
+      .catch(() => setAwaitingReference("erreur"));
   }
 
   useEffect(refresh, []);
+
+  async function submitReference(id: string) {
+    const reference = (referenceDrafts[id] ?? "").trim();
+    if (!reference) return;
+    setReferencePendingId(id);
+    try {
+      await apiPostAuthed(`/evaluation/attempts/${id}/payment-reference`, { reference }, adminHeaders());
+      refresh();
+      onChange?.();
+    } finally {
+      setReferencePendingId(null);
+    }
+  }
 
   function openPayment(id: string) {
     setOpenId(id);
@@ -96,6 +128,41 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
         <p className="mt-1 font-sans text-xs text-white/50">
           Vérifiez la référence sur votre compte Mobile Money / bancaire avant de confirmer.
         </p>
+
+        {Array.isArray(awaitingReference) && awaitingReference.length > 0 && (
+          <div className="mt-4 space-y-2 border-b border-white/10 pb-4">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-white/40">
+              En attente de référence — candidat injoignable par son lien ? Saisissez-la ici.
+            </p>
+            {awaitingReference.map((a) => (
+              <div
+                key={a.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded border border-white/10 bg-obsidian px-4 py-3"
+              >
+                <span className="font-sans text-sm text-white">
+                  {a.candidat.firstName} {a.candidat.lastName}
+                  <span className="block font-mono text-[11px] text-white/40">{a.candidat.email}</span>
+                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Référence"
+                    value={referenceDrafts[a.id] ?? ""}
+                    onChange={(e) => setReferenceDrafts((d) => ({ ...d, [a.id]: e.target.value }))}
+                    className="w-32 rounded border border-white/20 bg-obsidianCard px-2 py-1 font-sans text-xs text-white outline-none focus:border-accent"
+                  />
+                  <Button
+                    variant="ghostDark"
+                    disabled={referencePendingId === a.id || !(referenceDrafts[a.id] ?? "").trim()}
+                    onClick={() => submitReference(a.id)}
+                  >
+                    {referencePendingId === a.id ? "..." : "Enregistrer"}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="mt-4 space-y-2">
           {payments === "loading" && <p className="font-sans text-sm text-white/50">Chargement...</p>}

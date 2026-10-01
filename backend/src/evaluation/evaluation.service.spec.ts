@@ -424,6 +424,30 @@ describe("EvaluationService", () => {
     });
   });
 
+  describe("submitPaymentReferenceAdmin", () => {
+    it("rejette si le contrat n'a pas été envoyé", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(baseAttempt({ status: "corrige" }));
+      await expect(
+        service.submitPaymentReferenceAdmin("attempt-1", { reference: "MVOLA-123" })
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.evaluationAttempt.update).not.toHaveBeenCalled();
+    });
+
+    it("enregistre la référence et passe en en_attente_paiement", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({ status: "contrat_envoye" })
+      );
+      prisma.evaluationAttempt.update.mockResolvedValue({});
+
+      await service.submitPaymentReferenceAdmin("attempt-1", { reference: "MVOLA-123" });
+
+      expect(prisma.evaluationAttempt.update).toHaveBeenCalledWith({
+        where: { id: "attempt-1" },
+        data: { paymentReference: "MVOLA-123", status: "en_attente_paiement" },
+      });
+    });
+  });
+
   describe("confirmPayment", () => {
     it("rejette si la tentative n'est pas en_attente_paiement", async () => {
       prisma.evaluationAttempt.findUnique.mockResolvedValue(baseAttempt({ status: "corrige" }));

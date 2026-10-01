@@ -409,6 +409,15 @@ export class EvaluationController {
     return this.service.confirmPayment(id, dto);
   }
 
+  // Repli RH — au cas où le candidat transmet sa référence par téléphone
+  // plutôt que via sa page de contrat publique (voir /registrations/:id/payment-reference
+  // pour l'équivalent côté Inscriptions).
+  @UseGuards(RhGuard)
+  @Post("attempts/:id/payment-reference")
+  submitPaymentReferenceAdmin(@Param("id") id: string, @Body() dto: SubmitPaymentReferenceDto) {
+    return this.service.submitPaymentReferenceAdmin(id, dto);
+  }
+
   // ---- Parcours candidat (public) — contrat + paiement -------------------
   // Accessible uniquement via le lien envoyé par e-mail (attemptId comme
   // jeton), même principe que le reste du parcours candidat sans compte.

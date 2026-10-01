@@ -1082,6 +1082,22 @@ export class EvaluationService {
     });
   }
 
+  // Repli RH — au cas où le candidat transmet sa référence par téléphone
+  // plutôt que via sa page de contrat publique (même principe que
+  // RegistrationsService.submitPaymentReference).
+  async submitPaymentReferenceAdmin(attemptId: string, dto: SubmitPaymentReferenceDto) {
+    const attempt = await this.getAttemptOrThrow(attemptId);
+    if (attempt.status !== "contrat_envoye") {
+      throw new BadRequestException(
+        "Le contrat doit avoir été envoyé avant de transmettre une référence de paiement."
+      );
+    }
+    return this.prisma.evaluationAttempt.update({
+      where: { id: attempt.id },
+      data: { paymentReference: dto.reference, status: "en_attente_paiement" },
+    });
+  }
+
   // ---- Interface admin (RH) ----------------------------------------------
 
   // Vue d'ensemble RH — tout le pipeline post-correction, pas seulement les
