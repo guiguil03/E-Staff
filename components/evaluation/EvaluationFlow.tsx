@@ -13,7 +13,7 @@ const REQUIRED_SITUATIONS = 5;
 // Vidéo de contexte diffusée en direct (Range requests natives, pas de
 // blob chargé en mémoire) — endpoint public, pas besoin de passer par
 // apiGetBlob comme pour les enregistrements des candidats.
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+const API_URL = (process.env.NEXT_PUBLIC_API_URL_Dev ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
 
 interface QcmQuestion {
   id: string;

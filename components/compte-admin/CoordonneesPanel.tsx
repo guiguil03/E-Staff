@@ -18,7 +18,7 @@ interface CoordonneesRow {
   typeCours: string | null;
 }
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+const API_URL = (process.env.NEXT_PUBLIC_API_URL_Dev ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
 
 // Tableau consolidé — une ligne par candidat avec ses coordonnées, son CV
 // (s'il a été déposé à l'étape "Coordonnées" du test) et les liens vers ses
