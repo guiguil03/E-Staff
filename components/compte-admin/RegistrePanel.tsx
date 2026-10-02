@@ -232,7 +232,10 @@ export default function RegistrePanel() {
             <table className="w-full min-w-[1600px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-white/10 font-mono text-[11px] uppercase tracking-widest text-white/40">
-                  <th className="py-2 pr-4">Matricule</th>
+                  <th className="sticky left-0 z-10 w-[140px] bg-obsidianCard py-2 pr-4">Matricule</th>
+                  <th className="sticky left-[140px] z-10 border-r border-white/10 bg-obsidianCard py-2 pr-4">
+                    Action
+                  </th>
                   <th className="py-2 pr-4">Nom &amp; Prénom</th>
                   <th className="py-2 pr-4">Statut</th>
                   <th className="py-2 pr-4">Formation</th>
@@ -243,7 +246,6 @@ export default function RegistrePanel() {
                   <th className="py-2 pr-4">Formateur assigné</th>
                   <th className="py-2 pr-4">Date d&apos;entrée en prod</th>
                   <th className="py-2 pr-4">Dernière mission (Client)</th>
-                  <th className="py-2 pr-4">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -252,10 +254,20 @@ export default function RegistrePanel() {
                     key={r.matricule}
                     className="border-b border-white/5 font-sans text-sm text-white/80 hover:bg-white/5"
                   >
-                    <td className="py-2.5 pr-4 font-mono text-xs text-accent">
+                    <td className="sticky left-0 z-10 w-[140px] bg-obsidianCard py-2.5 pr-4 font-mono text-xs text-accent">
                       <Link href={`/compte/admin/apprenants/${r.matricule}`} className="hover:underline">
                         {r.matricule}
                       </Link>
+                    </td>
+                    <td className="sticky left-[140px] z-10 border-r border-white/10 bg-obsidianCard py-2.5 pr-4">
+                      <button
+                        onClick={() => seConnecterEnTantQue(r.matricule)}
+                        disabled={openingViewAsMatricule === r.matricule}
+                        title="Ouvre son tableau de bord dans un nouvel onglet, sans son mot de passe"
+                        className="whitespace-nowrap rounded border border-accent/40 px-2.5 py-1 font-mono text-[11px] uppercase tracking-widest text-accent hover:bg-accent/10 disabled:opacity-50"
+                      >
+                        {openingViewAsMatricule === r.matricule ? "Ouverture..." : "Se connecter en tant que"}
+                      </button>
                     </td>
                     <td className="py-2.5 pr-4">
                       {r.prenom} {r.nom}
@@ -289,21 +301,11 @@ export default function RegistrePanel() {
                     <td className="py-2.5 pr-4 font-mono text-xs text-white/40">
                       {r.derniereMissionClient ?? "—"}
                     </td>
-                    <td className="py-2.5 pr-4">
-                      <button
-                        onClick={() => seConnecterEnTantQue(r.matricule)}
-                        disabled={openingViewAsMatricule === r.matricule}
-                        title="Ouvre son tableau de bord dans un nouvel onglet, sans son mot de passe"
-                        className="whitespace-nowrap rounded border border-accent/40 px-2.5 py-1 font-mono text-[11px] uppercase tracking-widest text-accent hover:bg-accent/10 disabled:opacity-50"
-                      >
-                        {openingViewAsMatricule === r.matricule ? "Ouverture..." : "Se connecter en tant que"}
-                      </button>
-                    </td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="py-6 text-center font-sans text-sm text-white/40">
+                    <td colSpan={12} className="py-6 text-center font-sans text-sm text-white/40">
                       Aucun résultat.
                     </td>
                   </tr>
