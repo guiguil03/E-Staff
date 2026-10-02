@@ -47,6 +47,8 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
   const [groupes, setGroupes] = useState<GroupeAvecPlaces[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [groupeId, setGroupeId] = useState("");
+  const [montant, setMontant] = useState("");
+  const [moyenPaiement, setMoyenPaiement] = useState("");
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -91,16 +93,18 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
   function openPayment(id: string) {
     setOpenId(id);
     setGroupeId("");
+    setMontant("");
+    setMoyenPaiement("");
     setStatus("idle");
   }
 
   async function confirm() {
-    if (!openId || !groupeId) return;
+    if (!openId || !groupeId || !montant) return;
     const payment = Array.isArray(payments) ? payments.find((p) => p.id === openId) : undefined;
     const nom = payment ? `${payment.candidat.firstName} ${payment.candidat.lastName}` : "ce candidat";
     if (
       !window.confirm(
-        `Confirmer le paiement de ${nom} ? Cette action crée immédiatement son compte apprenant et lui envoie ses identifiants par e-mail — elle ne peut pas être annulée depuis cet écran. Vérifiez bien le groupe sélectionné avant de continuer.`
+        `Confirmer le paiement de ${nom} ? Cette action crée immédiatement son compte apprenant, journalise l'encaissement et lui envoie ses identifiants par e-mail — elle ne peut pas être annulée depuis cet écran. Vérifiez bien le groupe et le montant avant de continuer.`
       )
     )
       return;
@@ -108,7 +112,7 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
     try {
       await apiPostAuthed(
         `/evaluation/attempts/${openId}/confirm-payment`,
-        { groupeId },
+        { groupeId, montant: Number(montant), moyenPaiement: moyenPaiement || undefined },
         adminHeaders()
       );
       setOpenId(null);
@@ -216,11 +220,40 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
                         </option>
                       ))}
                     </select>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+                          Montant reçu
+                        </label>
+                        <input
+                          type="number"
+                          value={montant}
+                          onChange={(e) => setMontant(e.target.value)}
+                          placeholder="Ex. 500000"
+                          className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+                          Moyen de paiement
+                        </label>
+                        <select
+                          value={moyenPaiement}
+                          onChange={(e) => setMoyenPaiement(e.target.value)}
+                          className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
+                        >
+                          <option value="">—</option>
+                          <option value="Mobile Money">Mobile Money</option>
+                          <option value="Virement bancaire">Virement bancaire</option>
+                          <option value="Espèces">Espèces</option>
+                        </select>
+                      </div>
+                    </div>
                     <div className="mt-3 flex items-center gap-3">
                       <Button
                         variant="dark"
                         onClick={confirm}
-                        disabled={status === "saving" || !groupeId}
+                        disabled={status === "saving" || !groupeId || !montant}
                       >
                         {status === "saving" ? "Confirmation..." : "Paiement reçu"}
                       </Button>
