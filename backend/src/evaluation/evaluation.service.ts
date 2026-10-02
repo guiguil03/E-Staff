@@ -1270,6 +1270,21 @@ export class EvaluationService {
       },
     });
 
+    // Journalise immédiatement l'encaissement (RhService.listEncaissements)
+    // — sinon ce paiement confirmé ici n'apparaîtrait jamais dans
+    // l'Historique des encaissements côté Facturation, qui est un journal
+    // saisi à la main et totalement déconnecté de ce pipeline.
+    const jour = new Date();
+    jour.setUTCHours(0, 0, 0, 0);
+    await this.prisma.encaissementFormation.create({
+      data: {
+        apprenantId: apprenant.id,
+        montant: dto.montant,
+        jour,
+        moyenPaiement: dto.moyenPaiement ?? null,
+      },
+    });
+
     // Seule et unique fois où ce mot de passe existe en clair — jamais
     // stocké, seulement haché (voir ci-dessus). L'apprenant le change dans
     // ses Paramètres une fois connecté.
