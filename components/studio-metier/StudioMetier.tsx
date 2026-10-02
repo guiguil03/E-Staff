@@ -129,31 +129,24 @@ export default function StudioMetier() {
           </div>
         </section>
 
+        {/* Nos offres d'emploi — en premier, décision RH du 2026-10-02
+            (plus de titre commun "Mur des Performances" : deux sections
+            indépendantes, offres d'abord, médias ensuite). */}
         <section className="mt-10 border-t border-accent/15 px-4 pb-16 pt-12 sm:px-6">
-          <div className="mx-auto grid max-w-7xl grid-cols-1 gap-12 lg:grid-cols-[1fr_380px] lg:gap-10">
-            <MediaWall />
-            <div className="lg:border-l lg:border-accent/15 lg:pl-10">
-              <TemoignagesEmbauche />
-            </div>
-          </div>
-        </section>
+          <div ref={murRef} aria-labelledby="mur-offres" className="mx-auto max-w-7xl scroll-mt-24">
+            <Reveal>
+              <h2 id="mur-offres" className="font-display text-2xl font-bold text-accent sm:text-3xl">
+                Nos offres d&apos;emploi
+              </h2>
+              <p className="mt-2 max-w-2xl font-sans text-sm text-white/60">
+                Nos postes ouverts en ce moment. Choisissez l&apos;offre qui vous correspond et
+                démarrez votre candidature.
+              </p>
+            </Reveal>
 
-        {/* Offres d'emploi publiées par la RH + candidature */}
-        <section className="border-t border-accent/15 px-4 pb-20 pt-12 sm:px-6">
-          <div ref={murRef} aria-labelledby="mur-offres" className="mx-auto min-w-0 max-w-7xl scroll-mt-24">
-              <Reveal>
-                <h2 id="mur-offres" className="font-display text-2xl font-bold text-accent sm:text-3xl">
-                  Nos offres d&apos;emploi
-                </h2>
-                <p className="mt-2 max-w-2xl font-sans text-sm text-white/60">
-                  Nos postes ouverts en ce moment. Choisissez l&apos;offre qui vous correspond et
-                  démarrez votre candidature.
-                </p>
-              </Reveal>
-
-              {offres === null ? (
-                <p className="mt-8 font-sans text-sm text-white/50">Chargement des offres...</p>
-              ) : offresTriees.length === 0 ? (
+            {offres === null ? (
+              <p className="mt-8 font-sans text-sm text-white/50">Chargement des offres...</p>
+            ) : offresTriees.length === 0 ? (
                 <Reveal>
                   <div className="mt-8 rounded border border-white/10 bg-obsidianCard px-6 py-10 text-center">
                     <p className="font-display text-lg font-semibold text-white">
@@ -266,6 +259,31 @@ export default function StudioMetier() {
                   )}
                 </div>
               )}
+          </div>
+        </section>
+
+        {/* Photos & vidéos de l'équipe — section indépendante, après les
+            offres. */}
+        <section aria-labelledby="medias-equipe" className="border-t border-accent/15 px-4 pb-16 pt-12 sm:px-6">
+          <div className="mx-auto max-w-7xl">
+            <Reveal>
+              <h2 id="medias-equipe" className="font-display text-2xl font-bold text-accent sm:text-3xl">
+                Photos &amp; vidéos de l&apos;équipe
+              </h2>
+              <p className="mt-2 max-w-2xl font-sans text-sm text-white/60">
+                Moments forts des campagnes, portraits de nos leaders et de nos formateurs.
+              </p>
+            </Reveal>
+            <div className="mt-8">
+              <MediaWall showHeading={false} />
+            </div>
+          </div>
+        </section>
+
+        {/* Témoignages — pleine largeur. */}
+        <section className="border-t border-accent/15 px-4 pb-20 pt-12 sm:px-6">
+          <div className="mx-auto max-w-3xl">
+            <TemoignagesEmbauche />
           </div>
         </section>
       </div>
