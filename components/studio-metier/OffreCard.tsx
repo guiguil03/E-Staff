@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { badgeOffre, formatDateLimite, type OffreEmploi } from "@/components/studio-metier/offres";
 
 const BADGE_TONE = {
@@ -30,6 +31,11 @@ interface OffreCardProps {
 // l'offre, jauge de recrutement, bouton d'action qui se désactive tout seul
 // quand l'offre est complète, expirée ou fermée par la RH.
 export default function OffreCard({ offre, selected = false, onPostuler, onListeAttente, preview = false }: OffreCardProps) {
+  // Repliée par défaut sur la vitrine publique (titre/badge/jauge
+  // seulement, « Voir plus » révèle le reste) — dépliée d'emblée dans
+  // l'aperçu du Portail RH, où la RH veut voir le rendu complet pendant
+  // qu'elle remplit le formulaire.
+  const [expanded, setExpanded] = useState(preview);
   const badge = badgeOffre(offre);
   const ouverte = offre.statut !== "cloture";
 
@@ -76,74 +82,88 @@ export default function OffreCard({ offre, selected = false, onPostuler, onListe
         </div>
       </div>
 
-      <dl className="mt-4 space-y-2 font-sans text-sm leading-relaxed">
-        {offre.projet && (
-          <div>
-            <dt className="inline font-semibold text-white">Projet : </dt>
-            <dd className="inline text-white/70">{offre.projet}</dd>
-          </div>
-        )}
-        {offre.remuneration && (
-          <div>
-            <dt className="inline font-semibold text-white">Rémunération : </dt>
-            <dd className="inline text-white/70">{offre.remuneration}</dd>
-          </div>
-        )}
-        {offre.prerequis && (
-          <div>
-            <dt className="inline font-semibold text-white">Prérequis : </dt>
-            <dd className="inline text-white/70">{offre.prerequis}</dd>
-          </div>
-        )}
-        {offre.dateLimite && ouverte && (
-          <div>
-            <dt className="inline font-semibold text-white">Candidatures jusqu&apos;au : </dt>
-            <dd className="inline text-white/70">{formatDateLimite(offre.dateLimite)}</dd>
-          </div>
-        )}
-      </dl>
+      {expanded ? (
+        <>
+          <dl className="mt-4 space-y-2 font-sans text-sm leading-relaxed">
+            {offre.projet && (
+              <div>
+                <dt className="inline font-semibold text-white">Projet : </dt>
+                <dd className="inline text-white/70">{offre.projet}</dd>
+              </div>
+            )}
+            {offre.remuneration && (
+              <div>
+                <dt className="inline font-semibold text-white">Rémunération : </dt>
+                <dd className="inline text-white/70">{offre.remuneration}</dd>
+              </div>
+            )}
+            {offre.prerequis && (
+              <div>
+                <dt className="inline font-semibold text-white">Prérequis : </dt>
+                <dd className="inline text-white/70">{offre.prerequis}</dd>
+              </div>
+            )}
+            {offre.dateLimite && ouverte && (
+              <div>
+                <dt className="inline font-semibold text-white">Candidatures jusqu&apos;au : </dt>
+                <dd className="inline text-white/70">{formatDateLimite(offre.dateLimite)}</dd>
+              </div>
+            )}
+          </dl>
 
-      <div className="mt-5 flex flex-wrap items-center gap-3">
-        {ouverte ? (
-          offre.lienWhatsapp && !preview ? (
-            <a
-              href={offre.lienWhatsapp}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-full bg-statusGreen px-6 py-3 font-sans text-sm font-bold uppercase tracking-wide text-obsidian transition-colors hover:bg-statusGreen/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
-            >
-              Postuler à cette offre <span aria-hidden="true">→</span>
-            </a>
-          ) : (
-            <button
-              type="button"
-              onClick={() => onPostuler?.(offre)}
-              disabled={preview}
-              className="inline-flex items-center gap-2 rounded-full bg-statusGreen px-6 py-3 font-sans text-sm font-bold uppercase tracking-wide text-obsidian transition-colors hover:bg-statusGreen/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:cursor-default"
-            >
-              Postuler à cette offre <span aria-hidden="true">→</span>
-            </button>
-          )
-        ) : (
-          <>
-            <button
-              type="button"
-              disabled
-              className="inline-flex cursor-not-allowed items-center rounded-full bg-white/10 px-6 py-3 font-sans text-sm font-bold uppercase tracking-wide text-white/40"
-            >
-              Offre clôturée
-            </button>
-            <button
-              type="button"
-              onClick={() => onListeAttente?.(offre)}
-              disabled={preview}
-              className="font-sans text-sm text-white/60 underline decoration-white/30 underline-offset-4 hover:text-accent disabled:cursor-default"
-            >
-              Rejoindre la liste d&apos;attente
-            </button>
-          </>
-        )}
-      </div>
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            {ouverte ? (
+              offre.lienWhatsapp && !preview ? (
+                <a
+                  href={offre.lienWhatsapp}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-full bg-statusGreen px-6 py-3 font-sans text-sm font-bold uppercase tracking-wide text-obsidian transition-colors hover:bg-statusGreen/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+                >
+                  Postuler à cette offre <span aria-hidden="true">→</span>
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onPostuler?.(offre)}
+                  disabled={preview}
+                  className="inline-flex items-center gap-2 rounded-full bg-statusGreen px-6 py-3 font-sans text-sm font-bold uppercase tracking-wide text-obsidian transition-colors hover:bg-statusGreen/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:cursor-default"
+                >
+                  Postuler à cette offre <span aria-hidden="true">→</span>
+                </button>
+              )
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex cursor-not-allowed items-center rounded-full bg-white/10 px-6 py-3 font-sans text-sm font-bold uppercase tracking-wide text-white/40"
+                >
+                  Offre clôturée
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onListeAttente?.(offre)}
+                  disabled={preview}
+                  className="font-sans text-sm text-white/60 underline decoration-white/30 underline-offset-4 hover:text-accent disabled:cursor-default"
+                >
+                  Rejoindre la liste d&apos;attente
+                </button>
+              </>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="mt-5">
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="font-sans text-sm text-accent underline decoration-accent/40 underline-offset-4 hover:text-white"
+          >
+            Voir plus
+          </button>
+        </div>
+      )}
     </article>
   );
 }

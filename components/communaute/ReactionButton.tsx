@@ -6,24 +6,41 @@ import { HeartIcon } from "./CommunityIcons";
 interface ReactionButtonProps {
   /** Starting reaction count for this example post/testimonial. */
   initialCount?: number;
+  /** Pré-coche le bouton (ex: post déjà liké par ce visiteur selon le
+   * localStorage) — n'affecte que l'état visuel initial, pas le compteur. */
+  initialActive?: boolean;
   /** Accessible label, e.g. "Réagir à la publication de Fara". */
   label: string;
+  /** Appelé après le toggle local avec le nouvel état (true = liké). Si la
+   * promesse résout un nombre, le compteur affiché se resynchronise dessus
+   * — utilisé pour les vrais posts médias, où le serveur (pas ce
+   * composant) est la source de vérité du compteur partagé entre
+   * visiteurs. Omis par défaut : comportement 100% local inchangé
+   * (témoignages, posts d'exemple). */
+  onToggle?: (active: boolean) => void | Promise<number | void>;
 }
 
-// Local-state-only "like" button — open to every visitor, no account
-// required. There is no backend yet, so the count only lives in this
-// component and resets on reload; that is expected for this phase.
+// "Like" button, open to every visitor, no account required. Par défaut
+// purement local (compteur reset au reload) — voir `onToggle` pour les cas
+// où le compteur doit être réel et partagé (MediaWall).
 // Styled for the dark/elite (obsidian) universe: gold accent on dark cards.
-export default function ReactionButton({ initialCount = 0, label }: ReactionButtonProps) {
-  const [active, setActive] = useState(false);
+export default function ReactionButton({
+  initialCount = 0,
+  initialActive = false,
+  label,
+  onToggle,
+}: ReactionButtonProps) {
+  const [active, setActive] = useState(initialActive);
   const [count, setCount] = useState(initialCount);
 
-  function toggle() {
-    setActive((prev) => {
-      const next = !prev;
-      setCount((c) => c + (next ? 1 : -1));
-      return next;
-    });
+  async function toggle() {
+    const next = !active;
+    setActive(next);
+    setCount((c) => c + (next ? 1 : -1));
+    if (onToggle) {
+      const result = await onToggle(next);
+      if (typeof result === "number") setCount(result);
+    }
   }
 
   return (
