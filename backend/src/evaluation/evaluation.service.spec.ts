@@ -18,13 +18,16 @@ function makePrismaMock() {
       updateMany: jest.fn(),
       findMany: jest.fn(),
       count: jest.fn(),
+      create: jest.fn(),
     },
+    candidat: { create: jest.fn() },
     situationResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     videoResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     essayResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     ecritOuvertResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     apprenant: { findMany: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
     groupe: { findUnique: jest.fn() },
+    encaissementFormation: { create: jest.fn() },
     formateur: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
   };
 }
@@ -93,6 +96,83 @@ describe("EvaluationService", () => {
       storage as unknown as StorageService
     );
     delete process.env.RH_NOTIFICATION_EMAIL;
+  });
+
+  describe("createCandidat — reprise d'un test en cours", () => {
+    const dto = { firstName: "Awa", lastName: "Diallo", email: "Awa@Example.com", phone: "+261 34 12 345 67" };
+
+    it("reprend la tentative en cours quand l'e-mail ET le téléphone correspondent", async () => {
+      prisma.evaluationAttempt.findMany.mockResolvedValue([
+        { id: "attempt-9", candidatId: "cand-9", candidat: { phone: "034 12 345 67" } },
+      ]);
+
+      const result = await service.createCandidat(dto);
+
+      expect(result).toEqual({ candidatId: "cand-9", attemptId: "attempt-9", resumed: true });
+      expect(prisma.candidat.create).not.toHaveBeenCalled();
+      expect(prisma.evaluationAttempt.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ status: "en_cours" }),
+        })
+      );
+    });
+
+    it("ne reprend pas la tentative d'un autre téléphone, même avec le même e-mail", async () => {
+      prisma.evaluationAttempt.findMany.mockResolvedValue([
+        { id: "attempt-9", candidatId: "cand-9", candidat: { phone: "032 99 888 77" } },
+      ]);
+      prisma.candidat.create.mockResolvedValue({ id: "cand-10" });
+      prisma.evaluationAttempt.create.mockResolvedValue({ id: "attempt-10" });
+
+      const result = await service.createCandidat(dto);
+
+      expect(result).toEqual({ candidatId: "cand-10", attemptId: "attempt-10", resumed: false });
+    });
+
+    it("crée un nouveau candidat quand aucune tentative n'est en cours", async () => {
+      prisma.evaluationAttempt.findMany.mockResolvedValue([]);
+      prisma.candidat.create.mockResolvedValue({ id: "cand-11" });
+      prisma.evaluationAttempt.create.mockResolvedValue({ id: "attempt-11" });
+
+      const result = await service.createCandidat(dto);
+
+      expect(result.resumed).toBe(false);
+      expect(prisma.candidat.create).toHaveBeenCalledWith({ data: dto });
+    });
+  });
+
+  describe("getAttemptProgress", () => {
+    it("indique les blocs déjà faits, sans exposer les réponses", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({
+          lexiqueAnswers: "{}",
+          ecritOuvertResponse: { id: "eo-1" },
+          situationResponses: [{ situationIndex: 2 }, { situationIndex: 5 }],
+          videoResponses: [{ taskIndex: 1 }],
+        })
+      );
+
+      const p = await service.getAttemptProgress("attempt-1");
+
+      expect(p).toEqual({
+        status: "en_cours",
+        lexique: true,
+        oral: false,
+        essay: false,
+        situationIndexes: [2, 5],
+        videoTaskIndexes: [1],
+        requiredSituations: 5,
+        requiredVideos: 2,
+      });
+    });
+
+    it("le Bloc 1 n'est pas fait tant que la partie ouverte manque", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(baseAttempt({ lexiqueAnswers: "{}" }));
+
+      const p = await service.getAttemptProgress("attempt-1");
+
+      expect(p.lexique).toBe(false);
+    });
   });
 
   describe("submitAnswers + finalisation automatique", () => {
@@ -424,10 +504,34 @@ describe("EvaluationService", () => {
     });
   });
 
+  describe("submitPaymentReferenceAdmin", () => {
+    it("rejette si le contrat n'a pas été envoyé", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(baseAttempt({ status: "corrige" }));
+      await expect(
+        service.submitPaymentReferenceAdmin("attempt-1", { reference: "MVOLA-123" })
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.evaluationAttempt.update).not.toHaveBeenCalled();
+    });
+
+    it("enregistre la référence et passe en en_attente_paiement", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({ status: "contrat_envoye" })
+      );
+      prisma.evaluationAttempt.update.mockResolvedValue({});
+
+      await service.submitPaymentReferenceAdmin("attempt-1", { reference: "MVOLA-123" });
+
+      expect(prisma.evaluationAttempt.update).toHaveBeenCalledWith({
+        where: { id: "attempt-1" },
+        data: { paymentReference: "MVOLA-123", status: "en_attente_paiement" },
+      });
+    });
+  });
+
   describe("confirmPayment", () => {
     it("rejette si la tentative n'est pas en_attente_paiement", async () => {
       prisma.evaluationAttempt.findUnique.mockResolvedValue(baseAttempt({ status: "corrige" }));
-      await expect(service.confirmPayment("attempt-1", { groupeId: "g-1" })).rejects.toThrow(
+      await expect(service.confirmPayment("attempt-1", { groupeId: "g-1", montant: 500000 })).rejects.toThrow(
         BadRequestException
       );
     });
@@ -437,7 +541,7 @@ describe("EvaluationService", () => {
         baseAttempt({ status: "en_attente_paiement" })
       );
       prisma.groupe.findUnique.mockResolvedValue(null);
-      await expect(service.confirmPayment("attempt-1", { groupeId: "g-1" })).rejects.toThrow(
+      await expect(service.confirmPayment("attempt-1", { groupeId: "g-1", montant: 500000 })).rejects.toThrow(
         NotFoundException
       );
     });
@@ -451,7 +555,7 @@ describe("EvaluationService", () => {
       prisma.apprenant.create.mockResolvedValue({ id: "app-new" });
       prisma.evaluationAttempt.update.mockResolvedValue({});
 
-      await service.confirmPayment("attempt-1", { groupeId: "g-1" });
+      await service.confirmPayment("attempt-1", { groupeId: "g-1", montant: 500000 });
 
       const createArgs = prisma.apprenant.create.mock.calls[0][0];
       expect(createArgs.data.matricule).toBe("ETF-2026-0001");
@@ -470,7 +574,7 @@ describe("EvaluationService", () => {
       prisma.apprenant.create.mockResolvedValue({ id: "app-new" });
       prisma.evaluationAttempt.update.mockResolvedValue({});
 
-      await service.confirmPayment("attempt-1", { groupeId: "g-1" });
+      await service.confirmPayment("attempt-1", { groupeId: "g-1", montant: 500000 });
 
       const createArgs = prisma.apprenant.create.mock.calls[0][0];
       expect(createArgs.data.matricule).toBe("ETF-2026-0008");
@@ -488,10 +592,35 @@ describe("EvaluationService", () => {
       prisma.apprenant.create.mockResolvedValue({ id: "app-new" });
       prisma.evaluationAttempt.update.mockResolvedValue({});
 
-      await service.confirmPayment("attempt-1", { groupeId: "g-1" });
+      await service.confirmPayment("attempt-1", { groupeId: "g-1", montant: 500000 });
 
       const createArgs = prisma.apprenant.create.mock.calls[0][0];
       expect(createArgs.data.agentAcquisitionId).toBe("agent-1");
+    });
+
+    it("journalise l'encaissement pour que le paiement apparaisse dans l'Historique des encaissements", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        baseAttempt({ status: "en_attente_paiement" })
+      );
+      prisma.groupe.findUnique.mockResolvedValue({ id: "g-1", label: "Groupe A" });
+      prisma.apprenant.findMany.mockResolvedValue([]);
+      prisma.apprenant.create.mockResolvedValue({ id: "app-new" });
+      prisma.evaluationAttempt.update.mockResolvedValue({});
+
+      await service.confirmPayment("attempt-1", {
+        groupeId: "g-1",
+        montant: 500000,
+        moyenPaiement: "Mobile Money",
+      });
+
+      expect(prisma.encaissementFormation.create).toHaveBeenCalledWith({
+        data: {
+          apprenantId: "app-new",
+          montant: 500000,
+          jour: expect.any(Date),
+          moyenPaiement: "Mobile Money",
+        },
+      });
     });
 
     it("hache le mot de passe temporaire, met la tentative à jour et envoie les identifiants en clair par e-mail (une seule fois)", async () => {
@@ -503,7 +632,7 @@ describe("EvaluationService", () => {
       prisma.apprenant.create.mockResolvedValue({ id: "app-new" });
       prisma.evaluationAttempt.update.mockResolvedValue({});
 
-      await service.confirmPayment("attempt-1", { groupeId: "g-1" });
+      await service.confirmPayment("attempt-1", { groupeId: "g-1", montant: 500000 });
 
       const createArgs = prisma.apprenant.create.mock.calls[0][0];
       expect(createArgs.data.email).toBe(CANDIDAT.email);

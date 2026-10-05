@@ -18,12 +18,12 @@ import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { ConsumeViewAsTokenDto } from "./dto/consume-view-as-token.dto";
 import { AuthService } from "./auth.service";
 import { AdminGuard } from "../common/admin.guard";
-import { RhGuard } from "../common/rh.guard";
 import { RateLimitGuard } from "../common/rate-limit.guard";
 import { recordFailure, recordSuccess, remainingLockoutSeconds } from "../common/login-rate-limit";
 import { consumeViewAsToken } from "../common/view-as-token";
 import {
   clearSessionCookie,
+  setViewAsSessionCookie,
   identifiantPartage,
   identifiantPartageAutorise,
   readSession,
@@ -191,7 +191,7 @@ export class AuthController {
     // titre qu'un vrai login — sans ça, les routes désormais gardées par
     // FormateurGuard/ApprenantGuard resteraient inaccessibles depuis une
     // session "se connecter en tant que".
-    setSessionCookie(response, {
+    setViewAsSessionCookie(response, {
       matricule: result.matricule,
       role: result.role as SessionRole,
     });
@@ -200,10 +200,11 @@ export class AuthController {
 
   // "Se connecter en tant que" (RH -> compte apprenant) — voir
   // AuthService.createApprenantViewAsToken. Appelé depuis le Casier
-  // Apprenant (page RH) — génération réservée à RhGuard ; la consommation
+  // Apprenant (page RH) — génération réservée au staff (Admin ou RH) ; la consommation
   // ci-dessous reste publique (c'est le nouvel onglet, sans session RH,
   // qui l'appelle).
-  @UseGuards(RhGuard)
+  // StaffGuard : le bouton est aussi sur le Registre d'Académie (Admin).
+  @UseGuards(StaffGuard)
   @Post("view-as/:matricule")
   createViewAs(@Param("matricule") matricule: string) {
     return this.authService.createApprenantViewAsToken(matricule);

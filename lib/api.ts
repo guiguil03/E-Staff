@@ -1,6 +1,6 @@
-// Retire un éventuel "/" final — évite un double slash si NEXT_PUBLIC_API_URL
+// Retire un éventuel "/" final — évite un double slash si NEXT_PUBLIC_API_URL(_Dev)
 // est renseigné avec (ex. "https://api.example.com/") ou sans.
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+const API_URL = (process.env.NEXT_PUBLIC_API_URL_Dev ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
 
 // `credentials: "include"` sur tous les appels : nécessaire pour que le
 // navigateur envoie/reçoive le cookie de session httpOnly (voir

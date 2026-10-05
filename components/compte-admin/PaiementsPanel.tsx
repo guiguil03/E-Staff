@@ -3,13 +3,19 @@
 import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
-import { apiGet, apiPostAuthed } from "@/lib/api";
+import { ApiError, apiGet, apiPostAuthed } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 
 interface PendingPayment {
   id: string;
   candidat: { firstName: string; lastName: string; email: string };
   paymentReference: string | null;
+}
+
+interface PipelineAttemptLite {
+  id: string;
+  status: string;
+  candidat: { firstName: string; lastName: string; email: string };
 }
 
 interface GroupeAvecPlaces {
@@ -41,7 +47,19 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
   const [groupes, setGroupes] = useState<GroupeAvecPlaces[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [groupeId, setGroupeId] = useState("");
+  const [montant, setMontant] = useState("");
+  const [moyenPaiement, setMoyenPaiement] = useState("");
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Candidats dont le contrat est envoyé mais qui n'ont transmis aucune
+  // référence (ni via leur page publique, ni en appelant) — repli RH pour
+  // les saisir à leur place (voir EvaluationService.submitPaymentReferenceAdmin).
+  const [awaitingReference, setAwaitingReference] = useState<PipelineAttemptLite[] | "loading" | "erreur">(
+    "loading"
+  );
+  const [referenceDrafts, setReferenceDrafts] = useState<Record<string, string>>({});
+  const [referencePendingId, setReferencePendingId] = useState<string | null>(null);
 
   function refresh() {
     setPayments("loading");
@@ -51,23 +69,42 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
     apiGet<GroupeAvecPlaces[]>("/evaluation/groupes-avec-places", adminHeaders())
       .then(setGroupes)
       .catch(() => setGroupes([]));
+    setAwaitingReference("loading");
+    apiGet<PipelineAttemptLite[]>("/evaluation/pipeline-overview", adminHeaders())
+      .then((attempts) => setAwaitingReference(attempts.filter((a) => a.status === "contrat_envoye")))
+      .catch(() => setAwaitingReference("erreur"));
   }
 
   useEffect(refresh, []);
 
+  async function submitReference(id: string) {
+    const reference = (referenceDrafts[id] ?? "").trim();
+    if (!reference) return;
+    setReferencePendingId(id);
+    try {
+      await apiPostAuthed(`/evaluation/attempts/${id}/payment-reference`, { reference }, adminHeaders());
+      refresh();
+      onChange?.();
+    } finally {
+      setReferencePendingId(null);
+    }
+  }
+
   function openPayment(id: string) {
     setOpenId(id);
     setGroupeId("");
+    setMontant("");
+    setMoyenPaiement("");
     setStatus("idle");
   }
 
   async function confirm() {
-    if (!openId || !groupeId) return;
+    if (!openId || !groupeId || !montant) return;
     const payment = Array.isArray(payments) ? payments.find((p) => p.id === openId) : undefined;
     const nom = payment ? `${payment.candidat.firstName} ${payment.candidat.lastName}` : "ce candidat";
     if (
       !window.confirm(
-        `Confirmer le paiement de ${nom} ? Cette action crée immédiatement son compte apprenant et lui envoie ses identifiants par e-mail — elle ne peut pas être annulée depuis cet écran. Vérifiez bien le groupe sélectionné avant de continuer.`
+        `Confirmer le paiement de ${nom} ? Cette action crée immédiatement son compte apprenant, journalise l'encaissement et lui envoie ses identifiants par e-mail — elle ne peut pas être annulée depuis cet écran. Vérifiez bien le groupe et le montant avant de continuer.`
       )
     )
       return;
@@ -75,14 +112,15 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
     try {
       await apiPostAuthed(
         `/evaluation/attempts/${openId}/confirm-payment`,
-        { groupeId },
+        { groupeId, montant: Number(montant), moyenPaiement: moyenPaiement || undefined },
         adminHeaders()
       );
       setOpenId(null);
       setStatus("idle");
       refresh();
       onChange?.();
-    } catch {
+    } catch (err) {
+      setErrorMessage(err instanceof ApiError ? err.message : null);
       setStatus("error");
     }
   }
@@ -96,6 +134,41 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
         <p className="mt-1 font-sans text-xs text-white/50">
           Vérifiez la référence sur votre compte Mobile Money / bancaire avant de confirmer.
         </p>
+
+        {Array.isArray(awaitingReference) && awaitingReference.length > 0 && (
+          <div className="mt-4 space-y-2 border-b border-white/10 pb-4">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-white/40">
+              En attente de référence — candidat injoignable par son lien ? Saisissez-la ici.
+            </p>
+            {awaitingReference.map((a) => (
+              <div
+                key={a.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded border border-white/10 bg-obsidian px-4 py-3"
+              >
+                <span className="font-sans text-sm text-white">
+                  {a.candidat.firstName} {a.candidat.lastName}
+                  <span className="block font-mono text-[11px] text-white/40">{a.candidat.email}</span>
+                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Référence"
+                    value={referenceDrafts[a.id] ?? ""}
+                    onChange={(e) => setReferenceDrafts((d) => ({ ...d, [a.id]: e.target.value }))}
+                    className="w-32 rounded border border-white/20 bg-obsidianCard px-2 py-1 font-sans text-xs text-white outline-none focus:border-accent"
+                  />
+                  <Button
+                    variant="ghostDark"
+                    disabled={referencePendingId === a.id || !(referenceDrafts[a.id] ?? "").trim()}
+                    onClick={() => submitReference(a.id)}
+                  >
+                    {referencePendingId === a.id ? "..." : "Enregistrer"}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="mt-4 space-y-2">
           {payments === "loading" && <p className="font-sans text-sm text-white/50">Chargement...</p>}
@@ -147,11 +220,40 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
                         </option>
                       ))}
                     </select>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+                          Montant reçu
+                        </label>
+                        <input
+                          type="number"
+                          value={montant}
+                          onChange={(e) => setMontant(e.target.value)}
+                          placeholder="Ex. 500000"
+                          className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
+                          Moyen de paiement
+                        </label>
+                        <select
+                          value={moyenPaiement}
+                          onChange={(e) => setMoyenPaiement(e.target.value)}
+                          className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
+                        >
+                          <option value="">—</option>
+                          <option value="Mobile Money">Mobile Money</option>
+                          <option value="Virement bancaire">Virement bancaire</option>
+                          <option value="Espèces">Espèces</option>
+                        </select>
+                      </div>
+                    </div>
                     <div className="mt-3 flex items-center gap-3">
                       <Button
                         variant="dark"
                         onClick={confirm}
-                        disabled={status === "saving" || !groupeId}
+                        disabled={status === "saving" || !groupeId || !montant}
                       >
                         {status === "saving" ? "Confirmation..." : "Paiement reçu"}
                       </Button>
@@ -160,7 +262,7 @@ export default function PaiementsPanel({ onChange }: PaiementsPanelProps) {
                       </Button>
                     </div>
                     {status === "error" && (
-                      <p className="mt-2 font-mono text-xs text-accent">Erreur — réessayer.</p>
+                      <p className="mt-2 font-mono text-xs text-accent">{errorMessage ?? "Erreur — réessayer."}</p>
                     )}
                   </div>
                 )}

@@ -1,91 +1,45 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Reveal from "@/components/Reveal";
 import ReactionButton from "./ReactionButton";
 import ShareButton from "./ShareButton";
-import { LockIcon, StarIcon, MedalIcon, PlusCircleIcon } from "./CommunityIcons";
+import { LockIcon, PlusCircleIcon } from "./CommunityIcons";
+import type { MediaPostPublic } from "./mediaPost";
+import { apiGet, apiPost } from "@/lib/api";
 
-type Tone = "success" | "teal" | "accent" | "primary";
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
 
-interface MediaPost {
-  id: string;
-  type: "Photo" | "Vidéo";
-  caption: string;
-  firstname: string;
-  tone: Tone;
-  reactions: number;
-  /** A subset of posts carry the "top performer" ribbon + star rating, like
-   * the reference gallery mixes plain team shots with badged portraits. */
-  featured?: boolean;
-  rating?: number;
+// Mémorise les posts déjà likés par CE navigateur (clé locale, pas un vrai
+// compte) — purement pour que l'état visuel reste cohérent au rechargement.
+// N'empêche personne de re-liker depuis un autre navigateur/navigation
+// privée : la vraie protection anti-abus est le rate-limit par IP côté
+// backend (voir media-wall.controller.ts).
+const LIKED_POSTS_KEY = "estaf-media-posts-liked";
+
+function getLikedPostIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(LIKED_POSTS_KEY);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
 }
 
-// EXAMPLE content only — there is no real media library yet. These six
-// posts stand in for the "real" moderated wall (team moments, campaign
-// highlights, leader/teacher portraits) and should be replaced with actual
-// approved media once the back-office moderation queue exists.
-const EXAMPLE_POSTS: MediaPost[] = [
-  {
-    id: "p1",
-    type: "Photo",
-    caption: "Moment d'équipe pendant la campagne du trimestre.",
-    firstname: "Fara",
-    tone: "success",
-    reactions: 24,
-  },
-  {
-    id: "p2",
-    type: "Vidéo",
-    caption: "Portrait d'un de nos formateurs, en session d'éloquence.",
-    firstname: "Mihaja",
-    tone: "teal",
-    reactions: 18,
-  },
-  {
-    id: "p3",
-    type: "Photo",
-    caption: "Célébration des objectifs de production atteints.",
-    firstname: "Tiana",
-    tone: "accent",
-    reactions: 31,
-    featured: true,
-    rating: 5,
-  },
-  {
-    id: "p4",
-    type: "Photo",
-    caption: "Portrait du leader du mois, pôle Talents.",
-    firstname: "Njaka",
-    tone: "primary",
-    reactions: 27,
-    featured: true,
-    rating: 5,
-  },
-  {
-    id: "p5",
-    type: "Vidéo",
-    caption: "Extrait d'une session de coaching oratoire (programme FOL).",
-    firstname: "Vola",
-    tone: "success",
-    reactions: 15,
-  },
-  {
-    id: "p6",
-    type: "Photo",
-    caption: "Remise des diplômes internes de fin de module.",
-    firstname: "Hasina",
-    tone: "teal",
-    reactions: 22,
-    featured: true,
-    rating: 4,
-  },
-];
-
-const TONE_CLASSES: Record<Tone, string> = {
-  success: "bg-success",
-  teal: "bg-teal",
-  accent: "bg-accent",
-  primary: "bg-primary",
-};
+function setPostLiked(id: string, liked: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    const ids = getLikedPostIds();
+    if (liked) ids.add(id);
+    else ids.delete(id);
+    window.localStorage.setItem(LIKED_POSTS_KEY, JSON.stringify([...ids]));
+  } catch {
+    // Stockage indisponible (navigation privée stricte, quota...) — tant
+    // pis, l'état visuel ne survivra juste pas au rechargement.
+  }
+}
 
 function HangingPin() {
   return (
@@ -96,91 +50,128 @@ function HangingPin() {
   );
 }
 
-// The gallery wall + upload panel for /communaute — dark/elite universe
-// (obsidian background, gold-framed "hanging photo" cards). Returns content
-// only; the page shell supplies the full-bleed obsidian background.
-export default function MediaWall() {
+interface MediaWallProps {
+  /** Masque le titre/intro (le h2 "Photos & vidéos de l'équipe" et le
+   * bandeau "prévisualisation avant publication") quand un parent porte
+   * déjà son propre titre pour cette section — voir StudioMetier.tsx. Par
+   * défaut affiché (ex. CommunautePage.tsx). */
+  showHeading?: boolean;
+}
+
+// Le mur de médias publiés par la RH pour /offres/carrieres (et
+// /communaute, en pause depuis le 2026-09-26) — univers sombre/élite
+// (obsidienne + or), cartes "photo accrochée". Publication directe par la
+// RH (voir compte-admin/MediaWallPanel.tsx), pas de modération.
+export default function MediaWall({ showHeading = true }: MediaWallProps) {
+  const [posts, setPosts] = useState<MediaPostPublic[] | null>(null);
+
+  useEffect(() => {
+    apiGet<MediaPostPublic[]>("/media-posts")
+      .then((data) => setPosts(Array.isArray(data) ? data : []))
+      .catch(() => setPosts([]));
+  }, []);
+
   return (
-    <div aria-labelledby="mur-performances">
-      <Reveal>
-        <h2
-          id="mur-performances"
-          className="font-display text-2xl font-bold text-accent sm:text-3xl"
-        >
-          Le Mur des Performances &amp; Médias
-        </h2>
-        <p className="mt-2 max-w-2xl font-sans text-sm text-white/60">
-          Photos et vidéos de l&apos;équipe, moments forts des campagnes, portraits de nos
-          leaders et de nos formateurs.
-        </p>
-      </Reveal>
+    <div aria-labelledby={showHeading ? "medias-equipe" : undefined}>
+      {showHeading && (
+        <>
+          <Reveal>
+            <h2
+              id="medias-equipe"
+              className="font-display text-2xl font-bold text-accent sm:text-3xl"
+            >
+              Photos &amp; vidéos de l&apos;équipe
+            </h2>
+            <p className="mt-2 max-w-2xl font-sans text-sm text-white/60">
+              Photos et vidéos de l&apos;équipe, moments forts des campagnes, portraits de nos
+              leaders et de nos formateurs.
+            </p>
+          </Reveal>
 
-      <Reveal delay={80}>
-        <div className="mt-4 inline-flex items-center gap-2 rounded border border-accent/25 bg-obsidianCard px-4 py-2 font-sans text-xs text-white/60">
-          <LockIcon className="h-3.5 w-3.5 shrink-0 text-accent" />
-          Chaque contenu partagé par la communauté passe par une prévisualisation avant
-          publication.
-        </div>
-      </Reveal>
-
-      <p className="mt-8 font-mono text-[11px] uppercase tracking-widest text-white/40">
-        Exemples illustratifs — à remplacer par de vrais médias
-      </p>
-
-      <div className="mt-3 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
-        {EXAMPLE_POSTS.map((post, i) => (
-          <Reveal key={post.id} delay={i * 60}>
-            <div className="flex flex-col items-center">
-              <HangingPin />
-              <article className="relative mt-1 w-full overflow-hidden rounded-lg border-2 border-accent/60 bg-obsidianCard shadow-lg shadow-black/40">
-                {post.featured && (
-                  <span className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-accent bg-obsidian/80 text-accent">
-                    <MedalIcon className="h-4 w-4" />
-                  </span>
-                )}
-                <div
-                  className={`flex h-36 items-center justify-center px-4 text-center ${TONE_CLASSES[post.tone]}`}
-                >
-                  <span className="font-mono text-[11px] uppercase tracking-widest text-white/85">
-                    Exemple — {post.type}
-                  </span>
-                </div>
-                {post.featured && post.rating && (
-                  <div className="flex items-center justify-center gap-0.5 border-t border-accent/20 bg-obsidianCard px-4 pt-3">
-                    {Array.from({ length: 5 }).map((_, starIndex) => (
-                      <StarIcon
-                        key={starIndex}
-                        filled={starIndex < post.rating!}
-                        className={`h-3.5 w-3.5 ${starIndex < post.rating! ? "text-accent" : "text-white/20"}`}
-                      />
-                    ))}
-                  </div>
-                )}
-                <div className="flex flex-1 flex-col p-4">
-                  <p className="flex-1 font-sans text-sm text-white/85">{post.caption}</p>
-                  <p className="mt-3 font-mono text-xs text-white/40">
-                    Publié par {post.firstname}
-                  </p>
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <ReactionButton
-                      initialCount={post.reactions}
-                      label={`Réagir à la publication de ${post.firstname}`}
-                    />
-                    <Link
-                      href="/connexion"
-                      className="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-obsidian/60 px-3 py-1.5 font-sans text-xs font-medium text-white/70 transition-colors duration-150 hover:border-accent hover:text-accent"
-                    >
-                      <LockIcon className="h-3.5 w-3.5" />
-                      Commenter
-                    </Link>
-                    <ShareButton label={`Partager la publication de ${post.firstname}`} />
-                  </div>
-                </div>
-              </article>
+          <Reveal delay={80}>
+            <div className="mt-4 inline-flex items-center gap-2 rounded border border-accent/25 bg-obsidianCard px-4 py-2 font-sans text-xs text-white/60">
+              <LockIcon className="h-3.5 w-3.5 shrink-0 text-accent" />
+              Chaque contenu partagé par la communauté passe par une prévisualisation avant
+              publication.
             </div>
           </Reveal>
-        ))}
-      </div>
+        </>
+      )}
+
+      {posts === null && (
+        <p className="mt-8 font-sans text-sm text-white/50">Chargement des médias...</p>
+      )}
+      {posts !== null && posts.length === 0 && (
+        <p className="mt-8 font-sans text-sm text-white/50">Aucun média publié pour le moment.</p>
+      )}
+
+      {posts !== null && posts.length > 0 && (
+        <div className="mt-3 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+          {posts.map((post, i) => (
+            <Reveal key={post.id} delay={i * 60}>
+              <div className="flex flex-col items-center">
+                <HangingPin />
+                <article className="relative mt-1 w-full overflow-hidden rounded-lg border-2 border-accent/60 bg-obsidianCard shadow-lg shadow-black/40">
+                  {post.type === "video" ? (
+                    <video
+                      src={`${API_URL}/media-posts/${post.id}/file`}
+                      controls
+                      className="h-36 w-full bg-black object-cover"
+                    />
+                  ) : (
+                    <img
+                      src={`${API_URL}/media-posts/${post.id}/file`}
+                      alt={post.caption ?? "Photo de l'équipe e-Staf"}
+                      className="h-36 w-full object-cover"
+                    />
+                  )}
+                  <div className="flex flex-1 flex-col p-4">
+                    <p className="flex-1 font-sans text-sm text-white/85">{post.caption ?? ""}</p>
+                    {post.auteur && (
+                      <p className="mt-3 font-mono text-xs text-white/40">
+                        Publié par {post.auteur}
+                      </p>
+                    )}
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <ReactionButton
+                        initialCount={post.likes}
+                        initialActive={getLikedPostIds().has(post.id)}
+                        label={`Réagir à la publication${post.auteur ? ` de ${post.auteur}` : ""}`}
+                        onToggle={async (active) => {
+                          setPostLiked(post.id, active);
+                          try {
+                            const result = await apiPost<{ likes: number }>(
+                              `/media-posts/${post.id}/${active ? "like" : "unlike"}`,
+                              {}
+                            );
+                            return result.likes;
+                          } catch {
+                            // Panne réseau/serveur — le compteur local optimiste reste
+                            // affiché tel quel, pas de rollback (cosmétique, pas critique).
+                          }
+                        }}
+                      />
+                      <Link
+                        href="/connexion"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-obsidian/60 px-3 py-1.5 font-sans text-xs font-medium text-white/70 transition-colors duration-150 hover:border-accent hover:text-accent"
+                      >
+                        <LockIcon className="h-3.5 w-3.5" />
+                        Commenter
+                      </Link>
+                      <ShareButton
+                        label={`Partager la publication${post.auteur ? ` de ${post.auteur}` : ""}`}
+                        onShare={() => {
+                          apiPost(`/media-posts/${post.id}/share`, {}).catch(() => {});
+                        }}
+                      />
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      )}
 
       <Reveal delay={120}>
         <div className="mx-auto mt-14 flex max-w-xl flex-col items-center gap-3 text-center">

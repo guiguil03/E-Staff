@@ -21,7 +21,7 @@ interface ContractInfo {
   };
 }
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+const API_URL = (process.env.NEXT_PUBLIC_API_URL_Dev ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
 
 // Page accessible uniquement via le lien envoyé par e-mail à l'inscrit
 // (id d'inscription comme jeton, pas de compte à créer) — même principe

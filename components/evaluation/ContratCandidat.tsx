@@ -18,7 +18,7 @@ interface ContractInfo {
   apprenantMatricule: string | null;
 }
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+const API_URL = (process.env.NEXT_PUBLIC_API_URL_Dev ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
 
 // Page accessible uniquement via le lien envoyé par e-mail au cron de 20h
 // (attemptId comme jeton, pas de compte à créer pour l'atteindre — même

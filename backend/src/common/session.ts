@@ -21,6 +21,12 @@ export interface SessionPayload {
 }
 
 export const SESSION_COOKIE_NAME = "estaf_session";
+// Session « Se connecter en tant que » : cookie distinct pour ne jamais
+// écraser la session de l'admin/RH qui ouvre le compte d'un formateur ou
+// d'un apprenant dans un autre onglet (même navigateur = mêmes cookies). Les
+// guards cherchent, parmi les deux cookies, la première session dont le rôle
+// convient à la route (voir verifierSession).
+export const VIEW_AS_COOKIE_NAME = "estaf_session_va";
 const SESSION_TTL_SECONDS = 12 * 60 * 60; // 12h — cohérent avec une session de travail.
 
 function secret(): string {
@@ -41,7 +47,17 @@ export function signSession(payload: SessionPayload): string {
 }
 
 export function readSession(request: Request): SessionPayload | null {
-  const token = request.cookies?.[SESSION_COOKIE_NAME];
+  return decoderSession(request.cookies?.[SESSION_COOKIE_NAME]);
+}
+
+// Sessions présentes dans la requête, la session principale d'abord.
+export function readSessions(request: Request): SessionPayload[] {
+  return [SESSION_COOKIE_NAME, VIEW_AS_COOKIE_NAME]
+    .map((nom) => decoderSession(request.cookies?.[nom]))
+    .filter((s): s is SessionPayload => s !== null);
+}
+
+function decoderSession(token: unknown): SessionPayload | null {
   if (!token || typeof token !== "string") return null;
 
   try {
@@ -73,10 +89,18 @@ function cookieOptions() {
 
 export function setSessionCookie(response: Response, payload: SessionPayload): void {
   response.cookie(SESSION_COOKIE_NAME, signSession(payload), cookieOptions());
+  // Une vraie connexion met fin à une éventuelle session « en tant que ».
+  response.clearCookie(VIEW_AS_COOKIE_NAME, { ...cookieOptions(), maxAge: undefined });
+}
+
+// « Se connecter en tant que » : n'écrase pas la session principale.
+export function setViewAsSessionCookie(response: Response, payload: SessionPayload): void {
+  response.cookie(VIEW_AS_COOKIE_NAME, signSession(payload), cookieOptions());
 }
 
 export function clearSessionCookie(response: Response): void {
   response.clearCookie(SESSION_COOKIE_NAME, { ...cookieOptions(), maxAge: undefined });
+  response.clearCookie(VIEW_AS_COOKIE_NAME, { ...cookieOptions(), maxAge: undefined });
 }
 
 // ---- Vérification en base (audit du 2026-09-28) ------------------------------
@@ -127,8 +151,17 @@ export async function sessionToujoursValide(session: SessionPayload): Promise<bo
   return identifiantPartage(role).matricule === matricule && (await identifiantPartageAutorise(role));
 }
 
-export async function verifierSession(request: Request): Promise<SessionPayload | null> {
-  const session = readSession(request);
-  if (!session) return null;
-  return (await sessionToujoursValide(session)) ? session : null;
+// Première session valide (signée ET toujours valide en base) dont le rôle
+// est accepté — tous rôles confondus si `roles` est omis. Avec une session
+// admin et une session « en tant que » dans le même navigateur, chaque route
+// reçoit celle dont le rôle lui correspond.
+export async function verifierSession(
+  request: Request,
+  roles?: SessionRole[]
+): Promise<SessionPayload | null> {
+  for (const session of readSessions(request)) {
+    if (roles && !roles.includes(session.role)) continue;
+    if (await sessionToujoursValide(session)) return session;
+  }
+  return null;
 }

@@ -1415,6 +1415,40 @@ model OffreEmploi {
   @@index([metierSlug])
 }
 
+// Mur des Performances & Médias (/offres/carrieres) — photos/vidéos publiées
+// directement par la RH, sans file de modération (publication directe,
+// décision produit 2026-10-02). `type` n'est jamais pris tel que déclaré par
+// le client mais dérivé du contenu réel du fichier (isImage/isVideo, voir
+// common/file-signature.ts) — même principe anti-usurpation que CV/vidéo
+// d'évaluation.
+model MediaPost {
+  id String @id @default(cuid())
+
+  type       String // "photo" | "video"
+  storageKey String
+  mimeType   String
+
+  caption String?
+  // "Publié par X" — texte libre saisi par la RH, pas un lien vers un compte.
+  auteur  String?
+
+  // Masqué de la vitrine sans être supprimé — même principe que
+  // OffreEmploi.publiee.
+  publiee   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  // Compteurs publics (like/partage) — pas de compte visiteur, donc pas de
+  // vraie déduplication possible : juste un compteur partagé entre tous les
+  // visiteurs, protégé par un simple rate-limit par IP côté contrôleur
+  // (voir media-wall.controller.ts). Le client mémorise en local les posts
+  // déjà likés pour l'affichage (cohérence au rechargement), mais rien
+  // n'empêche un autre navigateur/une navigation privée de liker à nouveau.
+  likes  Int @default(0)
+  shares Int @default(0)
+
+  @@index([publiee])
+}
+
 // Enregistrement cloud d'une classe virtuelle (Daily « cloud recording »),
 // démarré automatiquement à l'arrivée du formateur quand
 // DAILY_RECORDING_ENABLED=true. Créé à la réception du webhook

@@ -1,7 +1,7 @@
 import { UnauthorizedException } from "@nestjs/common";
 import type { Request } from "express";
 import { recordFailure, remainingLockoutSeconds } from "./login-rate-limit";
-import { SessionPayload, SessionRole, verifierSession } from "./session";
+import { SessionPayload, SessionRole, readSessions, sessionToujoursValide } from "./session";
 
 // Logique commune des guards de rôle (audit du 2026-09-28) :
 // - la session doit être signée ET toujours valide en base (compte actif,
@@ -17,9 +17,9 @@ export async function exigerSession(
     accepte?: (session: SessionPayload) => boolean;
   }
 ): Promise<SessionPayload> {
-  const session = await verifierSession(request);
-  if (session && options.roles.includes(session.role) && (options.accepte?.(session) ?? true)) {
-    return session;
+  for (const session of readSessions(request)) {
+    if (!options.roles.includes(session.role) || !(options.accepte?.(session) ?? true)) continue;
+    if (await sessionToujoursValide(session)) return session;
   }
 
   const key = `${options.cle}:${request.ip}`;

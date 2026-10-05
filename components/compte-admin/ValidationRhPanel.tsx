@@ -3,13 +3,13 @@
 import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
-import { apiGet, apiPostAuthed } from "@/lib/api";
+import { ApiError, apiGet, apiPostAuthed, apiUpload } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 
 interface PendingAttempt {
   id: string;
   status: string;
-  candidat: { firstName: string; lastName: string; email: string };
+  candidat: { id: string; firstName: string; lastName: string; email: string; cvKey: string | null };
   tier: string | null;
   totalScore: number | null;
   lexiqueScore: number | null;
@@ -58,6 +58,31 @@ export default function ValidationRhPanel({ onChange }: ValidationRhPanelProps) 
   const [openId, setOpenId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
+  // Message renvoyé par le serveur (ex. « le CV du candidat n'a pas été
+  // déposé ») : sans lui, toute erreur se réduisait à « Erreur — réessayer ».
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Confirmation après une action réussie : sans elle, la ligne reste dans la
+  // liste (« en attente d'envoi ») et on croit que rien ne s'est passé.
+  const [notice, setNotice] = useState<string | null>(null);
+
+  function echec(err: unknown, parDefaut: string) {
+    setErrorMessage(err instanceof ApiError ? err.message : parDefaut);
+    setStatus("error");
+  }
+
+  async function deposerCv(candidatId: string, file: File) {
+    setStatus("saving");
+    setErrorMessage(null);
+    try {
+      const formData = new FormData();
+      formData.append("cv", file, file.name);
+      await apiUpload(`/evaluation/candidats/${candidatId}/cv`, formData, adminHeaders());
+      setStatus("idle");
+      refresh();
+    } catch (err) {
+      echec(err, "Échec du dépôt du CV (PDF, 10 Mo max).");
+    }
+  }
 
   function refresh() {
     setAttempts("loading");
@@ -70,6 +95,8 @@ export default function ValidationRhPanel({ onChange }: ValidationRhPanelProps) 
 
   function openAttempt(a: PendingAttempt) {
     setOpenId(a.id);
+    setNotice(null);
+    setErrorMessage(null);
     setForm({
       duree: a.contractDuree ?? "",
       frais: a.contractFrais ?? "",
@@ -83,12 +110,15 @@ export default function ValidationRhPanel({ onChange }: ValidationRhPanelProps) 
     setStatus("saving");
     try {
       await apiPostAuthed(`/evaluation/attempts/${openId}/validate-contract`, form, adminHeaders());
+      setNotice(
+        "Contrat généré. Il sera envoyé au candidat à 20h (heure de Madagascar) — ou cliquez sur « Envoyer maintenant » dans sa ligne. Le candidat apparaîtra dans « Paiements en attente » une fois sa référence de paiement transmise."
+      );
       setOpenId(null);
       setStatus("idle");
       refresh();
       onChange?.();
-    } catch {
-      setStatus("error");
+    } catch (err) {
+      echec(err, "Échec de la validation du contrat.");
     }
   }
 
@@ -102,8 +132,8 @@ export default function ValidationRhPanel({ onChange }: ValidationRhPanelProps) 
       setStatus("idle");
       refresh();
       onChange?.();
-    } catch {
-      setStatus("error");
+    } catch (err) {
+      echec(err, "Échec de l'enregistrement du refus.");
     }
   }
 
@@ -112,12 +142,15 @@ export default function ValidationRhPanel({ onChange }: ValidationRhPanelProps) 
     setStatus("saving");
     try {
       await apiPostAuthed(`/evaluation/attempts/${id}/send-now`, {}, adminHeaders());
+      setNotice(
+        `Contrat envoyé à ${nom}. Il apparaîtra dans « Paiements en attente » dès qu'il aura transmis sa référence de paiement.`
+      );
       setOpenId(null);
       setStatus("idle");
       refresh();
       onChange?.();
-    } catch {
-      setStatus("error");
+    } catch (err) {
+      echec(err, "Échec de l'envoi du contrat.");
     }
   }
 
@@ -131,6 +164,12 @@ export default function ValidationRhPanel({ onChange }: ValidationRhPanelProps) 
           Évaluations corrigées à valider, et contrats déjà préparés (modifiables jusqu&apos;au
           paiement).
         </p>
+
+        {notice && (
+          <p className="mt-3 rounded border border-success/40 px-3 py-2 font-sans text-xs text-success">
+            {notice}
+          </p>
+        )}
 
         <div className="mt-4 space-y-2">
           {attempts === "loading" && <p className="font-sans text-sm text-white/50">Chargement...</p>}
@@ -195,6 +234,26 @@ export default function ValidationRhPanel({ onChange }: ValidationRhPanelProps) 
                         Total : {a.totalScore ?? "—"}/100 —{" "}
                         {a.tier === "refuse" ? "Non retenu (suggéré)" : (a.tier ?? "—")}
                       </p>
+
+                      {!a.candidat.cvKey && (
+                        <div className="mt-4 rounded border border-accent/40 p-3">
+                          <p className="font-sans text-xs text-accent">
+                            Le candidat n&apos;a pas déposé son CV : la validation du contrat est
+                            impossible tant qu&apos;il manque. Déposez-le ici (PDF, 10 Mo max).
+                          </p>
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            disabled={status === "saving"}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) void deposerCv(a.candidat.id, file);
+                              e.target.value = "";
+                            }}
+                            className="mt-2 block w-full font-sans text-xs text-white/70 file:mr-3 file:rounded file:border file:border-white/20 file:bg-obsidianCard file:px-3 file:py-1 file:text-white"
+                          />
+                        </div>
+                      )}
 
                       <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 sm:grid-cols-2">
                         <div>
@@ -265,7 +324,9 @@ export default function ValidationRhPanel({ onChange }: ValidationRhPanelProps) 
                         )}
                       </div>
                       {status === "error" && (
-                        <p className="mt-2 font-mono text-xs text-accent">Erreur — réessayer.</p>
+                        <p className="mt-2 font-mono text-xs text-accent">
+                          {errorMessage ?? "Erreur — réessayer."}
+                        </p>
                       )}
                     </div>
                   )}

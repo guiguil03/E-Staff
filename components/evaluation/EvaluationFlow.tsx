@@ -13,7 +13,7 @@ const REQUIRED_SITUATIONS = 5;
 // Vidéo de contexte diffusée en direct (Range requests natives, pas de
 // blob chargé en mémoire) — endpoint public, pas besoin de passer par
 // apiGetBlob comme pour les enregistrements des candidats.
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+const API_URL = (process.env.NEXT_PUBLIC_API_URL_Dev ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
 
 interface QcmQuestion {
   id: string;
@@ -217,6 +217,39 @@ function QcmBlock({
   );
 }
 
+// Mémorise la tentative en cours sur cet appareil : un rechargement de la
+// page ou un retour plus tard reprend le test au menu des blocs. Le stockage
+// peut être indisponible (navigation privée) — jamais bloquant.
+const TENTATIVE_EN_COURS_KEY = "estaf-test-admission-tentative";
+
+function lireTentativeEnCours(): string | null {
+  try {
+    return localStorage.getItem(TENTATIVE_EN_COURS_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function memoriserTentativeEnCours(attemptId: string | null) {
+  try {
+    if (attemptId) localStorage.setItem(TENTATIVE_EN_COURS_KEY, attemptId);
+    else localStorage.removeItem(TENTATIVE_EN_COURS_KEY);
+  } catch {
+    // ignoré
+  }
+}
+
+interface AttemptProgress {
+  status: string;
+  lexique: boolean;
+  oral: boolean;
+  essay: boolean;
+  situationIndexes: number[];
+  videoTaskIndexes: number[];
+  requiredSituations: number;
+  requiredVideos: number;
+}
+
 export default function EvaluationFlow() {
   const [step, setStep] = useState<Step>("coordonnees");
   const [coordonnees, setCoordonnees] = useState(initialCoordonnees);
@@ -257,8 +290,45 @@ export default function EvaluationFlow() {
   const [situationsDone, setSituationsDone] = useState(false);
   const [videosDone, setVideosDone] = useState(false);
   const [essayDone, setEssayDone] = useState(false);
+  const [resumed, setResumed] = useState(false);
   const allBlocksDone =
     lexiqueSubmitted && oralSubmitted && situationsDone && videosDone && essayDone;
+
+  // Reprend la tentative en cours : blocs déjà faits cochés, retour au menu.
+  // Renvoie false si la tentative n'est plus modifiable (déjà soumise...).
+  async function reprendreTentative(id: string): Promise<boolean> {
+    try {
+      const p = await apiGet<AttemptProgress>(`/evaluation/attempts/${id}/progress`);
+      if (p.status !== "en_cours") {
+        memoriserTentativeEnCours(null);
+        return false;
+      }
+      setAttemptId(id);
+      setLexiqueSubmitted(p.lexique);
+      setOralSubmitted(p.oral);
+      setEssayDone(p.essay);
+      setSituationsDone(p.situationIndexes.length >= p.requiredSituations);
+      setVideosDone(p.videoTaskIndexes.length >= p.requiredVideos);
+      setResumed(true);
+      setStep("menu");
+      return true;
+    } catch {
+      // Tentative introuvable (base réinitialisée...) : on repart de zéro.
+      memoriserTentativeEnCours(null);
+      return false;
+    }
+  }
+
+  useEffect(() => {
+    const id = lireTentativeEnCours();
+    if (id) void reprendreTentative(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Test terminé : plus rien à reprendre sur cet appareil.
+  useEffect(() => {
+    if (step === "confirmation") memoriserTentativeEnCours(null);
+  }, [step]);
 
   useEffect(() => {
     apiGet<EvaluationQuestions>("/evaluation/questions")
@@ -287,7 +357,7 @@ export default function EvaluationFlow() {
     e.preventDefault();
     setError(null);
     try {
-      const res = await apiPost<{ candidatId: string; attemptId: string }>(
+      const res = await apiPost<{ candidatId: string; attemptId: string; resumed?: boolean }>(
         "/evaluation/candidats",
         { ...coordonnees, agentAcquisitionId: coordonnees.agentAcquisitionId || undefined }
       );
@@ -298,6 +368,8 @@ export default function EvaluationFlow() {
         formData.append("cv", cvFile, cvFile.name);
         await apiUpload(`/evaluation/candidats/${res.candidatId}/cv`, formData).catch(() => {});
       }
+      memoriserTentativeEnCours(res.attemptId);
+      if (res.resumed && (await reprendreTentative(res.attemptId))) return;
       setAttemptId(res.attemptId);
       setStep("intro");
     } catch (err) {
@@ -659,6 +731,12 @@ export default function EvaluationFlow() {
         <h2 className="mt-2 font-display text-xl font-semibold text-white">
           Choisissez un bloc à faire
         </h2>
+        {resumed && (
+          <p className="mt-3 rounded border border-accent/40 px-3 py-2 font-sans text-sm text-accent">
+            Votre test en cours a été retrouvé : les blocs déjà faits sont cochés, reprenez où
+            vous vous étiez arrêté.
+          </p>
+        )}
         <p className="mt-2 font-sans text-sm text-white/70">
           Les 4 blocs sont indépendants — faites-les dans l&apos;ordre que vous
           voulez. Vous pouvez revenir ici entre chaque bloc.

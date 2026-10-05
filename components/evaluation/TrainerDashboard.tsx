@@ -171,7 +171,7 @@ interface PartieOuverteCriterion {
   maxPoints: number;
 }
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+const API_URL = (process.env.NEXT_PUBLIC_API_URL_Dev ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
 
 interface GradingCriterion {
   key: string;
