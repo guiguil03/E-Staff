@@ -7,7 +7,7 @@ import { StorageService } from "../common/storage.service";
 import { computeTier, computeTotalScore } from "./scoring";
 import { SITUATION_GRADING_CRITERIA, GRADING_LEVELS } from "./situations";
 import { VIDEO_GRADING_CRITERIA, VIDEO_GRADING_LEVELS } from "./video-tasks";
-import { ESSAY_GRADING_CRITERIA, ESSAY_GRADING_LEVELS } from "./commentaire-argumentatif";
+import { ESSAY_GRADING_CRITERIA, ESSAY_GRADING_LEVELS, ESSAY_SUBJECTS } from "./commentaire-argumentatif";
 import { PARTIE_OUVERTE_GRADING_CRITERIA } from "./partie-ouverte";
 
 function makePrismaMock() {
@@ -20,7 +20,7 @@ function makePrismaMock() {
       count: jest.fn(),
       create: jest.fn(),
     },
-    candidat: { create: jest.fn() },
+    candidat: { create: jest.fn(), update: jest.fn() },
     situationResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     videoResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
     essayResponse: { findUnique: jest.fn(), update: jest.fn(), upsert: jest.fn() },
@@ -156,6 +156,7 @@ describe("EvaluationService", () => {
 
       expect(p).toEqual({
         status: "en_cours",
+        videoPresentation: false,
         lexique: true,
         oral: false,
         essay: false,
@@ -270,6 +271,117 @@ describe("EvaluationService", () => {
       prisma.formateur.findMany.mockRejectedValue(new Error("db down"));
 
       await expect(service.submitAnswers("attempt-1", { oralAnswers: { q1: "a" } })).resolves.not.toThrow();
+    });
+  });
+
+  describe("parcours recrutement", () => {
+    const dto = {
+      firstName: "Awa",
+      lastName: "Diallo",
+      email: "awa@example.com",
+      phone: "034 12 345 67",
+      parcours: "recrutement" as const,
+      posteVise: "sdr" as const,
+      posteAutre: "ignoré",
+      experienceAnnees: 3,
+      experienceSecteurs: "Télécoms",
+      parcoursPoste: "Prospection sortante",
+      tauxObjectifs: 110,
+    };
+
+    it("enregistre la fiche et crée une tentative de parcours recrutement", async () => {
+      prisma.evaluationAttempt.findMany.mockResolvedValue([]);
+      prisma.candidat.create.mockResolvedValue({ id: "cand-r" });
+      prisma.evaluationAttempt.create.mockResolvedValue({ id: "attempt-r" });
+
+      await service.createCandidat(dto);
+
+      expect(prisma.evaluationAttempt.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ parcours: "recrutement" }) })
+      );
+      const { data } = prisma.candidat.create.mock.calls[0][0];
+      expect(data).toMatchObject({ posteVise: "sdr", posteAutre: null, experienceAnnees: 3, tauxObjectifs: 110 });
+      expect(data.parcours).toBeUndefined();
+      expect(prisma.evaluationAttempt.create).toHaveBeenCalledWith({
+        data: { candidatId: "cand-r", parcours: "recrutement" },
+      });
+    });
+
+    it("n'enregistre pas la fiche pour une admission", async () => {
+      prisma.evaluationAttempt.findMany.mockResolvedValue([]);
+      prisma.candidat.create.mockResolvedValue({ id: "cand-a" });
+      prisma.evaluationAttempt.create.mockResolvedValue({ id: "attempt-a" });
+
+      await service.createCandidat({ ...dto, parcours: undefined });
+
+      const { data } = prisma.candidat.create.mock.calls[0][0];
+      expect(data.posteVise).toBeUndefined();
+      expect(prisma.evaluationAttempt.create).toHaveBeenCalledWith({ data: { candidatId: "cand-a" } });
+    });
+
+    function recrutementAttempt(overrides: Record<string, unknown> = {}) {
+      return baseAttempt({
+        parcours: "recrutement",
+        essayResponse: { score: null },
+        videoResponses: new Array(2).fill({}),
+        candidat: { ...CANDIDAT, videoPresentationKey: "candidats/cand-1/presentation.webm" },
+        ...overrides,
+      });
+    }
+
+    it("passe en 'soumis' avec Bloc 2 + Bloc 5 + vidéo de présentation seulement", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(recrutementAttempt());
+      prisma.candidat.update = jest.fn();
+
+      await service.saveVideoPresentation("attempt-1", {
+        buffer: Buffer.from("x"),
+        originalname: "me.webm",
+        mimetype: "video/webm",
+      } as Express.Multer.File);
+
+      expect(storage.uploadBuffer).toHaveBeenCalled();
+      expect(prisma.evaluationAttempt.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: "soumis" }) })
+      );
+    });
+
+    it("ne soumet pas sans vidéo de présentation", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        recrutementAttempt({ candidat: { ...CANDIDAT, videoPresentationKey: null } })
+      );
+
+      await service.submitEssay("attempt-1", { subjectKey: ESSAY_SUBJECTS[0].key, text: "mot" });
+
+      expect(prisma.evaluationAttempt.update).not.toHaveBeenCalled();
+    });
+
+    it("refuse la vidéo de présentation hors parcours recrutement", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(baseAttempt({ parcours: "admission" }));
+      await expect(
+        service.saveVideoPresentation("attempt-1", { originalname: "a.webm" } as Express.Multer.File)
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it("note /100 sur Bloc 2 + Bloc 5 seulement et reste hors pipeline contrat", async () => {
+      prisma.videoResponse.findUnique.mockResolvedValue({ id: "v1", attemptId: "attempt-1" });
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(
+        recrutementAttempt({
+          status: "soumis",
+          essayResponse: { score: 15, gradedAt: new Date() },
+          videoResponses: [
+            { score: 10, gradedAt: new Date() },
+            { score: 10, gradedAt: new Date() },
+          ],
+        })
+      );
+
+      await service.gradeVideoResponse("v1", maxVideoCriteria());
+
+      const call = prisma.evaluationAttempt.update.mock.calls.find(
+        (c) => c[0].data.status === "recrute_corrige"
+      );
+      expect(call?.[0].data.totalScore).toBe(87.5);
+      expect(call?.[0].data.tier).toBeUndefined();
     });
   });
 

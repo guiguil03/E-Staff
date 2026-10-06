@@ -113,25 +113,16 @@ export default function OffreCard({ offre, selected = false, onPostuler, onListe
 
           <div className="mt-5 flex flex-wrap items-center gap-3">
             {ouverte ? (
-              offre.lienWhatsapp && !preview ? (
-                <a
-                  href={offre.lienWhatsapp}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-full bg-statusGreen px-6 py-3 font-sans text-sm font-bold uppercase tracking-wide text-obsidian transition-colors hover:bg-statusGreen/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
-                >
-                  Postuler à cette offre <span aria-hidden="true">→</span>
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => onPostuler?.(offre)}
-                  disabled={preview}
-                  className="inline-flex items-center gap-2 rounded-full bg-statusGreen px-6 py-3 font-sans text-sm font-bold uppercase tracking-wide text-obsidian transition-colors hover:bg-statusGreen/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:cursor-default"
-                >
-                  Postuler à cette offre <span aria-hidden="true">→</span>
-                </button>
-              )
+              // Le lien WhatsApp (s'il existe) n'est plus ouvert directement :
+              // le test de recrutement passe d'abord, voir StudioMetier.
+              <button
+                type="button"
+                onClick={() => onPostuler?.(offre)}
+                disabled={preview}
+                className="inline-flex items-center gap-2 rounded-full bg-statusGreen px-6 py-3 font-sans text-sm font-bold uppercase tracking-wide text-obsidian transition-colors hover:bg-statusGreen/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:cursor-default"
+              >
+                Postuler à cette offre <span aria-hidden="true">→</span>
+              </button>
             ) : (
               <>
                 <button

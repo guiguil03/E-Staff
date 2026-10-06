@@ -90,10 +90,38 @@ type Step =
   | "select-situations"
   | "record-situations"
   | "record-videos"
+  | "presentation"
   | "essay"
   | "confirmation";
 
 const initialCoordonnees = { firstName: "", lastName: "", email: "", phone: "", agentAcquisitionId: "" };
+
+// Fiche du parcours "recrutement" (poste visé, expérience, parcours).
+const initialFiche = {
+  posteVise: "",
+  posteAutre: "",
+  experienceAnnees: "",
+  experienceSecteurs: "",
+  parcoursPoste: "",
+  tauxObjectifs: "",
+};
+
+const POSTES_VISES = [
+  { value: "teleoperateur", label: "Téléopérateur" },
+  { value: "televente", label: "Télévente" },
+  { value: "teleprospecteur", label: "Téléprospecteur" },
+  { value: "sdr", label: "SDR" },
+  { value: "fundraising", label: "Fundraising" },
+  { value: "autre", label: "Autre" },
+];
+
+export type Parcours = "admission" | "recrutement";
+
+// Durée max de la vidéo de présentation (secondes).
+const PRESENTATION_MAX_SECONDS = 120;
+
+const INPUT_CLASS =
+  "rounded border border-white/20 bg-obsidian px-4 py-2 text-sm text-white outline-none focus:border-accent";
 
 interface AgentAcquisition {
   id: string;
@@ -221,19 +249,21 @@ function QcmBlock({
 // page ou un retour plus tard reprend le test au menu des blocs. Le stockage
 // peut être indisponible (navigation privée) — jamais bloquant.
 const TENTATIVE_EN_COURS_KEY = "estaf-test-admission-tentative";
+const cleTentative = (parcours: Parcours) =>
+  parcours === "recrutement" ? "estaf-test-recrutement-tentative" : TENTATIVE_EN_COURS_KEY;
 
-function lireTentativeEnCours(): string | null {
+function lireTentativeEnCours(parcours: Parcours): string | null {
   try {
-    return localStorage.getItem(TENTATIVE_EN_COURS_KEY);
+    return localStorage.getItem(cleTentative(parcours));
   } catch {
     return null;
   }
 }
 
-function memoriserTentativeEnCours(attemptId: string | null) {
+function memoriserTentativeEnCours(parcours: Parcours, attemptId: string | null) {
   try {
-    if (attemptId) localStorage.setItem(TENTATIVE_EN_COURS_KEY, attemptId);
-    else localStorage.removeItem(TENTATIVE_EN_COURS_KEY);
+    if (attemptId) localStorage.setItem(cleTentative(parcours), attemptId);
+    else localStorage.removeItem(cleTentative(parcours));
   } catch {
     // ignoré
   }
@@ -241,6 +271,8 @@ function memoriserTentativeEnCours(attemptId: string | null) {
 
 interface AttemptProgress {
   status: string;
+  parcours?: Parcours;
+  videoPresentation?: boolean;
   lexique: boolean;
   oral: boolean;
   essay: boolean;
@@ -250,9 +282,19 @@ interface AttemptProgress {
   requiredVideos: number;
 }
 
-export default function EvaluationFlow() {
+export default function EvaluationFlow({
+  parcours = "admission",
+  onTermine,
+}: {
+  parcours?: Parcours;
+  /** Appelé une fois le test envoyé (étape de confirmation atteinte). */
+  onTermine?: () => void;
+}) {
+  const recrutement = parcours === "recrutement";
   const [step, setStep] = useState<Step>("coordonnees");
   const [coordonnees, setCoordonnees] = useState(initialCoordonnees);
+  const [fiche, setFiche] = useState(initialFiche);
+  const [presentationDone, setPresentationDone] = useState(false);
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -291,19 +333,23 @@ export default function EvaluationFlow() {
   const [videosDone, setVideosDone] = useState(false);
   const [essayDone, setEssayDone] = useState(false);
   const [resumed, setResumed] = useState(false);
-  const allBlocksDone =
-    lexiqueSubmitted && oralSubmitted && situationsDone && videosDone && essayDone;
+  // Parcours recrutement : Bloc 2 + Bloc 5 + vidéo de présentation seulement.
+  const allBlocksDone = recrutement
+    ? essayDone && videosDone && presentationDone
+    : lexiqueSubmitted && oralSubmitted && situationsDone && videosDone && essayDone;
 
   // Reprend la tentative en cours : blocs déjà faits cochés, retour au menu.
   // Renvoie false si la tentative n'est plus modifiable (déjà soumise...).
   async function reprendreTentative(id: string): Promise<boolean> {
     try {
       const p = await apiGet<AttemptProgress>(`/evaluation/attempts/${id}/progress`);
-      if (p.status !== "en_cours") {
-        memoriserTentativeEnCours(null);
+      // Tentative d'un autre parcours (même appareil) : on ne la reprend pas.
+      if (p.status !== "en_cours" || (p.parcours ?? "admission") !== parcours) {
+        memoriserTentativeEnCours(parcours, null);
         return false;
       }
       setAttemptId(id);
+      setPresentationDone(p.videoPresentation === true);
       setLexiqueSubmitted(p.lexique);
       setOralSubmitted(p.oral);
       setEssayDone(p.essay);
@@ -314,38 +360,47 @@ export default function EvaluationFlow() {
       return true;
     } catch {
       // Tentative introuvable (base réinitialisée...) : on repart de zéro.
-      memoriserTentativeEnCours(null);
+      memoriserTentativeEnCours(parcours, null);
       return false;
     }
   }
 
   useEffect(() => {
-    const id = lireTentativeEnCours();
+    const id = lireTentativeEnCours(parcours);
     if (id) void reprendreTentative(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Test terminé : plus rien à reprendre sur cet appareil.
   useEffect(() => {
-    if (step === "confirmation") memoriserTentativeEnCours(null);
+    if (step === "confirmation") {
+      memoriserTentativeEnCours(parcours, null);
+      onTermine?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
   useEffect(() => {
     apiGet<EvaluationQuestions>("/evaluation/questions")
       .then(setQuestions)
       .catch(() => setError("Impossible de charger les épreuves."));
-    apiGet<Situation[]>("/evaluation/situations")
-      .then(setSituations)
-      .catch(() => setError("Impossible de charger les situations."));
+    // Le parcours recrutement n'utilise que le Bloc 2 et le Bloc 5.
+    if (!recrutement) {
+      apiGet<Situation[]>("/evaluation/situations")
+        .then(setSituations)
+        .catch(() => setError("Impossible de charger les situations."));
+    }
     apiGet<VideoTask[]>("/evaluation/video-tasks")
       .then(setVideoTasks)
       .catch(() => setError("Impossible de charger les tâches vidéo."));
     apiGet<EssaySubject[]>("/evaluation/essay-subjects")
       .then(setEssaySubjects)
       .catch(() => setError("Impossible de charger les sujets de commentaire argumenté."));
-    apiGet<PartieOuverteContent>("/evaluation/partie-ouverte")
-      .then(setPartieOuverteContent)
-      .catch(() => setError("Impossible de charger la partie 2 du Bloc 1."));
+    if (!recrutement) {
+      apiGet<PartieOuverteContent>("/evaluation/partie-ouverte")
+        .then(setPartieOuverteContent)
+        .catch(() => setError("Impossible de charger la partie 2 du Bloc 1."));
+    }
     // Facultatif — un échec ici ne doit pas bloquer le test, juste priver le
     // candidat du menu "recommandé par" (voir AgentAcquisition côté RH).
     apiGet<AgentAcquisition[]>("/evaluation/agents-acquisition")
@@ -359,7 +414,21 @@ export default function EvaluationFlow() {
     try {
       const res = await apiPost<{ candidatId: string; attemptId: string; resumed?: boolean }>(
         "/evaluation/candidats",
-        { ...coordonnees, agentAcquisitionId: coordonnees.agentAcquisitionId || undefined }
+        {
+          ...coordonnees,
+          agentAcquisitionId: coordonnees.agentAcquisitionId || undefined,
+          ...(recrutement
+            ? {
+                parcours,
+                posteVise: fiche.posteVise,
+                posteAutre: fiche.posteVise === "autre" ? fiche.posteAutre : undefined,
+                experienceAnnees: Number(fiche.experienceAnnees),
+                experienceSecteurs: fiche.experienceSecteurs,
+                parcoursPoste: fiche.parcoursPoste,
+                tauxObjectifs: Number(fiche.tauxObjectifs),
+              }
+            : {}),
+        }
       );
       if (cvFile) {
         // Dépôt optionnel — un échec ici ne doit pas bloquer le candidat qui
@@ -368,7 +437,7 @@ export default function EvaluationFlow() {
         formData.append("cv", cvFile, cvFile.name);
         await apiUpload(`/evaluation/candidats/${res.candidatId}/cv`, formData).catch(() => {});
       }
-      memoriserTentativeEnCours(res.attemptId);
+      memoriserTentativeEnCours(parcours, res.attemptId);
       if (res.resumed && (await reprendreTentative(res.attemptId))) return;
       setAttemptId(res.attemptId);
       setStep("intro");
@@ -492,6 +561,20 @@ export default function EvaluationFlow() {
     }
   }
 
+  async function handlePresentationRecorded(blob: Blob, filename: string) {
+    if (!attemptId) return;
+    setError(null);
+    const formData = new FormData();
+    formData.append("video", blob, filename);
+    try {
+      await apiUpload(`/evaluation/attempts/${attemptId}/presentation-video`, formData);
+      setPresentationDone(true);
+      setStep("menu");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Échec de l'envoi de la vidéo.");
+    }
+  }
+
   async function handleEssaySubmit() {
     if (!attemptId || !selectedEssaySubjectKey) return;
     setError(null);
@@ -521,7 +604,9 @@ export default function EvaluationFlow() {
           Vos coordonnées
         </h2>
         <p className="mt-2 font-sans text-sm text-white/70">
-          Avant de passer le test, merci de renseigner vos coordonnées.
+          {recrutement
+            ? "Avant de passer le test de recrutement, merci de renseigner vos coordonnées et votre parcours."
+            : "Avant de passer le test, merci de renseigner vos coordonnées."}
         </p>
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <input
@@ -583,6 +668,83 @@ export default function EvaluationFlow() {
               </select>
             </div>
           )}
+          {recrutement && (
+            <>
+              <div className="sm:col-span-2">
+                <label className="block font-sans text-xs text-white/60">Poste visé</label>
+                <select
+                  required
+                  className={`mt-1 w-full ${INPUT_CLASS}`}
+                  value={fiche.posteVise}
+                  onChange={(e) => setFiche((v) => ({ ...v, posteVise: e.target.value }))}
+                >
+                  <option value="">— Choisir un poste —</option>
+                  {POSTES_VISES.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {fiche.posteVise === "autre" && (
+                <input
+                  required
+                  maxLength={100}
+                  placeholder="Précisez le poste visé"
+                  className={`${INPUT_CLASS} sm:col-span-2`}
+                  value={fiche.posteAutre}
+                  onChange={(e) => setFiche((v) => ({ ...v, posteAutre: e.target.value }))}
+                />
+              )}
+              <div>
+                <label className="block font-sans text-xs text-white/60">
+                  Années d&apos;expérience
+                </label>
+                <input
+                  required
+                  type="number"
+                  min={0}
+                  max={60}
+                  step={1}
+                  className={`mt-1 w-full ${INPUT_CLASS}`}
+                  value={fiche.experienceAnnees}
+                  onChange={(e) => setFiche((v) => ({ ...v, experienceAnnees: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block font-sans text-xs text-white/60">
+                  Taux d&apos;atteinte des objectifs (%)
+                </label>
+                <input
+                  required
+                  type="number"
+                  min={0}
+                  max={500}
+                  step={1}
+                  className={`mt-1 w-full ${INPUT_CLASS}`}
+                  value={fiche.tauxObjectifs}
+                  onChange={(e) => setFiche((v) => ({ ...v, tauxObjectifs: e.target.value }))}
+                />
+              </div>
+              <input
+                required
+                maxLength={300}
+                placeholder="Secteurs d'activité (ex. télécoms, assurance)"
+                className={`${INPUT_CLASS} sm:col-span-2`}
+                value={fiche.experienceSecteurs}
+                onChange={(e) => setFiche((v) => ({ ...v, experienceSecteurs: e.target.value }))}
+              />
+              <textarea
+                required
+                maxLength={2000}
+                rows={4}
+                placeholder="Parcours : en quoi consistait votre dernier poste ?"
+                className={`${INPUT_CLASS} sm:col-span-2`}
+                value={fiche.parcoursPoste}
+                onChange={(e) => setFiche((v) => ({ ...v, parcoursPoste: e.target.value }))}
+              />
+            </>
+          )}
           <div className="sm:col-span-2">
             <label className="block font-sans text-xs text-white/60">
               CV (PDF, facultatif)
@@ -602,6 +764,36 @@ export default function EvaluationFlow() {
           </Button>
         </div>
       </form>
+    );
+  }
+
+  if (step === "intro" && recrutement) {
+    return (
+      <div className="mx-auto max-w-2xl rounded border border-white/10 bg-obsidianCard p-6 sm:p-8">
+        <p className="font-mono text-xs uppercase tracking-widest text-accent">
+          Avant de commencer
+        </p>
+        <h2 className="mt-2 font-display text-xl font-semibold text-white">
+          Test de recrutement
+        </h2>
+        <p className="mt-3 font-sans text-sm text-white/70">
+          Le test comprend trois épreuves, à faire dans l&apos;ordre de votre choix :
+        </p>
+        <ul className="mt-3 space-y-2 font-sans text-sm text-white/80">
+          <li>• Une vidéo de présentation ({PRESENTATION_MAX_SECONDS / 60} minutes maximum).</li>
+          <li>• Bloc 2 — Commentaire Argumentatif (20 pts).</li>
+          <li>• Bloc 5 — Production Vidéo : Débat Plateau Télé &amp; Pitch de Synthèse (20 pts).</li>
+        </ul>
+        <p className="mt-4 font-sans text-sm text-white/70">
+          Le résultat ne vous sera pas communiqué immédiatement : notre équipe vous recontactera
+          si votre candidature est retenue.
+        </p>
+        <div className="mt-6 text-center">
+          <Button variant="dark" onClick={() => setStep("menu")}>
+            Commencer le test
+          </Button>
+        </div>
+      </div>
     );
   }
 
@@ -723,6 +915,18 @@ export default function EvaluationFlow() {
       },
     ];
 
+    const visibleTiles = recrutement
+      ? [
+          {
+            number: 0,
+            title: "Vidéo de présentation",
+            done: presentationDone,
+            onClick: () => setStep("presentation"),
+          },
+          ...tiles.filter((t) => t.number === 2 || t.number === 5),
+        ]
+      : tiles;
+
     return (
       <div className="mx-auto max-w-2xl rounded border border-white/10 bg-obsidianCard p-6 sm:p-8">
         <p className="font-mono text-xs uppercase tracking-widest text-accent">
@@ -738,12 +942,12 @@ export default function EvaluationFlow() {
           </p>
         )}
         <p className="mt-2 font-sans text-sm text-white/70">
-          Les 4 blocs sont indépendants — faites-les dans l&apos;ordre que vous
-          voulez. Vous pouvez revenir ici entre chaque bloc.
+          {recrutement ? "Les 3 épreuves sont indépendantes" : "Les 4 blocs sont indépendants"} —
+          faites-les dans l&apos;ordre que vous voulez. Vous pouvez revenir ici entre chaque bloc.
         </p>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          {tiles.map((tile) => (
+          {visibleTiles.map((tile) => (
             <button
               key={tile.number}
               onClick={tile.onClick}
@@ -758,11 +962,11 @@ export default function EvaluationFlow() {
                   tile.done ? "border-success/60 text-success" : "border-accent/40 text-accent"
                 }`}
               >
-                {tile.done ? "✓" : tile.number}
+                {tile.done ? "✓" : tile.number || "▶"}
               </span>
               <div>
                 <p className="font-sans text-sm font-semibold text-white">
-                  Bloc {tile.number} (20 pts)
+                  {tile.number === 0 ? "Présentation (non notée)" : `Bloc ${tile.number} (20 pts)`}
                 </p>
                 <p className="mt-0.5 font-sans text-xs text-white/60">{tile.title}</p>
                 <p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-white/40">
@@ -779,9 +983,39 @@ export default function EvaluationFlow() {
           <Button variant="dark" disabled={!allBlocksDone} onClick={() => setStep("confirmation")}>
             {allBlocksDone
               ? "Terminer et envoyer mon test"
-              : "Terminez les 5 blocs pour envoyer votre test"}
+              : recrutement
+                ? "Terminez les 3 épreuves pour envoyer votre test"
+                : "Terminez les 5 blocs pour envoyer votre test"}
           </Button>
         </div>
+      </div>
+    );
+  }
+
+  if (step === "presentation") {
+    return (
+      <div className="mx-auto max-w-lg rounded border border-white/10 bg-obsidianCard p-6">
+        <button
+          onClick={() => setStep("menu")}
+          className="mb-3 block font-sans text-xs text-accent hover:underline"
+        >
+          ← Retour au menu
+        </button>
+        <p className="font-mono text-xs uppercase tracking-widest text-accent">
+          Vidéo de présentation
+        </p>
+        <p className="mt-3 font-sans text-sm text-white/80">
+          Présentez-vous en {PRESENTATION_MAX_SECONDS / 60} minutes maximum : votre parcours, votre
+          motivation pour le poste visé et ce que vous apporteriez à l&apos;équipe.
+        </p>
+        <div className="mt-6">
+          <VideoRecorder
+            key="presentation"
+            onRecorded={handlePresentationRecorded}
+            maxSeconds={PRESENTATION_MAX_SECONDS}
+          />
+        </div>
+        {error && <p className="mt-4 text-sm text-accent">{error}</p>}
       </div>
     );
   }
@@ -1390,9 +1624,9 @@ export default function EvaluationFlow() {
           Merci, {coordonnees.firstName} !
         </h2>
         <p className="mt-3 font-sans text-sm text-white/70">
-          Votre test a bien été enregistré. Notre équipe l&apos;examine avec attention : si votre
-          dossier est retenu, vous recevrez par e-mail votre résultat ainsi que votre contrat de
-          formation et les prochaines étapes pour finaliser votre inscription.
+          {recrutement
+            ? "Votre candidature a bien été enregistrée. Notre équipe l'examine avec attention et vous recontactera si votre profil est retenu."
+            : "Votre test a bien été enregistré. Notre équipe l'examine avec attention : si votre dossier est retenu, vous recevrez par e-mail votre résultat ainsi que votre contrat de formation et les prochaines étapes pour finaliser votre inscription."}
         </p>
       </div>
     </Reveal>

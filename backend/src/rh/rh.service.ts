@@ -153,7 +153,7 @@ export class RhService {
         distinct: ['groupeId'],
       }),
       this.prisma.evaluationAttempt.count({
-        where: { status: { in: STATUTS_RECRUTEMENT_EN_COURS } },
+        where: { parcours: 'admission', status: { in: STATUTS_RECRUTEMENT_EN_COURS } },
       }),
       this.prisma.connecteur.findMany({ select: { status: true, createdAt: true } }),
       this.prisma.mission.count({ where: { dateFin: null } }),
@@ -600,6 +600,7 @@ export class RhService {
   // statut inventé.
   async getCycleComplet() {
     const attempts = await this.prisma.evaluationAttempt.findMany({
+      where: { parcours: 'admission' },
       include: {
         candidat: true,
         apprenant: {

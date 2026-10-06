@@ -230,6 +230,22 @@ model Candidat {
   cvKey        String?
   cvUploadedAt DateTime?
 
+  // Parcours "recrutement" (téléopérateurs, SDR...) — fiche renseignée à
+  // l'étape Coordonnées, voir EvaluationAttempt.parcours. Tous null pour un
+  // candidat du parcours "admission".
+  // posteVise : "teleoperateur" | "televente" | "teleprospecteur" | "sdr"
+  // | "fundraising" | "autre" (posteAutre précise alors le libellé).
+  posteVise          String?
+  posteAutre         String?
+  experienceAnnees   Int?
+  experienceSecteurs String?
+  parcoursPoste      String?
+  // Taux d'atteinte des objectifs sur le dernier poste, en % (ex. 110).
+  tauxObjectifs      Int?
+  // Vidéo de présentation (S3), non notée — consultée par le formateur/RH.
+  videoPresentationKey        String?
+  videoPresentationUploadedAt DateTime?
+
   // Agent d'acquisition indiqué par le candidat lui-même à l'étape
   // "Coordonnées" du test (liste déroulante, voir EvaluationService.
   // listAgentsAcquisition) — distinct du Connecteur/apporteur B2B, voir
@@ -277,6 +293,12 @@ model EvaluationAttempt {
   // "en_cours" | "soumis" | "en_correction" | "corrige" | "rejete"
   // | "valide_pret_envoi" | "contrat_envoye" | "en_attente_paiement" | "active"
   status String @default("en_cours")
+
+  // "admission" (test d'entrée en formation, 5 blocs) | "recrutement"
+  // (Bloc 2 + Bloc 5 + vidéo de présentation, sans contrat/paiement). Un
+  // parcours "recrutement" corrigé passe en "recrute_corrige" (et non
+  // "corrige") pour rester hors du pipeline contrat -> paiement -> matricule.
+  parcours String @default("admission")
 
   // Réponses brutes (auto-corrigées) — JSON { questionId: réponse }
   lexiqueAnswers String?

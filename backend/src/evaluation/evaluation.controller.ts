@@ -224,6 +224,29 @@ export class EvaluationController {
     return this.service.saveVideoResponse(id, dto.taskIndex, file, dto.subjectKey, dto.optionKey);
   }
 
+  // Vidéo de présentation du parcours recrutement (non notée).
+  @UseGuards(RateLimitGuard("evaluation-upload-presentation", 10))
+  @Post("attempts/:id/presentation-video")
+  @UseInterceptors(
+    FileInterceptor("video", {
+      limits: { fileSize: MAX_VIDEO_UPLOAD_BYTES },
+      fileFilter: (_req, file, cb) => {
+        cb(null, file.mimetype.startsWith("video/"));
+      },
+    })
+  )
+  uploadVideoPresentation(@Param("id") id: string, @UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException(
+        "Fichier vidéo manquant, trop volumineux (300 Mo max) ou format non supporté."
+      );
+    }
+    if (!isVideo(file.buffer)) {
+      throw new BadRequestException("Le fichier ne semble pas être une vidéo valide.");
+    }
+    return this.service.saveVideoPresentation(id, file);
+  }
+
   // ---- Interface formateur ------------------------------------------------
   // Code formateur partagé (ex-TrainerGuard) retiré temporairement le
   // 2026-08-25 à la demande du client — trop de friction pour l'usage
@@ -236,6 +259,20 @@ export class EvaluationController {
   // d'admission (questions-corrigees) et la possibilité de noter une
   // réponse candidat — était accessible à quiconque trouvait l'URL, sans
   // même avoir besoin de deviner un identifiant.
+
+  @UseGuards(FormateurOuRhGuard)
+  @Get("recrutement")
+  listRecrutementAttempts() {
+    return this.service.listRecrutementAttempts();
+  }
+
+  @UseGuards(FormateurOuRhGuard)
+  @Get("candidats/:id/video-presentation")
+  async streamVideoPresentation(@Param("id") id: string, @Res() res: Response) {
+    const { stream, contentType } = await this.service.getVideoPresentationStream(id);
+    res.set("Content-Type", contentType ?? "video/webm");
+    stream.pipe(res);
+  }
 
   @UseGuards(FormateurGuard)
   @Get("attempts")

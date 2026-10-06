@@ -12,7 +12,24 @@ interface Candidat {
   email: string;
   phone: string;
   createdAt: string;
+  // Fiche du parcours "recrutement" (null pour une admission).
+  posteVise?: string | null;
+  posteAutre?: string | null;
+  experienceAnnees?: number | null;
+  experienceSecteurs?: string | null;
+  parcoursPoste?: string | null;
+  tauxObjectifs?: number | null;
+  videoPresentationKey?: string | null;
 }
+
+const POSTES_LABELS: Record<string, string> = {
+  teleoperateur: "Téléopérateur",
+  televente: "Télévente",
+  teleprospecteur: "Téléprospecteur",
+  sdr: "SDR",
+  fundraising: "Fundraising",
+  autre: "Autre",
+};
 
 interface QcmQuestion {
   id: string;
@@ -63,6 +80,7 @@ interface EcritOuvertResponse {
 interface Attempt {
   id: string;
   status: string;
+  parcours?: string;
   lexiqueAnswers: string | null;
   oralAnswers: string | null;
   lexiqueQcmScore: number | null;
@@ -326,6 +344,11 @@ export default function TrainerDashboard() {
                 >
                   <span className="block font-medium">
                     {a.candidat.firstName} {a.candidat.lastName}
+                    {a.parcours === "recrutement" && (
+                      <span className="ml-2 rounded-full border border-accent/40 px-1.5 py-0.5 font-mono text-[10px] uppercase text-accent">
+                        Recrutement
+                      </span>
+                    )}
                   </span>
                   <span className="block text-xs text-white/50">
                     {STATUS_LABELS[a.status] ?? a.status} — {graded}/{total} notées
@@ -395,6 +418,60 @@ function itemIsGraded(item: CarouselItem): boolean {
 // prévient explicitement la RH par e-mail (voir EvaluationService.notifyRh)
 // au lieu de compter uniquement sur le passage régulier de la RH dans son
 // tableau de validation.
+// Fiche candidat + vidéo de présentation (non notée) du parcours recrutement.
+function FicheRecrutement({ candidat }: { candidat: Candidat }) {
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!candidat.videoPresentationKey) return;
+    let objectUrl: string | null = null;
+    apiGetBlob(`/evaluation/candidats/${candidat.id}/video-presentation`, {})
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob);
+        setVideoUrl(objectUrl);
+      })
+      .catch(() => setError("Vidéo de présentation indisponible."));
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [candidat.id, candidat.videoPresentationKey]);
+
+  const poste =
+    candidat.posteVise === "autre"
+      ? `Autre — ${candidat.posteAutre ?? ""}`
+      : (candidat.posteVise && POSTES_LABELS[candidat.posteVise]) ?? "—";
+
+  return (
+    <div className="mt-4 space-y-2 border-t border-white/10 pt-3 text-sm text-white/80">
+      <p>
+        <span className="text-white/50">Poste visé : </span>
+        {poste}
+      </p>
+      <p>
+        <span className="text-white/50">Expérience : </span>
+        {candidat.experienceAnnees ?? "—"} an(s) — {candidat.experienceSecteurs ?? "—"}
+      </p>
+      <p>
+        <span className="text-white/50">Atteinte des objectifs : </span>
+        {candidat.tauxObjectifs ?? "—"} %
+      </p>
+      <p className="whitespace-pre-line">
+        <span className="text-white/50">Parcours : </span>
+        {candidat.parcoursPoste ?? "—"}
+      </p>
+      <div>
+        <p className="text-white/50">Vidéo de présentation</p>
+        {videoUrl ? (
+          <video controls src={videoUrl} className="mt-1 w-full max-w-md rounded" />
+        ) : (
+          <p className="text-xs text-white/40">{error ?? "Aucune vidéo déposée."}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function NotifyRhButton({ attempt, onSent }: { attempt: Attempt; onSent: () => void }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(false);
@@ -529,16 +606,27 @@ function AttemptDetail({
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-3 text-sm text-white/80 sm:grid-cols-5">
-          <p>Lexique : {attempt.lexiqueScore ?? "—"}/20</p>
-          <p>Essai : {attempt.essayScore ?? "—"}/20</p>
-          <p>Situations : {attempt.situationsScore ?? "—"}/20</p>
-          <p>Oral : {attempt.oralScore ?? "—"}/20</p>
-          <p>Vidéo : {attempt.videoScore ?? "—"}/20</p>
-        </div>
+        {attempt.parcours === "recrutement" && <FicheRecrutement candidat={attempt.candidat} />}
+
+        {attempt.parcours === "recrutement" ? (
+          <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-3 text-sm text-white/80">
+            <p>Bloc 2 — Essai : {attempt.essayScore ?? "—"}/20</p>
+            <p>Bloc 5 — Vidéo : {attempt.videoScore ?? "—"}/20</p>
+          </div>
+        ) : (
+          <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-3 text-sm text-white/80 sm:grid-cols-5">
+            <p>Lexique : {attempt.lexiqueScore ?? "—"}/20</p>
+            <p>Essai : {attempt.essayScore ?? "—"}/20</p>
+            <p>Situations : {attempt.situationsScore ?? "—"}/20</p>
+            <p>Oral : {attempt.oralScore ?? "—"}/20</p>
+            <p>Vidéo : {attempt.videoScore ?? "—"}/20</p>
+          </div>
+        )}
         {attempt.totalScore !== null && (
           <p className="mt-2 text-sm text-accent">
-            Total : {attempt.totalScore}/100 — {(attempt.tier && TIER_LABELS[attempt.tier]) ?? attempt.tier ?? "—"}
+            Total : {attempt.totalScore}/100
+            {attempt.parcours !== "recrutement" &&
+              ` — ${(attempt.tier && TIER_LABELS[attempt.tier]) ?? attempt.tier ?? "—"}`}
           </p>
         )}
         {attempt.status === "corrige" && (

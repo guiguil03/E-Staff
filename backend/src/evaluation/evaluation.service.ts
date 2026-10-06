@@ -198,24 +198,49 @@ export class EvaluationService {
   // facile à connaître, et reprendre une tentative permet d'en modifier les
   // réponses.
   async createCandidat(dto: CreateCandidatDto) {
-    const enCours = await this.trouverTentativeEnCours(dto.email, dto.phone);
+    const { parcours = "admission", ...coordonnees } = dto;
+    const enCours = await this.trouverTentativeEnCours(dto.email, dto.phone, parcours);
     if (enCours) {
       return { candidatId: enCours.candidatId, attemptId: enCours.id, resumed: true };
     }
 
-    const candidat = await this.prisma.candidat.create({ data: dto });
+    // La fiche poste/expérience n'a de sens que pour le recrutement : jamais
+    // enregistrée pour une admission, même si le client l'a envoyée.
+    const {
+      posteVise,
+      posteAutre,
+      experienceAnnees,
+      experienceSecteurs,
+      parcoursPoste,
+      tauxObjectifs,
+      ...base
+    } = coordonnees;
+    const fiche =
+      parcours === "recrutement"
+        ? {
+            posteVise,
+            posteAutre: posteVise === "autre" ? posteAutre : null,
+            experienceAnnees,
+            experienceSecteurs,
+            parcoursPoste,
+            tauxObjectifs,
+          }
+        : {};
+
+    const candidat = await this.prisma.candidat.create({ data: { ...base, ...fiche } });
     const attempt = await this.prisma.evaluationAttempt.create({
-      data: { candidatId: candidat.id },
+      data: { candidatId: candidat.id, ...(parcours === "recrutement" ? { parcours } : {}) },
     });
     return { candidatId: candidat.id, attemptId: attempt.id, resumed: false };
   }
 
-  private async trouverTentativeEnCours(email: string, phone: string) {
+  private async trouverTentativeEnCours(email: string, phone: string, parcours: string) {
     const telephone = chiffresTelephone(phone);
     if (!telephone) return null;
     const tentatives = await this.prisma.evaluationAttempt.findMany({
       where: {
         status: "en_cours",
+        parcours,
         candidat: { email: { equals: email.trim(), mode: "insensitive" }, dataPurgedAt: null },
       },
       include: { candidat: true },
@@ -232,6 +257,8 @@ export class EvaluationService {
     const attempt = await this.getAttemptOrThrow(attemptId);
     return {
       status: attempt.status,
+      parcours: attempt.parcours,
+      videoPresentation: Boolean(attempt.candidat.videoPresentationKey),
       lexique: attempt.lexiqueAnswers !== null && attempt.ecritOuvertResponse !== null,
       oral: attempt.oralAnswers !== null,
       essay: attempt.essayResponse !== null,
@@ -266,6 +293,42 @@ export class EvaluationService {
       return await this.storage.getObjectStream(candidat.cvKey);
     } catch {
       throw new NotFoundException("Fichier CV introuvable.");
+    }
+  }
+
+  // Vidéo de présentation du parcours "recrutement" — rattachée à la
+  // tentative (jeton = id, comme les autres dépôts), stockée sur le Candidat,
+  // écrasée en cas de redépôt tant que la tentative est en cours.
+  async saveVideoPresentation(attemptId: string, file: Express.Multer.File) {
+    const attempt = await this.getAttemptOrThrow(attemptId);
+    if (attempt.parcours !== "recrutement") {
+      throw new BadRequestException("La vidéo de présentation est réservée au parcours recrutement.");
+    }
+    if (attempt.status !== "en_cours") {
+      throw new BadRequestException("Cette tentative est déjà complète.");
+    }
+
+    const extension = path.extname(file.originalname) || ".webm";
+    const key = `candidats/${attempt.candidatId}/presentation${extension}`;
+    await this.storage.uploadBuffer(key, file.buffer, file.mimetype || "video/webm");
+
+    await this.prisma.candidat.update({
+      where: { id: attempt.candidatId },
+      data: { videoPresentationKey: key, videoPresentationUploadedAt: new Date() },
+    });
+    await this.maybeFinalize(attemptId);
+    return { ok: true };
+  }
+
+  async getVideoPresentationStream(candidatId: string) {
+    const candidat = await this.prisma.candidat.findUnique({ where: { id: candidatId } });
+    if (!candidat?.videoPresentationKey) {
+      throw new NotFoundException("Vidéo de présentation introuvable.");
+    }
+    try {
+      return await this.storage.getObjectStream(candidat.videoPresentationKey);
+    } catch {
+      throw new NotFoundException("Fichier vidéo introuvable.");
     }
   }
 
@@ -356,13 +419,19 @@ export class EvaluationService {
     const attempt = await this.getAttemptOrThrow(attemptId);
     if (attempt.status !== "en_cours") return;
 
+    // Parcours recrutement : Bloc 2 (commentaire argumentatif) + Bloc 5
+    // (vidéos) + vidéo de présentation, rien d'autre.
     const complete =
-      attempt.lexiqueAnswers !== null &&
-      attempt.ecritOuvertResponse !== null &&
-      attempt.oralAnswers !== null &&
-      attempt.situationResponses.length >= REQUIRED_SITUATION_COUNT &&
-      attempt.videoResponses.length >= REQUIRED_VIDEO_COUNT &&
-      attempt.essayResponse !== null;
+      attempt.parcours === "recrutement"
+        ? attempt.essayResponse !== null &&
+          attempt.videoResponses.length >= REQUIRED_VIDEO_COUNT &&
+          attempt.candidat.videoPresentationKey !== null
+        : attempt.lexiqueAnswers !== null &&
+          attempt.ecritOuvertResponse !== null &&
+          attempt.oralAnswers !== null &&
+          attempt.situationResponses.length >= REQUIRED_SITUATION_COUNT &&
+          attempt.videoResponses.length >= REQUIRED_VIDEO_COUNT &&
+          attempt.essayResponse !== null;
 
     if (complete) {
       await this.prisma.evaluationAttempt.update({
@@ -729,6 +798,16 @@ export class EvaluationService {
     });
   }
 
+  // Candidatures du parcours recrutement (toutes étapes), avec la fiche
+  // candidat — pour le suivi RH/formateur, hors pipeline contrat/paiement.
+  async listRecrutementAttempts() {
+    return this.prisma.evaluationAttempt.findMany({
+      where: { parcours: "recrutement" },
+      include: { candidat: true },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
   async getAttemptForGrading(attemptId: string) {
     return this.getAttemptOrThrow(attemptId);
   }
@@ -845,16 +924,37 @@ export class EvaluationService {
     const ecritOuvertGraded =
       attempt.ecritOuvertResponse?.gradedAt !== null && attempt.ecritOuvertResponse !== null;
 
-    const situationsComplete = gradedSituations.length >= REQUIRED_SITUATION_COUNT;
+    const recrutement = attempt.parcours === "recrutement";
+    const situationsComplete =
+      recrutement || gradedSituations.length >= REQUIRED_SITUATION_COUNT;
     const videosComplete = gradedVideos.length >= REQUIRED_VIDEO_COUNT;
 
-    if (!situationsComplete || !videosComplete || !essayGraded || !ecritOuvertGraded) {
+    if (!situationsComplete || !videosComplete || !essayGraded || (!recrutement && !ecritOuvertGraded)) {
       if (attempt.status === "soumis") {
         await this.prisma.evaluationAttempt.update({
           where: { id: attemptId },
           data: { status: "en_correction" },
         });
       }
+      return;
+    }
+
+    // Recrutement : seuls Bloc 2 + Bloc 5 comptent (moyenne /20 ramenée à
+    // 100, soit (essay + vidéos) / 40). Pas de palier d'admission, et statut
+    // "recrute_corrige" pour ne jamais entrer dans le pipeline contrat.
+    if (recrutement) {
+      const videoScore = gradedVideos.reduce((sum, r) => sum + (r.score ?? 0), 0);
+      const essayScore = attempt.essayResponse!.score ?? 0;
+      await this.prisma.evaluationAttempt.update({
+        where: { id: attemptId },
+        data: {
+          videoScore,
+          essayScore,
+          totalScore: computeTotalScore([videoScore, essayScore]),
+          status: "recrute_corrige",
+          gradedAt: new Date(),
+        },
+      });
       return;
     }
 
@@ -1185,7 +1285,7 @@ export class EvaluationService {
   async getStats() {
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const [candidatsSemaine, totalPipeline, actifs] = await Promise.all([
-      this.prisma.evaluationAttempt.count({ where: { createdAt: { gte: weekAgo } } }),
+      this.prisma.evaluationAttempt.count({ where: { parcours: "admission", createdAt: { gte: weekAgo } } }),
       this.prisma.evaluationAttempt.count({
         where: {
           status: {

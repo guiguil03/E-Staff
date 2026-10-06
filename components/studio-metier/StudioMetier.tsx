@@ -6,6 +6,7 @@ import RegistrationForm from "@/components/RegistrationForm";
 import AccessNotice from "@/components/studio-metier/AccessNotice";
 import CircuitTexture from "@/components/studio-metier/CircuitTexture";
 import OffreCard from "@/components/studio-metier/OffreCard";
+import EvaluationFlow from "@/components/evaluation/EvaluationFlow";
 import TemoignagesEmbauche from "@/components/studio-metier/TemoignagesEmbauche";
 import MediaWall from "@/components/communaute/MediaWall";
 import type { OffreEmploi } from "@/components/studio-metier/offres";
@@ -20,6 +21,8 @@ function prefersReducedMotion() {
   if (typeof window === "undefined") return false;
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
+
+const TEST_RECRUTEMENT_OK_KEY = "estaf-test-recrutement-ok";
 
 const ORDRE_STATUT: Record<OffreEmploi["statut"], number> = { presque_complet: 0, ouvert: 1, cloture: 2 };
 
@@ -51,6 +54,27 @@ export default function StudioMetier() {
   // candidature spontanée (métier choisi dans la liste).
   const [choix, setChoix] = useState<{ offreId: string; listeAttente: boolean } | "spontanee" | null>(null);
   const [metierSpontane, setMetierSpontane] = useState("");
+  // Test de recrutement : obligatoire avant de postuler à une offre (pas pour
+  // la liste d'attente ni la candidature spontanée). Mémorisé sur l'appareil
+  // pour ne pas le refaire à chaque offre.
+  const [testPasse, setTestPasse] = useState(false);
+
+  useEffect(() => {
+    try {
+      setTestPasse(localStorage.getItem(TEST_RECRUTEMENT_OK_KEY) === "1");
+    } catch {
+      // stockage indisponible : le test sera simplement redemandé
+    }
+  }, []);
+
+  function testTermine() {
+    setTestPasse(true);
+    try {
+      localStorage.setItem(TEST_RECRUTEMENT_OK_KEY, "1");
+    } catch {
+      // ignoré
+    }
+  }
 
   useEffect(() => {
     apiGet<OffreEmploi[]>("/offres-emploi")
@@ -247,7 +271,30 @@ export default function StudioMetier() {
                     </label>
                   )}
 
-                  {segment && (
+                  {offreChoisie && !listeAttente && !testPasse && (
+                    <div>
+                      <p className="mb-4 text-center font-sans text-sm text-white/70">
+                        Avant de postuler, passez notre test de recrutement : fiche candidat,
+                        vidéo de présentation et test pratique.
+                      </p>
+                      <EvaluationFlow parcours="recrutement" onTermine={testTermine} />
+                    </div>
+                  )}
+
+                  {offreChoisie && !listeAttente && testPasse && offreChoisie.lienWhatsapp && (
+                    <p className="mb-6 text-center">
+                      <a
+                        href={offreChoisie.lienWhatsapp}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 rounded-full bg-statusGreen px-6 py-3 font-sans text-sm font-bold uppercase tracking-wide text-obsidian transition-colors hover:bg-statusGreen/90"
+                      >
+                        Postuler sur WhatsApp <span aria-hidden="true">→</span>
+                      </a>
+                    </p>
+                  )}
+
+                  {segment && (choix === "spontanee" || listeAttente || (testPasse && !offreChoisie?.lienWhatsapp)) && (
                     <RegistrationForm
                       key={offreChoisie ? `${offreChoisie.id}-${listeAttente}` : `spontanee-${segment}`}
                       segment={segment}
