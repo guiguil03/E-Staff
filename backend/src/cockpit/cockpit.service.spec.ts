@@ -10,12 +10,14 @@ import { PrismaService } from "../prisma/prisma.service";
 function makePrismaMock() {
   return {
     apprenant: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(), update: jest.fn() },
-    notation: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn() },
+    notation: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
     seance: { findMany: jest.fn().mockResolvedValue([]) },
     presence: { findMany: jest.fn().mockResolvedValue([]) },
     groupe: { findUnique: jest.fn() },
     formateur: { findUnique: jest.fn() },
     diffusion: { create: jest.fn(), findMany: jest.fn() },
+    bilanFormateur: { findFirst: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn() },
+    compteStaff: { findMany: jest.fn().mockResolvedValue([]) },
   };
 }
 
@@ -349,5 +351,158 @@ describe("CockpitService — paiements et abonnements limités aux groupes du fo
         },
       })
     );
+  });
+});
+
+describe("CockpitService — bilan hebdomadaire (historique, PDF, notification RH)", () => {
+  let prisma: ReturnType<typeof makePrismaMock>;
+  let email: { send: jest.Mock };
+  let service: CockpitService;
+
+  beforeEach(() => {
+    prisma = makePrismaMock();
+    email = { send: jest.fn().mockResolvedValue({ delivered: true }) };
+    prisma.formateur.findUnique.mockResolvedValue({ ...FORMATEUR, prenom: "Jean", nom: "Rakoto" });
+    service = new CockpitService(prisma as unknown as PrismaService, {} as never, email as never);
+  });
+
+  describe("getRapportHebdo — evolutionVsSemainePrecedente", () => {
+    it("renvoie null sans matricule de formateur fourni", async () => {
+      const result = await service.getRapportHebdo();
+      expect(result.evolutionVsSemainePrecedente).toBeNull();
+      expect(prisma.bilanFormateur.findFirst).not.toHaveBeenCalled();
+    });
+
+    it("renvoie null quand ce formateur n'a encore aucun bilan validé", async () => {
+      prisma.bilanFormateur.findFirst.mockResolvedValue(null);
+
+      const result = await service.getRapportHebdo(FORMATEUR.matricule);
+
+      expect(prisma.bilanFormateur.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { formateurId: FORMATEUR.id } })
+      );
+      expect(result.evolutionVsSemainePrecedente).toBeNull();
+    });
+
+    it("calcule la différence de moyenne générale par rapport au dernier bilan", async () => {
+      const COMPETENCIES = [
+        "comprehension_orale",
+        "expression_orale",
+        "comprehension_ecrite",
+        "expression_ecrite",
+        "posture_eloquence",
+      ];
+      prisma.apprenant.findMany.mockResolvedValue([{ id: "app-1", groupe: GROUPE_A }]);
+      prisma.notation.findMany.mockResolvedValue(
+        COMPETENCIES.map((competence) => ({
+          apprenantId: "app-1",
+          competence,
+          scoreOn20: 20,
+          seance: { numero: 1 },
+        }))
+      );
+      prisma.bilanFormateur.findFirst.mockResolvedValue({
+        statsSnapshot: { moyenneGenerale: 70, tauxPresenceGlobal: null },
+      });
+
+      const result = await service.getRapportHebdo(FORMATEUR.matricule);
+
+      expect(result.moyenneGenerale).toBe(100);
+      expect(result.evolutionVsSemainePrecedente).toEqual({
+        moyenneGenerale: 30,
+        tauxPresenceGlobal: null,
+      });
+    });
+  });
+
+  describe("submitBilanHebdo — notification RH", () => {
+    const dto = { constat: "Bon rythme.", analyse: "Groupe homogène.", axes: "Travailler l'oral." };
+
+    it("notifie les comptes RH actifs après la création du bilan", async () => {
+      prisma.bilanFormateur.create.mockResolvedValue({
+        id: "bilan-1",
+        formateurId: FORMATEUR.id,
+        createdAt: new Date("2026-10-08"),
+      });
+      prisma.compteStaff.findMany.mockResolvedValue([
+        { prenom: "Mina", email: "mina@example.com" },
+        { prenom: "Sans-email", email: "" },
+      ]);
+
+      await service.submitBilanHebdo(FORMATEUR.matricule, dto);
+
+      expect(prisma.compteStaff.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { role: "rh", actif: true } })
+      );
+      expect(email.send).toHaveBeenCalledTimes(1);
+      expect(email.send).toHaveBeenCalledWith(expect.objectContaining({ to: "mina@example.com" }));
+    });
+
+    it("ne bloque pas la validation du bilan si l'envoi d'e-mail échoue", async () => {
+      prisma.bilanFormateur.create.mockResolvedValue({
+        id: "bilan-1",
+        formateurId: FORMATEUR.id,
+        createdAt: new Date("2026-10-08"),
+      });
+      prisma.compteStaff.findMany.mockRejectedValue(new Error("DB indisponible"));
+
+      const result = await service.submitBilanHebdo(FORMATEUR.matricule, dto);
+
+      expect(result.id).toBe("bilan-1");
+    });
+  });
+
+  describe("listMesBilans", () => {
+    it("délègue à listBilansFormateur avec l'id du formateur résolu depuis le matricule", async () => {
+      prisma.bilanFormateur.findMany.mockResolvedValue([{ id: "bilan-1" }]);
+
+      const result = await service.listMesBilans(FORMATEUR.matricule);
+
+      expect(prisma.bilanFormateur.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { formateurId: FORMATEUR.id } })
+      );
+      expect(result).toEqual([{ id: "bilan-1" }]);
+    });
+  });
+
+  describe("generateBilanPdf", () => {
+    it("lève NotFoundException si le bilan n'appartient pas à ce formateur", async () => {
+      prisma.bilanFormateur.findUnique.mockResolvedValue({ id: "bilan-1", formateurId: "autre-formateur" });
+
+      await expect(service.generateBilanPdf("bilan-1", FORMATEUR.matricule)).rejects.toBeInstanceOf(
+        NotFoundException
+      );
+    });
+
+    it("lève NotFoundException si le bilan n'existe pas", async () => {
+      prisma.bilanFormateur.findUnique.mockResolvedValue(null);
+
+      await expect(service.generateBilanPdf("bilan-inconnu", FORMATEUR.matricule)).rejects.toBeInstanceOf(
+        NotFoundException
+      );
+    });
+
+    it("génère un PDF (buffer non vide) pour un bilan appartenant à ce formateur", async () => {
+      prisma.bilanFormateur.findUnique.mockResolvedValue({
+        id: "bilan-1",
+        formateurId: FORMATEUR.id,
+        createdAt: new Date("2026-10-08"),
+        constat: "Bon rythme.",
+        analyse: "Groupe homogène.",
+        axes: "Travailler l'oral.",
+        statsSnapshot: {
+          moyenneGenerale: 80,
+          tauxPresenceGlobal: 90,
+          rendusCorriges7j: 5,
+          vivierC1Total: 2,
+          alertesDecrochageActuelles: 0,
+        },
+      });
+
+      const pdf = await service.generateBilanPdf("bilan-1", FORMATEUR.matricule);
+
+      expect(pdf).toBeInstanceOf(Buffer);
+      expect(pdf.length).toBeGreaterThan(0);
+    });
   });
 });

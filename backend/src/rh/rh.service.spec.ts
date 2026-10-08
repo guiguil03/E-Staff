@@ -3,6 +3,7 @@ import { RhService } from "./rh.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CockpitService } from "../cockpit/cockpit.service";
 import { NotationService } from "../notation/notation.service";
+import { ProductionService } from "../production/production.service";
 import { EmailService } from "../common/email.service";
 import { StorageService } from "../common/storage.service";
 
@@ -35,6 +36,7 @@ function makePrismaMock() {
     },
     seance: { findMany: jest.fn() },
     connecteur: { findMany: jest.fn(), findUnique: jest.fn() },
+    contratB2B: { findMany: jest.fn() },
     evaluationAttempt: {
       findMany: jest.fn(),
       findUnique: jest.fn(),
@@ -53,18 +55,29 @@ function makePrismaMock() {
 
 describe("RhService", () => {
   let prisma: ReturnType<typeof makePrismaMock>;
+  let production: {
+    getCommissionsDemarrage: jest.Mock;
+    getCommissionsApporteurs: jest.Mock;
+    getCommissionRecurrenteCumulee: jest.Mock;
+  };
   let email: { send: jest.Mock };
   let storage: { deleteObject: jest.Mock };
   let service: RhService;
 
   beforeEach(() => {
     prisma = makePrismaMock();
+    production = {
+      getCommissionsDemarrage: jest.fn().mockResolvedValue([]),
+      getCommissionsApporteurs: jest.fn().mockResolvedValue([]),
+      getCommissionRecurrenteCumulee: jest.fn().mockResolvedValue({ montantPaye: 0, montantEnAttente: 0 }),
+    };
     email = { send: jest.fn().mockResolvedValue({ delivered: true }) };
     storage = { deleteObject: jest.fn().mockResolvedValue(undefined) };
     service = new RhService(
       prisma as unknown as PrismaService,
       {} as unknown as CockpitService,
       {} as unknown as NotationService,
+      production as unknown as ProductionService,
       email as unknown as EmailService,
       storage as unknown as StorageService
     );
@@ -925,6 +938,7 @@ describe("RhService", () => {
         prisma as unknown as PrismaService,
         cockpit as unknown as CockpitService,
         {} as unknown as NotationService,
+        production as unknown as ProductionService,
         email as unknown as EmailService,
         storage as unknown as StorageService
       );
@@ -1048,6 +1062,106 @@ describe("RhService", () => {
 
       await expect(service.purgeCandidatData("attempt-1")).rejects.toThrow("S3 indisponible");
       expect(prisma.candidat.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---- Casier Partenaire -----------------------------------------------
+
+  describe("getPartenaireCasier", () => {
+    it("lève NotFoundException si le partenaire n'existe pas", async () => {
+      prisma.connecteur.findUnique.mockResolvedValue(null);
+
+      await expect(service.getPartenaireCasier("inconnu")).rejects.toThrow(NotFoundException);
+    });
+
+    it("combine questionnaire, apports et commissions pour ce partenaire", async () => {
+      prisma.connecteur.findUnique.mockResolvedValue({
+        id: "con-1",
+        firstName: "Rina",
+        lastName: "Rakoto",
+        email: "rina@example.com",
+        phone: "0340000000",
+        activityType: "Agence",
+        clientCount: "5-15",
+        soughtRoles: JSON.stringify(["Closer"]),
+        cvVolume: "50-200",
+        budgetPerAgent: "500-1000€",
+        presentationMode: "RDV à trois",
+        paymentChannel: "Virement",
+        opportunityTiming: "Oui immédiat",
+        status: "actif",
+        createdAt: new Date("2026-08-01"),
+      });
+      prisma.apprenant.findMany.mockResolvedValue([
+        { matricule: "A-1", prenom: "Jean", nom: "Rabe", statutAgent: "actif" },
+        { matricule: "A-2", prenom: "Lea", nom: "Rasoa", statutAgent: "formation" },
+      ]);
+      prisma.contratB2B.findMany.mockResolvedValue([
+        { id: "c-1", clientNom: "Client X", statut: "actif", tarifMensuel: 1000, dateDebut: new Date("2026-07-01") },
+      ]);
+      production.getCommissionsDemarrage.mockResolvedValue([
+        { id: "cd-1", contratId: "c-1", clientNom: "Client X", connecteurNom: "Rina Rakoto", montant: 100, statut: "en_attente", datePaiement: null },
+      ]);
+      production.getCommissionsApporteurs.mockResolvedValue([
+        { connecteurId: "con-1", nom: "Rina Rakoto", agentsActifs: [], masseSalariale: 500, commission: 25 },
+      ]);
+      production.getCommissionRecurrenteCumulee.mockResolvedValue({ montantPaye: 60, montantEnAttente: 25 });
+
+      const result = await service.getPartenaireCasier("con-1");
+
+      expect(prisma.apprenant.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { connecteurId: "con-1" } })
+      );
+      expect(prisma.contratB2B.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { connecteurId: "con-1" } })
+      );
+      expect(production.getCommissionsDemarrage).toHaveBeenCalledWith("con-1");
+      expect(production.getCommissionsApporteurs).toHaveBeenCalledWith(undefined, "con-1");
+      expect(production.getCommissionRecurrenteCumulee).toHaveBeenCalledWith("con-1");
+
+      expect(result.apports).toEqual({
+        apprenants: [
+          { matricule: "A-1", prenom: "Jean", nom: "Rabe", statutAgent: "actif" },
+          { matricule: "A-2", prenom: "Lea", nom: "Rasoa", statutAgent: "formation" },
+        ],
+        contrats: [
+          { id: "c-1", clientNom: "Client X", statut: "actif", tarifMensuel: 1000, dateDebut: new Date("2026-07-01") },
+        ],
+        commissionsDemarrage: [
+          { id: "cd-1", contratId: "c-1", clientNom: "Client X", connecteurNom: "Rina Rakoto", montant: 100, statut: "en_attente", datePaiement: null },
+        ],
+        commissionRecurrenteCourante: { connecteurId: "con-1", nom: "Rina Rakoto", agentsActifs: [], masseSalariale: 500, commission: 25 },
+        commissionRecurrenteCumulee: { montantPaye: 60, montantEnAttente: 25 },
+      });
+    });
+
+    it("renvoie commissionRecurrenteCourante=null quand aucun agent n'est actif ce mois-ci", async () => {
+      prisma.connecteur.findUnique.mockResolvedValue({
+        id: "con-2",
+        firstName: "Sam",
+        lastName: "Rabe",
+        email: "sam@example.com",
+        phone: "0340000001",
+        activityType: "Consultant RH-BizDev",
+        clientCount: "1-5",
+        soughtRoles: JSON.stringify([]),
+        cvVolume: "<50",
+        budgetPerAgent: "<500€",
+        presentationMode: "Recommandation directe",
+        paymentChannel: "Mobile Money",
+        opportunityTiming: "Non",
+        status: "nouveau",
+        createdAt: new Date("2026-09-01"),
+      });
+      prisma.apprenant.findMany.mockResolvedValue([]);
+      prisma.contratB2B.findMany.mockResolvedValue([]);
+      production.getCommissionsDemarrage.mockResolvedValue([]);
+      production.getCommissionsApporteurs.mockResolvedValue([]);
+      production.getCommissionRecurrenteCumulee.mockResolvedValue({ montantPaye: 0, montantEnAttente: 0 });
+
+      const result = await service.getPartenaireCasier("con-2");
+
+      expect(result.apports.commissionRecurrenteCourante).toBeNull();
     });
   });
 });

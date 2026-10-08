@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiGet, ApiError } from "@/lib/api";
-import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 
 interface LiveRoomStatus {
   titre: string;
@@ -14,22 +13,21 @@ interface LiveRoomStatus {
   roomUrl: string | null;
 }
 
-function adminHeaders(): HeadersInit {
-  const matricule =
-    typeof window !== "undefined" ? sessionStorage.getItem(ACCOUNT_MATRICULE_KEY) : null;
-  return matricule ? { "x-admin-matricule": matricule } : {};
-}
-
-// Page de visionnage du Live du Forum — publique (pas de useRequireRole,
-// cohérent avec le reste du Forum qui n'a pas encore de vraie auth). Si le
-// visiteur est connecté en Admin, le backend lui renvoie un jeton hôte
-// (caméra/micro) plutôt qu'un jeton spectateur (owner_only_broadcast côté
-// Daily gère automatiquement la distinction).
+// Page de visionnage du Live du Forum — pas de useRequireRole ici (la page
+// elle-même n'est pas démontée en cas de refus, voir ForumAccessGate pour
+// le filtre UX), mais `GET /forum/live/room` est maintenant protégée
+// côté serveur (ApprenantOuAdminGuard) : un visiteur sans session
+// apprenant/admin reçoit un 401, traité ici comme "aucun live disponible"
+// plutôt que d'exposer qu'il s'agit d'un refus d'accès. Si le visiteur est
+// connecté en Admin, le backend lui renvoie un jeton hôte (caméra/micro)
+// plutôt qu'un jeton spectateur (owner_only_broadcast côté Daily gère
+// automatiquement la distinction) — le cookie de session part
+// automatiquement avec l'appel (`credentials: "include"`, voir lib/api.ts).
 export default function ForumLivePage() {
   const [status, setStatus] = useState<LiveRoomStatus | null | "loading" | "erreur">("loading");
 
   useEffect(() => {
-    apiGet<LiveRoomStatus | null>("/forum/live/room", adminHeaders())
+    apiGet<LiveRoomStatus | null>("/forum/live/room")
       .then(setStatus)
       .catch((err) => setStatus(err instanceof ApiError ? null : "erreur"));
   }, []);

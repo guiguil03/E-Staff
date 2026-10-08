@@ -6,6 +6,8 @@ import Button from "@/components/ui/Button";
 import { apiGet, apiPostAuthed } from "@/lib/api";
 import { ACCOUNT_MATRICULE_KEY } from "@/lib/accountSession";
 
+const API_URL = (process.env.NEXT_PUBLIC_API_URL_Dev ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+
 interface WeeklyReportPanelProps {
   onClose: () => void;
 }
@@ -16,6 +18,13 @@ interface RapportHebdoApi {
   rendusCorriges7j: number;
   vivierC1Total: number;
   alertesDecrochageActuelles: number;
+  evolutionVsSemainePrecedente: { moyenneGenerale: number | null; tauxPresenceGlobal: number | null } | null;
+}
+
+interface BilanHebdo {
+  id: string;
+  createdAt: string;
+  constat: string;
 }
 
 function formateurHeaders(): HeadersInit {
@@ -24,10 +33,23 @@ function formateurHeaders(): HeadersInit {
   return matricule ? { "x-formateur-matricule": matricule } : {};
 }
 
+function evolutionLabel(delta: number | null | undefined): string {
+  if (delta === null || delta === undefined) return "";
+  if (delta === 0) return " (= vs semaine précédente)";
+  return ` (${delta > 0 ? "▲ +" : "▼ "}${delta} vs semaine précédente)`;
+}
+
 function statsRows(stats: RapportHebdoApi): { label: string; value: string }[] {
+  const evolution = stats.evolutionVsSemainePrecedente;
   return [
-    { label: "Moyenne générale de la cohorte", value: `${stats.moyenneGenerale ?? "—"}/100` },
-    { label: "Taux de présence global", value: `${stats.tauxPresenceGlobal ?? "—"}%` },
+    {
+      label: "Moyenne générale de la cohorte",
+      value: `${stats.moyenneGenerale ?? "—"}/100${evolutionLabel(evolution?.moyenneGenerale)}`,
+    },
+    {
+      label: "Taux de présence global",
+      value: `${stats.tauxPresenceGlobal ?? "—"}%${evolutionLabel(evolution?.tauxPresenceGlobal)}`,
+    },
     { label: "Travaux corrigés cette semaine", value: `${stats.rendusCorriges7j}` },
     { label: "Apprenants en alerte décrochage", value: `${stats.alertesDecrochageActuelles}` },
     { label: "Apprenants au niveau C1 (Vivier)", value: `${stats.vivierC1Total}` },
@@ -38,14 +60,15 @@ function statsRows(stats: RapportHebdoApi): { label: string; value: string }[] {
 // Notation/Presence, voir /cockpit/rapport-hebdo) depuis 2026-08-24, +
 // 3 blocs qualitatifs obligatoires demandés par la cliente. La validation
 // persiste le bilan (POST /cockpit/bilan-hebdo, voir BilanFormateur dans
-// schema.prisma) et le rend visible dans le Casier Formateur côté RH —
-// toujours pas d'export PDF/Excel ni d'e-mail automatique pour l'instant.
-// Deux chiffres de l'ancienne maquette ("Évolution vs semaine N-1",
-// "Groupes en baisse de tendance") ont été retirés : ils nécessitent un
-// historique semaine par semaine qui n'existe pas encore côté backend
-// (aucune table de snapshot) — à construire séparément si besoin.
+// schema.prisma), le rend visible dans le Casier Formateur côté RH et
+// notifie automatiquement la RH par e-mail. "Évolution vs semaine N-1"
+// (ci-dessous) compare aux chiffres figés du dernier bilan validé par ce
+// formateur — "Groupes en baisse de tendance" reste hors scope : il
+// demanderait un vrai pipeline d'agrégation par groupe qui n'existe pas
+// (getRapportHebdo reste volontairement académie entière).
 export default function WeeklyReportPanel({ onClose }: WeeklyReportPanelProps) {
   const [stats, setStats] = useState<RapportHebdoApi | "loading" | "erreur">("loading");
+  const [historique, setHistorique] = useState<BilanHebdo[] | "loading" | "erreur">("loading");
   const [constat, setConstat] = useState("");
   const [analyse, setAnalyse] = useState("");
   const [axes, setAxes] = useState("");
@@ -53,19 +76,33 @@ export default function WeeklyReportPanel({ onClose }: WeeklyReportPanelProps) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function refreshStats() {
+    apiGet<RapportHebdoApi>("/cockpit/rapport-hebdo", formateurHeaders())
+      .then(setStats)
+      .catch(() => setStats("erreur"));
+  }
+
+  function refreshHistorique() {
+    apiGet<BilanHebdo[]>("/cockpit/bilans-hebdo", formateurHeaders())
+      .then(setHistorique)
+      .catch(() => setHistorique("erreur"));
+  }
+
   function handleSubmit() {
     setSending(true);
     setError(null);
     apiPostAuthed("/cockpit/bilan-hebdo", { constat, analyse, axes }, formateurHeaders())
-      .then(() => setSent(true))
+      .then(() => {
+        setSent(true);
+        refreshHistorique();
+      })
       .catch(() => setError("Échec de l'envoi du bilan. Réessayez."))
       .finally(() => setSending(false));
   }
 
   useEffect(() => {
-    apiGet<RapportHebdoApi>("/cockpit/rapport-hebdo", formateurHeaders())
-      .then(setStats)
-      .catch(() => setStats("erreur"));
+    refreshStats();
+    refreshHistorique();
   }, []);
 
   return (
@@ -154,11 +191,44 @@ export default function WeeklyReportPanel({ onClose }: WeeklyReportPanelProps) {
           </Button>
           {sent && (
             <p className="font-sans text-xs text-white/50">
-              Bilan enregistré — visible dans votre Casier côté RH. Pas encore d&apos;export
-              PDF/Excel ni d&apos;e-mail automatique.
+              Bilan enregistré — visible dans votre Casier côté RH, qui a été notifiée par
+              e-mail. Téléchargez-le en PDF ci-dessous.
             </p>
           )}
           {error && <p className="font-sans text-xs text-red-400">{error}</p>}
+        </div>
+
+        <div className="mt-6 border-t border-white/10 pt-4">
+          <p className="font-sans text-sm font-semibold text-white">Historique de vos bilans</p>
+          {historique === "loading" && (
+            <p className="mt-2 font-sans text-xs text-white/50">Chargement...</p>
+          )}
+          {historique === "erreur" && (
+            <p className="mt-2 font-sans text-xs text-white/50">Impossible de charger l&apos;historique.</p>
+          )}
+          {Array.isArray(historique) && historique.length === 0 && (
+            <p className="mt-2 font-sans text-xs text-white/50">Aucun bilan validé pour l&apos;instant.</p>
+          )}
+          {Array.isArray(historique) && historique.length > 0 && (
+            <ul className="mt-2 space-y-1.5">
+              {historique.map((b) => (
+                <li key={b.id} className="flex items-center justify-between gap-3">
+                  <p className="font-mono text-[11px] text-white/60">
+                    {new Date(b.createdAt).toLocaleDateString("fr-FR")} — {b.constat.slice(0, 60)}
+                    {b.constat.length > 60 ? "…" : ""}
+                  </p>
+                  <a
+                    href={`${API_URL}/cockpit/bilan-hebdo/${b.id}/pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-accent hover:underline"
+                  >
+                    Télécharger PDF
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </Reveal>

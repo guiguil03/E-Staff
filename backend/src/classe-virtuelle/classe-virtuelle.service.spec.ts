@@ -183,9 +183,9 @@ describe("ClasseVirtuelleService — côté apprenant", () => {
     it("renvoie la prochaine séance planifiée du groupe de l'apprenant", async () => {
       // `configured` reflète Boolean(process.env.DAILY_API_KEY) — géré
       // explicitement plutôt que supposé absent : Railway expose les
-      // variables du service pendant le build (prebuild lance ce test
-      // suite), donc une vraie clé peut très bien être présente ici (build
-      // cassé le 2026-09-22 par cette hypothèse implicite).
+      // variables du service à l'exécution des tests (CI, local...), donc
+      // une vraie clé peut très bien être présente ici (build cassé le
+      // 2026-09-22 par cette hypothèse implicite).
       const originalKey = process.env.DAILY_API_KEY;
       delete process.env.DAILY_API_KEY;
       try {

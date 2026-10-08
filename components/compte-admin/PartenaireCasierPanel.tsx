@@ -2,8 +2,38 @@
 
 import { useEffect, useState } from "react";
 import Reveal from "@/components/Reveal";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPostAuthed } from "@/lib/api";
 import { adminHeaders } from "./adminHeaders";
+
+interface ApprenantApporte {
+  matricule: string;
+  prenom: string;
+  nom: string;
+  statutAgent: string;
+}
+
+interface ContratApporte {
+  id: string;
+  clientNom: string;
+  statut: string;
+  tarifMensuel: number | null;
+  dateDebut: string;
+}
+
+interface CommissionDemarrage {
+  id: string;
+  contratId: string;
+  clientNom: string;
+  connecteurNom: string | null;
+  montant: number;
+  statut: string;
+  datePaiement: string | null;
+}
+
+interface CommissionRecurrenteCourante {
+  masseSalariale: number;
+  commission: number;
+}
 
 interface PartenaireCasier {
   firstName: string;
@@ -20,6 +50,13 @@ interface PartenaireCasier {
   opportunityTiming: string;
   status: string;
   candidatureRecueLe: string;
+  apports: {
+    apprenants: ApprenantApporte[];
+    contrats: ContratApporte[];
+    commissionsDemarrage: CommissionDemarrage[];
+    commissionRecurrenteCourante: CommissionRecurrenteCourante | null;
+    commissionRecurrenteCumulee: { montantPaye: number; montantEnAttente: number };
+  };
 }
 
 const STATUT_LABELS: Record<string, string> = {
@@ -27,6 +64,17 @@ const STATUT_LABELS: Record<string, string> = {
   contacte: "Contacté",
   actif: "Actif",
 };
+
+const STATUT_AGENT_LABELS: Record<string, string> = {
+  formation: "En formation",
+  essai: "En essai",
+  actif: "Actif en mission",
+  inactif: "Inactif",
+};
+
+function fmtMontant(n: number): string {
+  return `${n.toLocaleString("fr-FR")} Ar`;
+}
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -40,15 +88,36 @@ function Field({ label, value }: { label: string; value: string }) {
 // Casier partenaire côté RH — la candidature Connecteur complète (voir
 // RhService.getPartenaireCasier) : pas de journal des changements de
 // statut (aucune table d'historique), juste l'état actuel + le
-// questionnaire de pré-qualification déposé à la candidature.
+// questionnaire de pré-qualification déposé à la candidature, + les apports
+// réels (apprenants, contrats B2B) et les commissions déjà modélisées côté
+// Production (CommissionDemarrageApporteur, getCommissionsApporteurs).
 export default function PartenaireCasierPanel({ id }: { id: string }) {
   const [casier, setCasier] = useState<PartenaireCasier | "loading" | "erreur">("loading");
+  const [payingId, setPayingId] = useState<string | null>(null);
 
-  useEffect(() => {
+  function refresh() {
     apiGet<PartenaireCasier>(`/rh/partenaires/${id}/casier`, adminHeaders())
       .then(setCasier)
       .catch(() => setCasier("erreur"));
-  }, [id]);
+  }
+
+  useEffect(refresh, [id]);
+
+  async function payerDemarrage(commissionId: string, clientNom: string, montant: number) {
+    if (
+      !window.confirm(
+        `Confirmer le paiement de la commission de démarrage (${fmtMontant(montant)}) pour ${clientNom} ? Cette action est irréversible.`
+      )
+    )
+      return;
+    setPayingId(commissionId);
+    try {
+      await apiPostAuthed(`/production/commissions-demarrage/${commissionId}/payer`, {}, adminHeaders());
+      refresh();
+    } finally {
+      setPayingId(null);
+    }
+  }
 
   if (casier === "loading") return <p className="font-sans text-sm text-white/50">Chargement...</p>;
   if (casier === "erreur")
@@ -91,6 +160,77 @@ export default function PartenaireCasierPanel({ id }: { id: string }) {
             <Field label="Mode de présentation" value={casier.presentationMode} />
             <Field label="Canal de paiement" value={casier.paymentChannel} />
             <Field label="Délai d'opportunité" value={casier.opportunityTiming} />
+          </div>
+        </div>
+      </Reveal>
+
+      <Reveal delay={80}>
+        <div className="rounded border border-white/10 bg-obsidianCard p-6">
+          <h3 className="font-display text-base font-semibold text-white">Apports &amp; commissions</h3>
+          <p className="mt-1 font-sans text-xs text-white/50">
+            Ce que ce partenaire a réellement apporté — un apprenant encore en formation n&apos;a pas
+            encore généré de commission.
+          </p>
+
+          <div className="mt-4 space-y-1.5">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-white/40">
+              Apprenants apportés
+            </p>
+            {casier.apports.apprenants.length === 0 && (
+              <p className="font-sans text-sm text-white/50">Aucun apprenant apporté pour l&apos;instant.</p>
+            )}
+            {casier.apports.apprenants.map((a) => (
+              <p key={a.matricule} className="font-mono text-[11px] text-white/60">
+                {a.prenom} {a.nom} ({a.matricule}) — {STATUT_AGENT_LABELS[a.statutAgent] ?? a.statutAgent}
+              </p>
+            ))}
+          </div>
+
+          {casier.apports.contrats.length > 0 && (
+            <div className="mt-4 space-y-1.5 border-t border-white/10 pt-3">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-white/40">
+                Contrats B2B apportés — commission de démarrage (10%)
+              </p>
+              {casier.apports.contrats.map((c) => {
+                const commission = casier.apports.commissionsDemarrage.find((d) => d.contratId === c.id);
+                return (
+                  <div key={c.id} className="flex items-center justify-between gap-2">
+                    <p className="font-mono text-[11px] text-white/60">
+                      {c.clientNom} {commission ? `— ${fmtMontant(commission.montant)}` : ""}
+                    </p>
+                    {commission &&
+                      (commission.statut === "paye" ? (
+                        <span className="rounded-full border border-success/40 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-success">
+                          Payée
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => payerDemarrage(commission.id, c.clientNom, commission.montant)}
+                          disabled={payingId === commission.id}
+                          className="rounded border border-accent/40 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-accent hover:bg-accent/10 disabled:opacity-50"
+                        >
+                          {payingId === commission.id ? "..." : "Valider & Payer"}
+                        </button>
+                      ))}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="mt-4 space-y-1 border-t border-white/10 pt-3">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-white/40">
+              Commission récurrente (5% — agents actuellement en mission)
+            </p>
+            <p className="font-sans text-sm text-white">
+              {casier.apports.commissionRecurrenteCourante
+                ? `Ce mois-ci : ${fmtMontant(casier.apports.commissionRecurrenteCourante.commission)}`
+                : "Aucun agent actuellement en mission ce mois-ci."}
+            </p>
+            <p className="font-mono text-[11px] text-white/50">
+              Cumul historique — payé : {fmtMontant(casier.apports.commissionRecurrenteCumulee.montantPaye)} ·
+              en attente : {fmtMontant(casier.apports.commissionRecurrenteCumulee.montantEnAttente)}
+            </p>
           </div>
         </div>
       </Reveal>

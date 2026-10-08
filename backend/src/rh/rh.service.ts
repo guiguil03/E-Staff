@@ -9,6 +9,7 @@ import * as path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { CockpitService } from '../cockpit/cockpit.service';
 import { NotationService } from '../notation/notation.service';
+import { ProductionService } from '../production/production.service';
 import { EmailService } from '../common/email.service';
 import { StorageService } from '../common/storage.service';
 import { escapeHtml, renderEmailHtml, emailParagraph, emailParagraphsFromText, credentialsBox } from '../common/email-template';
@@ -132,6 +133,7 @@ export class RhService {
     private readonly prisma: PrismaService,
     private readonly cockpit: CockpitService,
     private readonly notation: NotationService,
+    private readonly production: ProductionService,
     private readonly email: EmailService,
     private readonly storage: StorageService,
   ) {}
@@ -1211,6 +1213,26 @@ export class RhService {
     const connecteur = await this.prisma.connecteur.findUnique({ where: { id } });
     if (!connecteur) throw new NotFoundException('Partenaire introuvable.');
 
+    // Apports réels de ce partenaire + commissions générées (voir
+    // ProductionService) — un apprenant apporté mais jamais placé en
+    // mission B2B reste listé (traçabilité), sans aucun montant inventé.
+    const [apprenants, contrats, commissionsDemarrage, commissionsRecurrentes, commissionRecurrenteCumulee] =
+      await Promise.all([
+        this.prisma.apprenant.findMany({
+          where: { connecteurId: id },
+          select: { matricule: true, prenom: true, nom: true, statutAgent: true },
+          orderBy: { nom: 'asc' },
+        }),
+        this.prisma.contratB2B.findMany({
+          where: { connecteurId: id },
+          select: { id: true, clientNom: true, statut: true, tarifMensuel: true, dateDebut: true },
+          orderBy: { dateDebut: 'desc' },
+        }),
+        this.production.getCommissionsDemarrage(id),
+        this.production.getCommissionsApporteurs(undefined, id),
+        this.production.getCommissionRecurrenteCumulee(id),
+      ]);
+
     return {
       firstName: connecteur.firstName,
       lastName: connecteur.lastName,
@@ -1226,6 +1248,13 @@ export class RhService {
       opportunityTiming: connecteur.opportunityTiming,
       status: connecteur.status,
       candidatureRecueLe: connecteur.createdAt,
+      apports: {
+        apprenants,
+        contrats,
+        commissionsDemarrage,
+        commissionRecurrenteCourante: commissionsRecurrentes[0] ?? null,
+        commissionRecurrenteCumulee,
+      },
     };
   }
 
