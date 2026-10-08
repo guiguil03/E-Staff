@@ -12,6 +12,9 @@ import {
   Headers,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { diskStorage } from "multer";
+import { unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { EvaluationService } from "./evaluation.service";
@@ -35,11 +38,13 @@ import { FormateurGuard } from "../common/formateur.guard";
 import { FormateurOuRhGuard } from "../common/formateur-ou-rh.guard";
 import { ApprenantGuard } from "../common/apprenant.guard";
 import { RateLimitGuard } from "../common/rate-limit.guard";
-import { isAudio, isPdf, isVideo } from "../common/file-signature";
+import { isAudio, isPdf, isVideo, readLeadingBytes } from "../common/file-signature";
 
-// Les vidéos sont bien plus volumineuses que l'audio — Multer bufférise en
-// mémoire (pas de config disque ici, cohérent avec l'upload audio existant),
-// donc une limite explicite est nécessaire pour éviter un upload sans borne.
+// Les vidéos sont bien plus volumineuses que l'audio — fichier temporaire
+// sur disque plutôt que bufférisé en RAM (audit scalabilité du 2026-10-08 :
+// quelques candidats déposant une vidéo de 300 Mo en même temps pouvaient
+// épuiser la RAM du process), donc une limite explicite reste nécessaire
+// pour éviter un upload sans borne.
 const MAX_VIDEO_UPLOAD_BYTES = 300 * 1024 * 1024; // 300 Mo
 const MAX_CV_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
 // Aucune limite n'existait avant (audit du 2026-09-21) — un enregistrement
@@ -202,13 +207,14 @@ export class EvaluationController {
   @Post("attempts/:id/videos")
   @UseInterceptors(
     FileInterceptor("video", {
+      storage: diskStorage({ destination: tmpdir() }),
       limits: { fileSize: MAX_VIDEO_UPLOAD_BYTES },
       fileFilter: (_req, file, cb) => {
         cb(null, file.mimetype.startsWith("video/"));
       },
     })
   )
-  uploadVideoResponse(
+  async uploadVideoResponse(
     @Param("id") id: string,
     @Body() dto: UploadVideoDto,
     @UploadedFile() file: Express.Multer.File
@@ -218,10 +224,15 @@ export class EvaluationController {
         "Fichier vidéo manquant, trop volumineux (300 Mo max) ou format non supporté."
       );
     }
-    if (!isVideo(file.buffer)) {
-      throw new BadRequestException("Le fichier ne semble pas être une vidéo valide.");
+    try {
+      const leading = await readLeadingBytes(file.path);
+      if (!isVideo(leading)) {
+        throw new BadRequestException("Le fichier ne semble pas être une vidéo valide.");
+      }
+      return await this.service.saveVideoResponse(id, dto.taskIndex, file, dto.subjectKey, dto.optionKey);
+    } finally {
+      await unlink(file.path).catch(() => {});
     }
-    return this.service.saveVideoResponse(id, dto.taskIndex, file, dto.subjectKey, dto.optionKey);
   }
 
   // ---- Interface formateur ------------------------------------------------

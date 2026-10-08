@@ -286,6 +286,19 @@ describe("RhService", () => {
       expect(totaux).not.toContain(1);
       expect(totaux).not.toContain(2);
     });
+
+    // Régression scalabilité (2026-10-08) : seules les 8 dernières semaines
+    // comptent (slice ci-dessus) — inutile de charger tout l'historique des
+    // encaissements pour y arriver.
+    it("filtre déjà en base sur les dernières semaines, plutôt que de charger tout l'historique", async () => {
+      prisma.encaissementFormation.findMany.mockResolvedValue([]);
+
+      await service.getTendanceHebdomadaireFormation();
+
+      expect(prisma.encaissementFormation.findMany).toHaveBeenCalledWith({
+        where: { jour: { gte: expect.any(Date) } },
+      });
+    });
   });
 
   describe("getTendanceMensuelleFormation", () => {

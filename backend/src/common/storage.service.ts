@@ -5,6 +5,8 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { createReadStream } from "fs";
+import { stat } from "fs/promises";
 import type { Readable } from "stream";
 
 // Types de fichiers servis tels quels (audit du 2026-09-28). Le type
@@ -63,6 +65,26 @@ export class StorageService {
         Key: key,
         Body: body,
         ContentType: contentType,
+      })
+    );
+  }
+
+  // Upload en flux depuis un fichier temporaire sur disque, plutôt qu'un
+  // Buffer déjà entièrement chargé en RAM (audit scalabilité du 2026-10-08)
+  // — pour les endpoints à grosse limite (vidéo, devoir, support de cours)
+  // dont le `FileInterceptor` est passé en `diskStorage` : quelques dépôts
+  // simultanés de 100-300 Mo en Buffer pouvaient épuiser la RAM du process.
+  // `ContentLength` doit être fourni explicitement : un PUT S3 avec un
+  // `Body` de type flux (pas un Buffer) sans longueur connue échoue.
+  async uploadFile(key: string, filePath: string, contentType: string) {
+    const { size } = await stat(filePath);
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: createReadStream(filePath),
+        ContentType: contentType,
+        ContentLength: size,
       })
     );
   }

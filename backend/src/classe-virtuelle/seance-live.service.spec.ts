@@ -93,4 +93,44 @@ describe("SeanceLiveService", () => {
     );
     expect(storage.uploadBuffer).not.toHaveBeenCalled();
   });
+
+  // Régression XSS stocké (audit sécurité du 2026-10-08) : un SVG contenant
+  // du script déclarait "image/svg+xml", ce qui passait le seul filtre
+  // existant (startsWith("image/")) — rien ne vérifiait la signature
+  // binaire réelle avant de stocker, ni au moment de resservir le fichier.
+  it("refuse un fichier dont le contenu ne correspond pas à une image réelle, même avec un mimetype image/*", async () => {
+    const fauxSvg = {
+      mimetype: "image/svg+xml",
+      buffer: Buffer.from("<svg onload=\"alert(1)\"></svg>"),
+    } as Express.Multer.File;
+    await expect(
+      service.uploadFichierTableau("A", 8, "ETF-FORM-2026-0001", "f1", fauxSvg)
+    ).rejects.toThrow(BadRequestException);
+    expect(storage.uploadBuffer).not.toHaveBeenCalled();
+  });
+
+  it("accepte une vraie image (signature PNG valide)", async () => {
+    const png = {
+      mimetype: "image/png",
+      buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    } as Express.Multer.File;
+    await service.uploadFichierTableau("A", 8, "ETF-FORM-2026-0001", "f1", png);
+    expect(storage.uploadBuffer).toHaveBeenCalledWith("tableaux/s-8/f1", png.buffer, "image/png");
+  });
+
+  it("ressert le Content-Type assaini par le stockage, jamais le mimeType brut stocké en base", async () => {
+    prisma.tableauFichier.findUnique.mockResolvedValue({
+      seanceId: "s-8",
+      fileId: "f1",
+      storageKey: "tableaux/s-8/f1",
+      // mimeType brut historique potentiellement dangereux (ex. ligne
+      // créée avant ce durcissement) — ne doit jamais ressortir tel quel.
+      mimeType: "image/svg+xml",
+    });
+    storage.getObjectStream.mockResolvedValue({ stream: "un-stream", contentType: "application/octet-stream" });
+
+    const result = await service.getFichierFormateur("A", 8, "ETF-FORM-2026-0001", "f1");
+
+    expect(result.contentType).toBe("application/octet-stream");
+  });
 });

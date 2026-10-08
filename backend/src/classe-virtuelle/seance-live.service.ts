@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage.service";
+import { isImage } from "../common/file-signature";
 
 // Taille max de la scène du tableau blanc (éléments vectoriels, sans les
 // images, stockées à part) — largement au-dessus d'un vrai cours.
@@ -136,6 +137,13 @@ export class SeanceLiveService {
     if (!file.mimetype?.startsWith("image/")) {
       throw new BadRequestException("Seules les images peuvent être posées sur le tableau.");
     }
+    // Signature binaire réelle, pas seulement le mimetype déclaré par le
+    // client (audit sécurité du 2026-10-08) : sans ça, un SVG contenant du
+    // script passait le filtre ("image/svg+xml" matche startsWith("image/"))
+    // et s'exécutait au moment où streamFichier le resservait.
+    if (!isImage(file.buffer)) {
+      throw new BadRequestException("Le fichier déposé n'est pas une image valide.");
+    }
     if (!/^[A-Za-z0-9_-]{1,100}$/.test(fileId)) throw new BadRequestException("Identifiant de fichier invalide.");
     const { seance } = await this.seanceDuFormateur(groupeCle, numero, formateurMatricule);
     const storageKey = `tableaux/${seance.id}/${fileId}`;
@@ -158,8 +166,13 @@ export class SeanceLiveService {
       where: { seanceId_fileId: { seanceId, fileId } },
     });
     if (!fichier) throw new NotFoundException("Image introuvable.");
-    const { stream } = await this.storage.getObjectStream(fichier.storageKey);
-    return { stream, contentType: fichier.mimeType };
+    // Le Content-Type servi doit être celui assaini par typeServable()
+    // (voir storage.service.ts), jamais le mimeType brut stocké en base —
+    // sinon un fichier malveillant qui aurait passé l'upload (ou une ligne
+    // plus ancienne, avant le durcissement d'uploadFichierTableau) serait
+    // tout de même resservi avec son Content-Type d'origine.
+    const { stream, contentType } = await this.storage.getObjectStream(fichier.storageKey);
+    return { stream, contentType: contentType ?? "application/octet-stream" };
   }
 
   async getFichierFormateur(groupeCle: string, numero: number, formateurMatricule: string, fileId: string) {

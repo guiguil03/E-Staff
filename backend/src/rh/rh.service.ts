@@ -1505,8 +1505,17 @@ export class RhService {
 
   // Comparatif hebdomadaire — 8 dernières semaines ISO ayant réellement un
   // encaissement, jamais une semaine fabriquée pour remplir le tableau.
+  // Filtré à ~10 semaines en base (audit scalabilité du 2026-10-08) : seules
+  // les 8 dernières sont gardées après tri (slice(-8) plus bas), inutile de
+  // charger tout l'historique des encaissements pour ça — contrairement à
+  // getTendanceMensuelleFormation/getEncaissementsFormation ci-dessous, qui
+  // affichent volontairement tout l'historique (pas de slice), donc pas
+  // filtrées de la même façon.
   async getTendanceHebdomadaireFormation() {
-    const encaissements = await this.prisma.encaissementFormation.findMany();
+    const depuis = new Date(Date.now() - 10 * 7 * 24 * 60 * 60 * 1000);
+    const encaissements = await this.prisma.encaissementFormation.findMany({
+      where: { jour: { gte: depuis } },
+    });
     const parSemaine = new Map<string, number>();
     for (const e of encaissements) {
       const semaine = isoWeekLabel(new Date(e.jour));

@@ -121,6 +121,19 @@ export class NotationService {
     return apprenant;
   }
 
+  // Un apprenant doit appartenir au groupe de la séance notée — sans ça,
+  // findSeanceOrThrow vérifie bien que le formateur encadre le groupe, mais
+  // rien n'empêchait de noter/commenter n'importe quel apprenant de la
+  // plateforme en changeant juste le matricule dans l'URL (audit sécurité
+  // du 2026-10-08). Même contrôle que seance-live.service.ts (saveNote).
+  private async findApprenantDuGroupeOrThrow(matricule: string, groupeId: string) {
+    const apprenant = await this.findApprenantOrThrow(matricule);
+    if (apprenant.groupeId !== groupeId) {
+      throw new ForbiddenException(`${matricule} n'appartient pas à ce groupe.`);
+    }
+    return apprenant;
+  }
+
   private serialize(n: {
     id: string;
     competence: string;
@@ -156,7 +169,7 @@ export class NotationService {
     formateurMatricule?: string
   ) {
     const seance = await this.findSeanceOrThrow(groupeCle, numero, formateurMatricule);
-    const apprenant = await this.findApprenantOrThrow(apprenantMatricule);
+    const apprenant = await this.findApprenantDuGroupeOrThrow(apprenantMatricule, seance.groupeId);
     const notation = await this.prisma.notation.findUnique({
       where: { seanceId_apprenantId_competence: { seanceId: seance.id, apprenantId: apprenant.id, competence } },
     });
@@ -172,7 +185,7 @@ export class NotationService {
     formateurMatricule?: string
   ) {
     const seance = await this.findSeanceOrThrow(groupeCle, numero, formateurMatricule);
-    const apprenant = await this.findApprenantOrThrow(apprenantMatricule);
+    const apprenant = await this.findApprenantDuGroupeOrThrow(apprenantMatricule, seance.groupeId);
 
     const existing = await this.prisma.notation.findUnique({
       where: { seanceId_apprenantId_competence: { seanceId: seance.id, apprenantId: apprenant.id, competence } },
@@ -592,7 +605,10 @@ export class NotationService {
 
     const extension = path.extname(file.originalname) || "";
     const key = `devoirs/${apprenant.id}/${seance.id}-${competence}${extension}`;
-    await this.storage.uploadBuffer(key, file.buffer, file.mimetype || "application/octet-stream");
+    // uploadFile (flux depuis le fichier temporaire), pas uploadBuffer — le
+    // controller passe désormais ce endpoint en diskStorage (audit
+    // scalabilité du 2026-10-08), `file.buffer` n'existe plus.
+    await this.storage.uploadFile(key, file.path, file.mimetype || "application/octet-stream");
 
     const notation = await this.prisma.notation.upsert({
       where: { seanceId_apprenantId_competence: { seanceId: seance.id, apprenantId: apprenant.id, competence } },

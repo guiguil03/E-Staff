@@ -61,7 +61,12 @@ function decoderSession(token: unknown): SessionPayload | null {
   if (!token || typeof token !== "string") return null;
 
   try {
-    const decoded = jwt.verify(token, secret());
+    // Algorithme épinglé explicitement (audit sécurité du 2026-10-08) :
+    // signSession() ci-dessus ne signe qu'en HS256, mais sans le préciser
+    // ici, jwt.verify fait confiance à l'algorithme déclaré dans le token
+    // lui-même — par précaution si une clé asymétrique venait à coexister
+    // un jour (SSO externe), ce qui ouvrirait une confusion d'algorithme.
+    const decoded = jwt.verify(token, secret(), { algorithms: ["HS256"] });
     if (typeof decoded !== "object" || !decoded) return null;
     const { matricule, role, iat, emis } = decoded as Partial<SessionPayload>;
     if (typeof matricule !== "string" || typeof role !== "string") return null;

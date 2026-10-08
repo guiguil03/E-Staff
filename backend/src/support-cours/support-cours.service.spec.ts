@@ -31,14 +31,14 @@ const APPRENANT = {
 
 describe("SupportCoursService", () => {
   let prisma: ReturnType<typeof makePrismaMock>;
-  let storage: { uploadBuffer: jest.Mock; getObjectStream: jest.Mock; deleteObject: jest.Mock };
+  let storage: { uploadFile: jest.Mock; getObjectStream: jest.Mock; deleteObject: jest.Mock };
   let email: { send: jest.Mock };
   let service: SupportCoursService;
 
   beforeEach(() => {
     prisma = makePrismaMock();
     storage = {
-      uploadBuffer: jest.fn().mockResolvedValue(undefined),
+      uploadFile: jest.fn().mockResolvedValue(undefined),
       getObjectStream: jest.fn().mockResolvedValue({ stream: "un-stream", contentType: "application/pdf" }),
       deleteObject: jest.fn().mockResolvedValue(undefined),
     };
@@ -56,7 +56,7 @@ describe("SupportCoursService", () => {
     return {
       originalname: "cours.pdf",
       mimetype: "application/pdf",
-      buffer: Buffer.from("contenu"),
+      path: "/tmp/upload-fake-path",
       ...overrides,
     } as Express.Multer.File;
   }
@@ -76,10 +76,10 @@ describe("SupportCoursService", () => {
       await expect(
         service.uploadSupport(FORMATEUR.matricule, GROUPE.cle, null, fichier())
       ).rejects.toBeInstanceOf(ForbiddenException);
-      expect(storage.uploadBuffer).not.toHaveBeenCalled();
+      expect(storage.uploadFile).not.toHaveBeenCalled();
     });
 
-    it("uploade le fichier, crée la ligne, et notifie tous les apprenants du groupe", async () => {
+    it("uploade le fichier (en flux depuis le disque), crée la ligne, et notifie tous les apprenants du groupe", async () => {
       prisma.supportCours.create.mockImplementation(({ data }) => Promise.resolve({ id: "support-1", ...data }));
       prisma.apprenant.findMany.mockResolvedValue([
         APPRENANT,
@@ -87,10 +87,13 @@ describe("SupportCoursService", () => {
       ]);
 
       const result = await service.uploadSupport(FORMATEUR.matricule, GROUPE.cle, 3, fichier());
+      // La notification des apprenants n'est plus attendue par uploadSupport
+      // (audit scalabilité du 2026-10-08, fire-and-forget).
+      await new Promise((resolve) => setImmediate(resolve));
 
-      expect(storage.uploadBuffer).toHaveBeenCalledWith(
+      expect(storage.uploadFile).toHaveBeenCalledWith(
         expect.stringContaining(`supports-cours/${GROUPE.id}/`),
-        expect.any(Buffer),
+        "/tmp/upload-fake-path",
         "application/pdf"
       );
       expect(prisma.supportCours.create).toHaveBeenCalledWith(

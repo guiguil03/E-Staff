@@ -1148,25 +1148,40 @@ export class ProductionService {
       orderBy: { dateDebut: "desc" },
     });
 
-    return Promise.all(
-      contrats.map(async (c) => {
-        const montant = round2((c.tarifMensuel ?? 0) * demarragePct);
-        const row =
-          c.commissionDemarrage ??
-          (await this.prisma.commissionDemarrageApporteur.create({
-            data: { contratId: c.id, connecteurId: c.connecteurId as string, montant },
-          }));
-        return {
-          id: row.id,
+    // Get-or-create GROUPÉ (audit scalabilité du 2026-10-08, même recette
+    // que getDetailPaieAgents/getDetailPoolSuperviseurs plus haut) : un seul
+    // createMany({skipDuplicates: true}) pour les contrats sans ligne
+    // CommissionDemarrageApporteur encore, suivi d'un seul findMany —
+    // remplace le create par contrat qu'il y avait avant dans la boucle.
+    const sansCommission = contrats.filter((c) => !c.commissionDemarrage);
+    if (sansCommission.length > 0) {
+      await this.prisma.commissionDemarrageApporteur.createMany({
+        data: sansCommission.map((c) => ({
           contratId: c.id,
-          clientNom: c.clientNom,
-          connecteurNom: c.connecteur ? `${c.connecteur.firstName} ${c.connecteur.lastName}` : null,
-          montant: row.montant,
-          statut: row.statut,
-          datePaiement: row.datePaiement,
-        };
-      })
-    );
+          connecteurId: c.connecteurId as string,
+          montant: round2((c.tarifMensuel ?? 0) * demarragePct),
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    const rows = await this.prisma.commissionDemarrageApporteur.findMany({
+      where: { contratId: { in: contrats.map((c) => c.id) } },
+    });
+    const rowByContratId = new Map(rows.map((r) => [r.contratId, r]));
+
+    return contrats.map((c) => {
+      const row = rowByContratId.get(c.id)!;
+      return {
+        id: row.id,
+        contratId: c.id,
+        clientNom: c.clientNom,
+        connecteurNom: c.connecteur ? `${c.connecteur.firstName} ${c.connecteur.lastName}` : null,
+        montant: row.montant,
+        statut: row.statut,
+        datePaiement: row.datePaiement,
+      };
+    });
   }
 
   // Cumul historique (toutes périodes confondues) de la commission récurrente

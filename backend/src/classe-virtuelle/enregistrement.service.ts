@@ -62,12 +62,20 @@ export class EnregistrementService {
       where: { createdAt: { lt: limite } },
       select: { id: true, dailyRecordingId: true },
     });
-    let supprimes = 0;
+    // Les appels à l'API Daily restent par force séquentiels/individuels
+    // (un par enregistrement), mais la suppression en base est regroupée en
+    // un seul deleteMany (audit scalabilité du 2026-10-08) plutôt qu'un
+    // delete par ligne — le volume d'écritures DB ne dépend plus du nombre
+    // d'enregistrements purgés ce jour-là.
+    const idsSupprimes: string[] = [];
     for (const e of anciens) {
       if (!(await this.daily.deleteRecording(e.dailyRecordingId))) continue;
-      await this.prisma.enregistrement.delete({ where: { id: e.id } });
-      supprimes++;
+      idsSupprimes.push(e.id);
     }
+    if (idsSupprimes.length > 0) {
+      await this.prisma.enregistrement.deleteMany({ where: { id: { in: idsSupprimes } } });
+    }
+    const supprimes = idsSupprimes.length;
     if (anciens.length) {
       this.logger.log(`Enregistrements de plus de ${CONSERVATION_ENREGISTREMENTS_JOURS} jours supprimés : ${supprimes}/${anciens.length}`);
     }

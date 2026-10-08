@@ -83,13 +83,13 @@ function maxPartieOuverteCriteria() {
 describe("EvaluationService", () => {
   let prisma: ReturnType<typeof makePrismaMock>;
   let email: { send: jest.Mock };
-  let storage: { uploadBuffer: jest.Mock; getObjectStream: jest.Mock };
+  let storage: { uploadBuffer: jest.Mock; uploadFile: jest.Mock; getObjectStream: jest.Mock };
   let service: EvaluationService;
 
   beforeEach(() => {
     prisma = makePrismaMock();
     email = { send: jest.fn().mockResolvedValue({ delivered: true }) };
-    storage = { uploadBuffer: jest.fn(), getObjectStream: jest.fn() };
+    storage = { uploadBuffer: jest.fn(), uploadFile: jest.fn(), getObjectStream: jest.fn() };
     service = new EvaluationService(
       prisma as unknown as PrismaService,
       email as unknown as EmailService,
@@ -245,6 +245,10 @@ describe("EvaluationService", () => {
       ]);
 
       await service.submitAnswers("attempt-1", { oralAnswers: { q1: "a" } });
+      // La notification formateurs n'est plus attendue par submitAnswers
+      // (audit scalabilité du 2026-10-08, fire-and-forget) — on laisse la
+      // microtask queue se vider avant de vérifier l'envoi.
+      await new Promise((resolve) => setImmediate(resolve));
 
       expect(email.send).toHaveBeenCalledTimes(1);
       expect(email.send).toHaveBeenCalledWith(
@@ -450,6 +454,44 @@ describe("EvaluationService", () => {
       expect(args.text).toContain(TIER_LABELS.placement_direct);
       expect(args.text).toContain("82");
       expect(args.text).toContain("Awa Diallo");
+    });
+  });
+
+  // Régression scalabilité (2026-10-08) : l'endpoint est passé en
+  // diskStorage (voir evaluation.controller.ts) — le service doit uploader
+  // en flux depuis file.path (uploadFile), plus jamais file.buffer.
+  describe("saveVideoResponse", () => {
+    it("rejette si la tentative n'est plus en cours", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(baseAttempt({ status: "soumis" }));
+      const file = { originalname: "video.webm", path: "/tmp/video-fake-path", mimetype: "video/webm" } as Express.Multer.File;
+
+      await expect(service.saveVideoResponse("attempt-1", 0, file)).rejects.toThrow(BadRequestException);
+      expect(storage.uploadFile).not.toHaveBeenCalled();
+    });
+
+    it("uploade la vidéo en flux depuis le fichier temporaire et enregistre la réponse", async () => {
+      prisma.evaluationAttempt.findUnique.mockResolvedValue(baseAttempt({ status: "en_cours" }));
+      prisma.videoResponse.upsert.mockResolvedValue({ id: "v-1", attemptId: "attempt-1", taskIndex: 0 });
+      const file = { originalname: "video.webm", path: "/tmp/video-fake-path", mimetype: "video/webm" } as Express.Multer.File;
+
+      await service.saveVideoResponse("attempt-1", 0, file, "sujet-1", "option-a");
+
+      expect(storage.uploadFile).toHaveBeenCalledWith(
+        "evaluations/attempt-1/video-0.webm",
+        "/tmp/video-fake-path",
+        "video/webm"
+      );
+      expect(prisma.videoResponse.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            attemptId: "attempt-1",
+            taskIndex: 0,
+            videoUrl: "evaluations/attempt-1/video-0.webm",
+            subjectKey: "sujet-1",
+            optionKey: "option-a",
+          }),
+        })
+      );
     });
   });
 

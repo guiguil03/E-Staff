@@ -46,7 +46,10 @@ export class SupportCoursService {
 
     const extension = path.extname(file.originalname) || "";
     const key = `supports-cours/${groupe.id}/${Date.now()}${extension}`;
-    await this.storage.uploadBuffer(key, file.buffer, file.mimetype || "application/octet-stream");
+    // uploadFile (flux depuis le fichier temporaire), pas uploadBuffer — le
+    // controller passe désormais ce endpoint en diskStorage (audit
+    // scalabilité du 2026-10-08), `file.buffer` n'existe plus.
+    await this.storage.uploadFile(key, file.path, file.mimetype || "application/octet-stream");
 
     const support = await this.prisma.supportCours.create({
       data: {
@@ -63,7 +66,10 @@ export class SupportCoursService {
     const link = `${APP_URL}/compte/apprenant/supports-de-cours`;
     const contexte =
       seanceNumero !== null ? `pour la séance n°${seanceNumero}` : "pour votre groupe";
-    await Promise.all(
+    // Pas d'await (audit scalabilité du 2026-10-08) : un groupe plus
+    // nombreux ne doit pas faire attendre la réponse de l'upload sur des
+    // dizaines/centaines d'appels e-mail concurrents.
+    void Promise.all(
       apprenants.map((a) =>
         this.email.send({
           to: a.email,

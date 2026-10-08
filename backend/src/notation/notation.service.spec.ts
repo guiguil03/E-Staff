@@ -18,7 +18,7 @@ function makePrismaMock() {
 }
 
 function makeStorageMock() {
-  return { uploadBuffer: jest.fn(), getObjectStream: jest.fn() };
+  return { uploadBuffer: jest.fn(), uploadFile: jest.fn(), getObjectStream: jest.fn() };
 }
 
 const GROUPE = { id: "groupe-1", cle: "A", label: "Groupe A", formateurId: "f-1" };
@@ -31,6 +31,7 @@ const APPRENANT = {
   prenom: "Awa",
   nom: "Diallo",
   email: "awa@example.com",
+  groupeId: SEANCE.groupeId,
 };
 
 describe("NotationService", () => {
@@ -125,6 +126,21 @@ describe("NotationService", () => {
       const result = await service.getNotation("A", 3, "ETF-2026-0001", "oral");
       expect(result?.gridData).toBeNull();
     });
+
+    // Régression IDOR (audit sécurité du 2026-10-08) : findSeanceOrThrow
+    // vérifie bien que le formateur encadre le groupe "A", mais rien
+    // n'empêchait de lire/noter n'importe quel AUTRE apprenant de la
+    // plateforme en changeant juste le matricule dans l'URL.
+    it("refuse de lire la notation d'un apprenant qui n'appartient pas au groupe de la séance", async () => {
+      prisma.groupe.findUnique.mockResolvedValue(GROUPE);
+      prisma.seance.findUnique.mockResolvedValue(SEANCE);
+      prisma.apprenant.findUnique.mockResolvedValue({ ...APPRENANT, groupeId: "autre-groupe" });
+
+      await expect(service.getNotation("A", 3, "ETF-2026-0001", "oral")).rejects.toThrow(
+        ForbiddenException
+      );
+      expect(prisma.notation.findUnique).not.toHaveBeenCalled();
+    });
   });
 
   describe("gradeNotation", () => {
@@ -132,6 +148,20 @@ describe("NotationService", () => {
       prisma.groupe.findUnique.mockResolvedValue(GROUPE);
       prisma.seance.findUnique.mockResolvedValue(SEANCE);
       prisma.apprenant.findUnique.mockResolvedValue(APPRENANT);
+    });
+
+    // Même régression IDOR que getNotation ci-dessus, côté écriture cette
+    // fois : sans le contrôle, un formateur pouvait NOTER (pas seulement
+    // lire) un apprenant hors de son groupe, et ça déclenche un vrai
+    // e-mail à cet apprenant avec un commentaire choisi par l'attaquant.
+    it("refuse de noter un apprenant qui n'appartient pas au groupe de la séance", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue({ ...APPRENANT, groupeId: "autre-groupe" });
+
+      await expect(
+        service.gradeNotation("A", 3, "ETF-2026-0001", "oral", { scoreOn20: 20 })
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.notation.upsert).not.toHaveBeenCalled();
+      expect(email.send).not.toHaveBeenCalled();
     });
 
     it("upsert avec gridData sérialisé en JSON string et une date gradedAt", async () => {
@@ -274,7 +304,7 @@ describe("NotationService", () => {
   describe("uploadDevoir", () => {
     const file = {
       originalname: "devoir.pdf",
-      buffer: Buffer.from("contenu"),
+      path: "/tmp/devoir-fake-path",
       mimetype: "application/pdf",
     } as Express.Multer.File;
 
@@ -284,7 +314,7 @@ describe("NotationService", () => {
       await expect(service.uploadDevoir("ETF-2026-0001", 99, "expression_orale", file)).rejects.toThrow(
         NotFoundException
       );
-      expect(storage.uploadBuffer).not.toHaveBeenCalled();
+      expect(storage.uploadFile).not.toHaveBeenCalled();
     });
 
     it("dépose le fichier sous une clé stable et remet scoreOn20/gradedAt à null lors d'un redépôt", async () => {
@@ -305,9 +335,9 @@ describe("NotationService", () => {
 
       await service.uploadDevoir("ETF-2026-0001", 3, "expression_orale", file);
 
-      expect(storage.uploadBuffer).toHaveBeenCalledWith(
+      expect(storage.uploadFile).toHaveBeenCalledWith(
         `devoirs/${APPRENANT.id}/${SEANCE.id}-expression_orale.pdf`,
-        file.buffer,
+        file.path,
         "application/pdf"
       );
       const call = prisma.notation.upsert.mock.calls[0][0];
@@ -342,14 +372,14 @@ describe("NotationService", () => {
       await expect(
         service.uploadDevoir("ETF-2026-0001", 3, "expression_orale", file)
       ).rejects.toThrow(BadRequestException);
-      expect(storage.uploadBuffer).not.toHaveBeenCalled();
+      expect(storage.uploadFile).not.toHaveBeenCalled();
     });
 
     it("refuse une compétence qui ne se dépose pas par l'apprenant", async () => {
       await expect(
         service.uploadDevoir("ETF-2026-0001", 3, "comprehension_orale", file)
       ).rejects.toThrow(BadRequestException);
-      expect(storage.uploadBuffer).not.toHaveBeenCalled();
+      expect(storage.uploadFile).not.toHaveBeenCalled();
     });
 
     it("refuse une requête sans fichier", async () => {

@@ -69,7 +69,11 @@ export class PresenceService {
     });
 
     if (role === "formateur" && !formateurDejaConnecte) {
-      await this.notifierClasseDemarree(seance);
+      // Pas d'await (audit scalabilité du 2026-10-08) : recordJoin est
+      // appelée depuis le webhook Daily (daily-webhook.controller.ts), qui
+      // doit répondre vite — une boucle d'e-mails sur tout un groupe ne
+      // doit pas retarder ni risquer de faire retenter le webhook.
+      void this.notifierClasseDemarree(seance);
     }
   }
 
@@ -80,23 +84,32 @@ export class PresenceService {
     numero: number;
     groupe: { label: string; apprenants: { prenom: string; email: string }[] };
   }) {
-    const link = `${APP_URL}/compte/apprenant/classe-virtuelle`;
-    for (const apprenant of seance.groupe.apprenants) {
-      await this.email.send({
-        to: apprenant.email,
-        subject: `Votre classe virtuelle vient de commencer (${seance.groupe.label})`,
-        text: `Bonjour ${apprenant.prenom},\n\nVotre formateur vient de démarrer la séance n°${seance.numero} (${seance.groupe.label}).\n\nRejoignez la classe virtuelle ici :\n${link}\n\nÀ tout de suite,\nL'équipe e-Staf`,
-        html: renderEmailHtml({
-          title: "Votre classe virtuelle commence",
-          preheader: `${seance.groupe.label} — séance n°${seance.numero}`,
-          bodyHtml:
-            emailParagraph(`Bonjour ${escapeHtml(apprenant.prenom)},`) +
-            emailParagraph(
-              `Votre formateur vient de démarrer la séance n°${seance.numero} (${seance.groupe.label}).`
-            ) +
-            ctaButton("Rejoindre maintenant", link),
-        }),
-      });
+    try {
+      const link = `${APP_URL}/compte/apprenant/classe-virtuelle`;
+      // Promise.all plutôt qu'une boucle séquentielle — même raisonnement
+      // que les autres notifications de masse (email.send() ne rejette
+      // jamais, voir EmailService).
+      await Promise.all(
+        seance.groupe.apprenants.map((apprenant) =>
+          this.email.send({
+            to: apprenant.email,
+            subject: `Votre classe virtuelle vient de commencer (${seance.groupe.label})`,
+            text: `Bonjour ${apprenant.prenom},\n\nVotre formateur vient de démarrer la séance n°${seance.numero} (${seance.groupe.label}).\n\nRejoignez la classe virtuelle ici :\n${link}\n\nÀ tout de suite,\nL'équipe e-Staf`,
+            html: renderEmailHtml({
+              title: "Votre classe virtuelle commence",
+              preheader: `${seance.groupe.label} — séance n°${seance.numero}`,
+              bodyHtml:
+                emailParagraph(`Bonjour ${escapeHtml(apprenant.prenom)},`) +
+                emailParagraph(
+                  `Votre formateur vient de démarrer la séance n°${seance.numero} (${seance.groupe.label}).`
+                ) +
+                ctaButton("Rejoindre maintenant", link),
+            }),
+          })
+        )
+      );
+    } catch (err) {
+      this.logger.error(`Notification "classe démarrée" impossible : ${String(err)}`);
     }
   }
 

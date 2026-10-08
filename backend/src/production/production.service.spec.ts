@@ -333,11 +333,7 @@ describe("ProductionService — commissions apporteurs", () => {
     return {
       connecteur: { findMany: jest.fn() },
       contratB2B: { findMany: jest.fn() },
-      commissionDemarrageApporteur: {
-        create: jest.fn(({ data }: { data: Record<string, unknown> }) =>
-          Promise.resolve({ id: "cda-1", statut: "en_attente", datePaiement: null, ...data })
-        ),
-      },
+      commissionDemarrageApporteur: makeUniqueStore(["contratId"]),
       paiementAgent: makeUniqueStore(["missionId", "periode"]),
     };
   }
@@ -402,7 +398,7 @@ describe("ProductionService — commissions apporteurs", () => {
       };
     }
 
-    it("transmet le filtre connecteurId et crée la commission si elle n'existe pas encore", async () => {
+    it("transmet le filtre connecteurId et crée la commission (groupée) si elle n'existe pas encore", async () => {
       prisma.contratB2B.findMany.mockImplementation(
         ({ where }: { where?: { connecteurId?: unknown } }) => {
           const all = [contratFixture()];
@@ -419,14 +415,15 @@ describe("ProductionService — commissions apporteurs", () => {
       expect(prisma.contratB2B.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { connecteurId: "con-1" } })
       );
-      expect(prisma.commissionDemarrageApporteur.create).toHaveBeenCalledWith({
-        data: { contratId: "contrat-1", connecteurId: "con-1", montant: round2(1000000 * PCT_DEMARRAGE) },
+      expect(prisma.commissionDemarrageApporteur.createMany).toHaveBeenCalledWith({
+        data: [{ contratId: "contrat-1", connecteurId: "con-1", montant: round2(1000000 * PCT_DEMARRAGE) }],
+        skipDuplicates: true,
       });
       expect(row.montant).toBe(round2(1000000 * PCT_DEMARRAGE));
       expect(row.statut).toBe("en_attente");
     });
 
-    it("réutilise la commission déjà matérialisée sans en recréer une autre", async () => {
+    it("réutilise la commission déjà matérialisée sans en recréer une autre (pas de createMany)", async () => {
       prisma.contratB2B.findMany.mockResolvedValue([
         contratFixture({
           commissionDemarrage: {
@@ -437,12 +434,34 @@ describe("ProductionService — commissions apporteurs", () => {
           },
         }),
       ]);
+      prisma.commissionDemarrageApporteur.rows.push({
+        id: "cda-existante",
+        contratId: "contrat-1",
+        connecteurId: "con-1",
+        montant: 99999,
+        statut: "paye",
+        datePaiement: new Date("2026-09-01"),
+      });
 
       const [row] = await service.getCommissionsDemarrage("con-1");
 
-      expect(prisma.commissionDemarrageApporteur.create).not.toHaveBeenCalled();
+      expect(prisma.commissionDemarrageApporteur.createMany).not.toHaveBeenCalled();
       expect(row.montant).toBe(99999);
       expect(row.statut).toBe("paye");
+    });
+
+    it("regroupe plusieurs contrats sans commission en un seul createMany (pas un create par contrat)", async () => {
+      prisma.contratB2B.findMany.mockResolvedValue([
+        contratFixture({ id: "contrat-1" }),
+        contratFixture({ id: "contrat-2", clientNom: "Client Y" }),
+      ]);
+
+      const rows = await service.getCommissionsDemarrage();
+
+      expect(prisma.commissionDemarrageApporteur.createMany).toHaveBeenCalledTimes(1);
+      expect(prisma.commissionDemarrageApporteur.createMany.mock.calls[0][0].data).toHaveLength(2);
+      expect(rows).toHaveLength(2);
+      expect(rows.map((r) => r.contratId)).toEqual(["contrat-1", "contrat-2"]);
     });
   });
 

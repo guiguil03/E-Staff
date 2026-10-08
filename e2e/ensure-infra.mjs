@@ -99,6 +99,17 @@ async function main() {
       `-e POSTGRES_PASSWORD=${dbUrl.password} -e POSTGRES_DB=${dbUrl.pathname.slice(1)} postgres:16`,
   });
 
+  // `minio/minio` (Docker Hub) : MinIO est passé en distribution
+  // "source-only" et a retiré ses images publiques le 11-14/09/2026
+  // (litige de licence/trademark) — l'API Docker Hub renvoie "object not
+  // found" pour ce repo depuis. `quay.io/minio/minio`, l'alternative
+  // recommandée partout, a lui aussi coupé les pulls anonymes fin
+  // septembre 2026. `bitnamilegacy/minio` reste public à ce jour (mêmes
+  // variables MINIO_ROOT_USER/MINIO_ROOT_PASSWORD, image figée donc stable,
+  // pas de `server /data` à passer — son propre entrypoint démarre le
+  // serveur) : solution de repli la plus fiable trouvée, mais non testée
+  // ici (pas d'accès Docker dans ce sandbox) — si le prochain run CI échoue
+  // encore sur ce conteneur, regarder `docker logs e-staf-e2e-s3`.
   const s3Url = new URL(E2E_S3_ENDPOINT_URL);
   await ensureContainer({
     name: MINIO_CONTAINER,
@@ -106,7 +117,7 @@ async function main() {
     port: Number(s3Url.port || 9000),
     runArgs:
       `-p ${s3Url.port || 9000}:9000 -e MINIO_ROOT_USER=${E2E_S3_ACCESS_KEY_ID} ` +
-      `-e MINIO_ROOT_PASSWORD=${E2E_S3_SECRET_ACCESS_KEY} minio/minio server /data`,
+      `-e MINIO_ROOT_PASSWORD=${E2E_S3_SECRET_ACCESS_KEY} bitnamilegacy/minio:latest`,
   });
 
   // Un MinIO fraîchement démarré n'a aucun bucket — création idempotente

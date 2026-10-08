@@ -157,6 +157,11 @@ model Registration {
   // jetons, dont les liens déjà envoyés contiennent l'identifiant.
   lienToken          String?  @unique
   accesParIdAutorise Boolean  @default(false)
+
+  // Comptage des candidatures par offre (OffresEmploiService.list, _count)
+  // — sans index, un full scan de Registration (tous funnels confondus,
+  // bien plus nombreux que les seules offres d'emploi) par offre affichée.
+  @@index([offreEmploiId])
 }
 
 // ---------------------------------------------------------------------------
@@ -367,6 +372,10 @@ model EvaluationAttempt {
   correctionPriseAt DateTime?
 
   @@index([candidatId])
+  // Filtre le plus utilisé du modèle (file de correction, pipeline RH,
+  // compteur de l'overview RH) — sans index, full scan de toutes les
+  // tentatives jamais passées à chaque chargement de ces vues.
+  @@index([status])
 
   // Jeton des liens publics (contrat, paiement) envoyés par e-mail — voir
   // common/lien-token.ts. accesParIdAutorise : lignes antérieures aux
@@ -1116,6 +1125,9 @@ model Mission {
   @@index([apprenantId])
   @@index([contratId])
   @@index([superviseurId])
+  // "WHERE dateFin IS NULL" (missions actives) filtre les overview
+  // Production/RH, sans portée en amont — full scan à l'échelle.
+  @@index([dateFin])
 }
 
 model Facture {

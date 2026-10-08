@@ -222,6 +222,9 @@ describe("CockpitService — scoping par formateur", () => {
       });
 
       const result = await service.createDiffusion(formateur.matricule, null, "Salut");
+      // L'envoi aux destinataires en masse n'est plus attendu par
+      // createDiffusion (audit scalabilité du 2026-10-08, fire-and-forget).
+      await new Promise((resolve) => setImmediate(resolve));
 
       expect(prisma.apprenant.findMany).toHaveBeenCalledWith({
         where: { groupe: { formateurId: "f-1" } },
@@ -303,6 +306,7 @@ describe("CockpitService — scoping par formateur", () => {
       });
 
       await service.createDiffusion(formateur.matricule, "groupe-a", "Salut");
+      await new Promise((resolve) => setImmediate(resolve));
 
       expect(prisma.apprenant.findMany).toHaveBeenCalledWith({ where: { groupeId: "groupe-a" } });
       expect(email.send).toHaveBeenCalledTimes(1);

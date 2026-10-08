@@ -843,7 +843,12 @@ ${message}
       data: { formateurId: formateur.id, groupeId, message },
     });
 
-    await Promise.all(
+    // Pas d'await (audit scalabilité du 2026-10-08) : un groupe/portefeuille
+    // formateur plus grand ferait attendre la création de la diffusion sur
+    // des centaines d'appels e-mail concurrents. email.send() ne rejette
+    // jamais (erreurs catchées en interne, voir EmailService), donc rien
+    // n'est perdu à ne pas attendre ce Promise.all ici.
+    void Promise.all(
       cibles.map((a) =>
         this.email.send({
           to: a.email,

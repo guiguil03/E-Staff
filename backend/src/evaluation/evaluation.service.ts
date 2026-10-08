@@ -369,7 +369,13 @@ export class EvaluationService {
         where: { id: attemptId },
         data: { status: "soumis", submittedAt: new Date() },
       });
-      await this.notifierFormateursTestSoumis(attempt.candidat);
+      // Pas d'await (audit scalabilité du 2026-10-08) : avant, la réponse
+      // HTTP au candidat attendait la fin de l'envoi à TOUS les formateurs
+      // de l'académie, un par un — avec 50 formateurs ça ajoutait déjà
+      // 10-25s à la soumission d'un test, avec un vrai risque de timeout.
+      // La méthode a son propre try/catch et logge ses échecs, rien n'est
+      // perdu à ne pas l'attendre ici.
+      void this.notifierFormateursTestSoumis(attempt.candidat);
     }
   }
 
@@ -382,23 +388,32 @@ export class EvaluationService {
       const formateurs = await this.prisma.formateur.findMany({ select: { prenom: true, email: true } });
       const link = `${process.env.FRONTEND_URL ?? "http://localhost:3000"}/evaluation/formateur`;
       const nom = `${candidat.firstName} ${candidat.lastName}`;
-      for (const formateur of formateurs.filter((f) => f.email?.trim())) {
-        await this.email.send({
-          to: formateur.email,
-          subject: `Nouveau test d'admission à corriger — ${nom}`,
-          text: `Bonjour ${formateur.prenom},\n\n${nom} vient de terminer son test d'admission. Il attend une correction (mises en situation, vidéos, écrits).\n\nCorriger le test :\n${link}\n\nL'équipe e-Staf`,
-          html: renderEmailHtml({
-            title: "Nouveau test d'admission à corriger",
-            preheader: `${nom} vient de terminer son test`,
-            bodyHtml:
-              emailParagraph(`Bonjour ${escapeHtml(formateur.prenom)},`) +
-              emailParagraph(
-                `<strong>${escapeHtml(nom)}</strong> vient de terminer son test d'admission. Il attend une correction (mises en situation, vidéos, écrits).`
-              ) +
-              ctaButton("Corriger le test", link),
-          }),
-        });
-      }
+      // Promise.all plutôt qu'une boucle séquentielle (audit scalabilité du
+      // 2026-10-08) : email.send() ne rejette jamais (voir EmailService,
+      // les échecs sont catchés et retournés comme {delivered:false}), donc
+      // paralléliser ne risque pas de laisser un Promise.all échouer en
+      // silence sur un envoi resté en attente.
+      await Promise.all(
+        formateurs
+          .filter((f) => f.email?.trim())
+          .map((formateur) =>
+            this.email.send({
+              to: formateur.email,
+              subject: `Nouveau test d'admission à corriger — ${nom}`,
+              text: `Bonjour ${formateur.prenom},\n\n${nom} vient de terminer son test d'admission. Il attend une correction (mises en situation, vidéos, écrits).\n\nCorriger le test :\n${link}\n\nL'équipe e-Staf`,
+              html: renderEmailHtml({
+                title: "Nouveau test d'admission à corriger",
+                preheader: `${nom} vient de terminer son test`,
+                bodyHtml:
+                  emailParagraph(`Bonjour ${escapeHtml(formateur.prenom)},`) +
+                  emailParagraph(
+                    `<strong>${escapeHtml(nom)}</strong> vient de terminer son test d'admission. Il attend une correction (mises en situation, vidéos, écrits).`
+                  ) +
+                  ctaButton("Corriger le test", link),
+              }),
+            })
+          )
+      );
     } catch (err) {
       this.logger.error(`Notification formateurs (test soumis) impossible : ${String(err)}`);
     }
@@ -511,11 +526,10 @@ export class EvaluationService {
 
     const extension = path.extname(file.originalname) || ".webm";
     const key = `evaluations/${attemptId}/video-${taskIndex}${extension}`;
-    await this.storage.uploadBuffer(
-      key,
-      file.buffer,
-      file.mimetype || "video/webm"
-    );
+    // uploadFile (flux depuis le fichier temporaire), pas uploadBuffer — le
+    // controller passe désormais ce endpoint en diskStorage (audit
+    // scalabilité du 2026-10-08), `file.buffer` n'existe plus.
+    await this.storage.uploadFile(key, file.path, file.mimetype || "video/webm");
 
     const response = await this.prisma.videoResponse.upsert({
       where: {
