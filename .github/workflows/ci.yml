@@ -100,10 +100,18 @@ jobs:
     # ce job via `needs`, donc il ne bloquait deja pas le deploiement —
     # ceci evite juste qu'il fasse passer le run global en rouge).
     continue-on-error: true
-    # Pas de bloc `services:` : e2e/global-setup.ts démarre lui-même
-    # Postgres et MinIO via Docker (disponible nativement sur ce runner) s'ils
-    # ne tournent pas déjà — jamais la base/bucket Railway de dev/prod (voir
-    # backend/.env). Même mécanisme qu'en local, voir ce fichier pour le détail.
+    # Pas de bloc `services:` : `npm run test:e2e` démarre lui-même Postgres
+    # et MinIO via Docker (disponible nativement sur ce runner) s'ils ne
+    # tournent pas déjà, AVANT de lancer Playwright (hook npm
+    # `pretest:e2e` -> e2e/ensure-infra.mjs) — jamais la base/bucket
+    # Railway de dev/prod (voir backend/.env). Même mécanisme qu'en local.
+    #
+    # Historique (2026-10-08) : cette logique vivait dans le hook
+    # `globalSetup` de Playwright, qui démarre en réalité APRES les process
+    # `webServer` (donc après le backend) — sur un runner CI tout neuf, rien
+    # n'écoutait encore sur Postgres quand le backend tentait de s'y
+    # connecter, d'où l'échec systématique de ce job. Voir
+    # e2e/ensure-infra.mjs pour le détail.
     steps:
       - uses: actions/checkout@v4
 
@@ -124,6 +132,18 @@ jobs:
 
       - name: Run E2E
         run: npm run test:e2e
+
+      # Sans ça, un échec n'est diagnosticable que via l'annotation "github"
+      # (titre + message générique) — jamais le détail (capture d'écran,
+      # trace, étape qui a échoué). `if: always()` : utile aussi bien quand
+      # le job échoue que pour inspecter un run vert en cas de doute.
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
 
   deploy-vercel:
     name: Deploy to Vercel (production)

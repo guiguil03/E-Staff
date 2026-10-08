@@ -27,9 +27,9 @@ export const E2E_CREDENTIALS = {
 };
 
 // Le backend démarre à chaque run contre une base jetable qu'il migre et
-// seed lui-même (voir global-setup.ts pour la base elle-même) : chaque run
-// E2E repart d'un état de données connu, indépendant des runs précédents ou
-// de la base de dev réelle.
+// seed lui-même (voir e2e/ensure-infra.mjs pour la base elle-même) : chaque
+// run E2E repart d'un état de données connu, indépendant des runs
+// précédents ou de la base de dev réelle.
 const backendEnv = {
   DATABASE_URL: E2E_DATABASE_URL,
   PORT: String(BACKEND_PORT),
@@ -61,7 +61,14 @@ const backendEnv = {
 
 export default defineConfig({
   testDir: "./e2e",
-  globalSetup: "./e2e/global-setup.ts",
+  // Pas de `globalSetup` ici pour démarrer Postgres/MinIO : dans l'ordre
+  // réel d'exécution de Playwright, les process `webServer` démarrent AVANT
+  // `globalSetup` (confirmé dans playwright/lib/runner/index.js,
+  // createGlobalSetupTasks), alors que le backend ci-dessous a besoin que
+  // Postgres tourne déjà pour `prisma migrate deploy`. Cette logique vit
+  // maintenant dans e2e/ensure-infra.mjs, appelé en `pretest:e2e` — donc
+  // AVANT que `playwright test` (et ses webServer) ne démarre, quel que
+  // soit l'environnement. Voir ce fichier pour le détail du bug (2026-10-08).
   // Les specs partagent la même base (pas d'isolation par test) — golden
   // paths séquentiels plutôt que suite exhaustive, voir chaque fichier pour
   // le détail de ce qu'il seed/consomme.
