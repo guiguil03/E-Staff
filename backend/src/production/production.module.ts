@@ -8,5 +8,6 @@ import { ProductionService } from "./production.service";
   imports: [PrismaModule],
   controllers: [ProductionController],
   providers: [ProductionService, StorageService],
+  exports: [ProductionService],
 })
 export class ProductionModule {}

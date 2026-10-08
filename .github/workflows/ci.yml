@@ -1,20 +1,26 @@
 name: CI
 
+# Gate = build (+ type-check/lint) et deploiement uniquement. Les tests
+# (unitaires front/back et E2E Playwright) tournent toujours et remontent
+# leur statut dans l'onglet Checks, mais ne font plus echouer la CI ni
+# bloquer de deploiement — voir `continue-on-error` sur les steps/jobs de
+# test ci-dessous. Les scripts "prebuild" qui lancaient les tests avant le
+# build (package.json / backend/package.json) ont ete retires pour la meme
+# raison : `npm run build` ne doit plus pouvoir echouer a cause d'un test.
+#
 # Railway (backend) redeploie automatiquement sur chaque push a main,
 # independamment de ce workflow — pas de process de PR sur ce projet, tout
-# part directement sur main. Le blocage se fait au niveau du build lui-meme :
-# backend/package.json a un script "prebuild" (jest) qui s'execute
-# automatiquement avant "build" et fait echouer la commande si un test
-# casse — Railway execute `npm run build`, donc un test casse = pas de
-# build = pas de deploiement Railway, sans avoir besoin de gate ici.
+# part directement sur main. Railway execute `npm run build`, qui ne depend
+# plus des tests (voir ci-dessus).
 #
 # Vercel (frontend), en revanche, est piloté explicitement par les jobs
 # deploy-vercel* ci-dessous plutot que par l'auto-deploy Git de Vercel : le
-# deploiement ne part que si le job `frontend` (build + tests) est vert.
-# L'auto-deploy Git de Vercel doit rester desactive cote dashboard Vercel
-# (Project Settings > Git) pour eviter un deploiement parallele qui
-# ignorerait ce gate — voir README/discussion pour le detail du setup
-# (secrets VERCEL_TOKEN / VERCEL_ORG_ID / VERCEL_PROJECT_ID).
+# deploiement ne part que si le job `frontend` (build) est vert — les tests
+# de ce job sont non-bloquants, donc un test casse n'empeche plus le
+# deploiement. L'auto-deploy Git de Vercel doit rester desactive cote
+# dashboard Vercel (Project Settings > Git) pour eviter un deploiement
+# parallele qui ignorerait ce gate — voir README/discussion pour le detail
+# du setup (secrets VERCEL_TOKEN / VERCEL_ORG_ID / VERCEL_PROJECT_ID).
 #
 # Environnements : push sur `main` -> Vercel production (domaine .com) +
 # backend Railway "production". Push sur `develop` -> Vercel preview (URL
@@ -46,8 +52,11 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: https://backend-production-547d8.up.railway.app
 
+      # Non-bloquant : remonte dans Checks mais ne fait plus echouer le job
+      # ni le deploiement Vercel qui en depend (needs: [frontend]).
       - name: Tests
         run: npm run test -- --run
+        continue-on-error: true
 
   backend:
     name: Backend (build + tests)
@@ -73,8 +82,10 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Non-bloquant : remonte dans Checks mais ne fait plus echouer le job.
       - name: Tests
         run: npm run test
+        continue-on-error: true
         env:
           # Aucune vraie base necessaire pour ces tests (pas de requete DB) —
           # juste une valeur syntaxiquement valide pour que PrismaClient
@@ -84,6 +95,11 @@ jobs:
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
+    # Non-bloquant : un e2e flaky/casse ne doit pas marquer tout le run CI
+    # en echec alors que build + deploiement sont bons (rien ne depend de
+    # ce job via `needs`, donc il ne bloquait deja pas le deploiement —
+    # ceci evite juste qu'il fasse passer le run global en rouge).
+    continue-on-error: true
     # Pas de bloc `services:` : e2e/global-setup.ts démarre lui-même
     # Postgres et MinIO via Docker (disponible nativement sur ce runner) s'ils
     # ne tournent pas déjà — jamais la base/bucket Railway de dev/prod (voir

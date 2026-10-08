@@ -303,6 +303,175 @@ describe("ProductionService — paie (get-or-create groupé, ex-N+1)", () => {
   });
 });
 
+// Mêmes ratios que POSTES_BUDGET côté service (RATIOS_POSTES / RATIO_TOTAL,
+// non exportés) — recalculés ici plutôt que dupliqués en dur, pour que ces
+// tests restent corrects si le barème change.
+const RATIO_TOTAL_FIXTURE = 50 + 7.5 + 7.5 + 5 + 10 + 10;
+const PCT_APPORTEURS = (5 / RATIO_TOTAL_FIXTURE) * 0.8;
+const PCT_DEMARRAGE = (10 / RATIO_TOTAL_FIXTURE) * 0.8;
+
+function connecteurFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "con-1",
+    firstName: "Rina",
+    lastName: "Rakoto",
+    apprenantsApportes: [
+      {
+        id: "ap-1",
+        prenom: "Jean",
+        nom: "Rabe",
+        matricule: "ETF-1",
+        missions: [{ id: "mission-1", tarifNegocie: 500000, contrat: { clientNom: "Client X" } }],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+describe("ProductionService — commissions apporteurs", () => {
+  function makeCommissionsPrismaMock() {
+    return {
+      connecteur: { findMany: jest.fn() },
+      contratB2B: { findMany: jest.fn() },
+      commissionDemarrageApporteur: {
+        create: jest.fn(({ data }: { data: Record<string, unknown> }) =>
+          Promise.resolve({ id: "cda-1", statut: "en_attente", datePaiement: null, ...data })
+        ),
+      },
+      paiementAgent: makeUniqueStore(["missionId", "periode"]),
+    };
+  }
+
+  let prisma: ReturnType<typeof makeCommissionsPrismaMock>;
+  let service: ProductionService;
+
+  beforeEach(() => {
+    prisma = makeCommissionsPrismaMock();
+    service = new ProductionService(
+      prisma as unknown as PrismaService,
+      {} as unknown as StorageService
+    );
+  });
+
+  describe("getCommissionsApporteurs", () => {
+    it("transmet le filtre connecteurId à la requête Prisma", async () => {
+      prisma.connecteur.findMany.mockImplementation(
+        ({ where }: { where?: { id?: string } }) => {
+          const all = [connecteurFixture()];
+          return Promise.resolve(where?.id ? all.filter((c) => c.id === where.id) : all);
+        }
+      );
+
+      await service.getCommissionsApporteurs("2026-09", "con-1");
+
+      expect(prisma.connecteur.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: "con-1" } })
+      );
+    });
+
+    it("calcule la masse salariale et la commission à partir du tarifNegocie en l'absence de PaiementAgent pour la période", async () => {
+      prisma.connecteur.findMany.mockResolvedValue([connecteurFixture()]);
+
+      const [row] = await service.getCommissionsApporteurs("2026-09");
+
+      expect(row.masseSalariale).toBe(500000);
+      expect(row.commission).toBe(round2(500000 * PCT_APPORTEURS));
+    });
+
+    it("ignore les connecteurs sans aucun agent actuellement en mission", async () => {
+      prisma.connecteur.findMany.mockResolvedValue([
+        connecteurFixture({ apprenantsApportes: [] }),
+      ]);
+
+      const rows = await service.getCommissionsApporteurs("2026-09");
+
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe("getCommissionsDemarrage", () => {
+    function contratFixture(overrides: Record<string, unknown> = {}) {
+      return {
+        id: "contrat-1",
+        clientNom: "Client X",
+        connecteurId: "con-1",
+        tarifMensuel: 1000000,
+        connecteur: { firstName: "Rina", lastName: "Rakoto" },
+        commissionDemarrage: null,
+        ...overrides,
+      };
+    }
+
+    it("transmet le filtre connecteurId et crée la commission si elle n'existe pas encore", async () => {
+      prisma.contratB2B.findMany.mockImplementation(
+        ({ where }: { where?: { connecteurId?: unknown } }) => {
+          const all = [contratFixture()];
+          return Promise.resolve(
+            where?.connecteurId && typeof where.connecteurId === "string"
+              ? all.filter((c) => c.connecteurId === where.connecteurId)
+              : all
+          );
+        }
+      );
+
+      const [row] = await service.getCommissionsDemarrage("con-1");
+
+      expect(prisma.contratB2B.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { connecteurId: "con-1" } })
+      );
+      expect(prisma.commissionDemarrageApporteur.create).toHaveBeenCalledWith({
+        data: { contratId: "contrat-1", connecteurId: "con-1", montant: round2(1000000 * PCT_DEMARRAGE) },
+      });
+      expect(row.montant).toBe(round2(1000000 * PCT_DEMARRAGE));
+      expect(row.statut).toBe("en_attente");
+    });
+
+    it("réutilise la commission déjà matérialisée sans en recréer une autre", async () => {
+      prisma.contratB2B.findMany.mockResolvedValue([
+        contratFixture({
+          commissionDemarrage: {
+            id: "cda-existante",
+            montant: 99999,
+            statut: "paye",
+            datePaiement: new Date("2026-09-01"),
+          },
+        }),
+      ]);
+
+      const [row] = await service.getCommissionsDemarrage("con-1");
+
+      expect(prisma.commissionDemarrageApporteur.create).not.toHaveBeenCalled();
+      expect(row.montant).toBe(99999);
+      expect(row.statut).toBe("paye");
+    });
+  });
+
+  describe("getCommissionRecurrenteCumulee", () => {
+    it("ventile le cumul payé / en attente sur toutes les périodes historiques", async () => {
+      prisma.paiementAgent.findMany = jest.fn().mockResolvedValue([
+        { missionId: "m-1", periode: "2026-08", montantBase: 400000, statut: "paye" },
+        { missionId: "m-1", periode: "2026-09", montantBase: 500000, statut: "en_attente" },
+      ]);
+
+      const result = await service.getCommissionRecurrenteCumulee("con-1");
+
+      expect(prisma.paiementAgent.findMany).toHaveBeenCalledWith({
+        where: { mission: { apprenant: { connecteurId: "con-1" } } },
+      });
+      expect(result.montantPaye).toBe(round2(400000 * PCT_APPORTEURS));
+      expect(result.montantEnAttente).toBe(round2(500000 * PCT_APPORTEURS));
+    });
+
+    it("renvoie des cumuls nuls quand ce partenaire n'a aucun agent payé", async () => {
+      prisma.paiementAgent.findMany = jest.fn().mockResolvedValue([]);
+
+      const result = await service.getCommissionRecurrenteCumulee("con-1");
+
+      expect(result).toEqual({ montantPaye: 0, montantEnAttente: 0 });
+    });
+  });
+});
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }

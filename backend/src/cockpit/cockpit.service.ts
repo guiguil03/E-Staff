@@ -1,9 +1,17 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import * as path from "path";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../common/storage.service";
 import { EmailService } from "../common/email.service";
-import { renderEmailHtml, emailQuote, emailParagraphsFromText } from "../common/email-template";
+import {
+  renderEmailHtml,
+  emailQuote,
+  emailParagraphsFromText,
+  emailParagraph,
+  ctaButton,
+  escapeHtml,
+} from "../common/email-template";
+import { generateBilanHebdoPdf } from "./bilan-hebdo-pdf";
 
 // Agrégats réels du Cockpit Formateur — remplace les widgets qui tournaient
 // sur components/compte-formateur/exampleData.ts (Vivier C1, moyennes de
@@ -43,6 +51,8 @@ interface RawApprenant {
 
 @Injectable()
 export class CockpitService {
+  private readonly logger = new Logger(CockpitService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
@@ -507,7 +517,11 @@ export class CockpitService {
     return { seances: EVOLUTION_SEANCES, series };
   }
 
-  async getRapportHebdo() {
+  // `formateurMatricule` optionnel : si fourni, ajoute l'évolution par
+  // rapport au dernier bilan validé par CE formateur (dernier
+  // `BilanFormateur.statsSnapshot`) — les chiffres eux-mêmes restent
+  // académie entière (décision produit existante, pas touchée ici).
+  async getRapportHebdo(formateurMatricule?: string) {
     const { apprenants, notations, seancesPassees, presences } = await this.loadRaw();
     const scoresParApprenant = this.buildScoresParApprenant(notations);
     const tauxAbsenceParApprenant = this.buildTauxAbsence(apprenants, seancesPassees, presences);
@@ -534,12 +548,41 @@ export class CockpitService {
       (v): v is number => v !== null && v >= ALERTE_DECROCHAGE_TAUX_ABSENCE
     ).length;
 
+    let evolutionVsSemainePrecedente: {
+      moyenneGenerale: number | null;
+      tauxPresenceGlobal: number | null;
+    } | null = null;
+    if (formateurMatricule) {
+      const formateur = await this.findFormateurOrThrow(formateurMatricule);
+      const dernierBilan = await this.prisma.bilanFormateur.findFirst({
+        where: { formateurId: formateur.id },
+        orderBy: { createdAt: "desc" },
+      });
+      if (dernierBilan) {
+        const precedent = dernierBilan.statsSnapshot as {
+          moyenneGenerale: number | null;
+          tauxPresenceGlobal: number | null;
+        };
+        evolutionVsSemainePrecedente = {
+          moyenneGenerale:
+            moyenneGenerale !== null && precedent.moyenneGenerale !== null
+              ? moyenneGenerale - precedent.moyenneGenerale
+              : null,
+          tauxPresenceGlobal:
+            tauxPresenceGlobal !== null && precedent.tauxPresenceGlobal !== null
+              ? tauxPresenceGlobal - precedent.tauxPresenceGlobal
+              : null,
+        };
+      }
+    }
+
     return {
       moyenneGenerale,
       tauxPresenceGlobal,
       rendusCorriges7j,
       vivierC1Total,
       alertesDecrochageActuelles,
+      evolutionVsSemainePrecedente,
     };
   }
 
@@ -611,7 +654,7 @@ export class CockpitService {
   async submitBilanHebdo(matricule: string, dto: { constat: string; analyse: string; axes: string }) {
     const formateur = await this.findFormateurOrThrow(matricule);
     const statsSnapshot = await this.getRapportHebdo();
-    return this.prisma.bilanFormateur.create({
+    const bilan = await this.prisma.bilanFormateur.create({
       data: {
         formateurId: formateur.id,
         constat: dto.constat,
@@ -620,12 +663,79 @@ export class CockpitService {
         statsSnapshot,
       },
     });
+    await this.notifierRhBilanValide(formateur, bilan);
+    return bilan;
+  }
+
+  // Prévient la RH qu'un bilan hebdomadaire vient d'être validé, plutôt que
+  // de compter sur elle pour aller vérifier le Casier Formateur de son
+  // propre chef — même principe que EvaluationService.
+  // notifierFormateursTestSoumis. Un échec d'envoi ne bloque jamais la
+  // validation du bilan par le formateur.
+  private async notifierRhBilanValide(
+    formateur: { id: string; prenom: string; nom: string },
+    bilan: { createdAt: Date }
+  ) {
+    try {
+      const comptesRh = await this.prisma.compteStaff.findMany({
+        where: { role: "rh", actif: true },
+        select: { prenom: true, email: true },
+      });
+      const nom = `${formateur.prenom} ${formateur.nom}`;
+      const link = `${process.env.FRONTEND_URL ?? "http://localhost:3000"}/compte/admin/formateurs/${formateur.id}`;
+      for (const compte of comptesRh.filter((c) => c.email?.trim())) {
+        await this.email.send({
+          to: compte.email,
+          subject: `Bilan hebdomadaire validé — ${nom}`,
+          text: `Bonjour ${compte.prenom},\n\n${nom} vient de valider son bilan hebdomadaire (${bilan.createdAt.toLocaleDateString("fr-FR")}).\n\nConsulter le Casier Formateur :\n${link}\n\nL'équipe e-Staf`,
+          html: renderEmailHtml({
+            title: "Bilan hebdomadaire validé",
+            preheader: `${nom} vient de valider son bilan hebdomadaire`,
+            bodyHtml:
+              emailParagraph(`Bonjour ${escapeHtml(compte.prenom)},`) +
+              emailParagraph(
+                `<strong>${escapeHtml(nom)}</strong> vient de valider son bilan hebdomadaire (${bilan.createdAt.toLocaleDateString("fr-FR")}).`
+              ) +
+              ctaButton("Consulter le Casier Formateur", link),
+          }),
+        });
+      }
+    } catch (err) {
+      this.logger.error(`Notification RH (bilan hebdo validé) impossible : ${String(err)}`);
+    }
   }
 
   async listBilansFormateur(formateurId: string) {
     return this.prisma.bilanFormateur.findMany({
       where: { formateurId },
       orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async listMesBilans(matricule: string) {
+    const formateur = await this.findFormateurOrThrow(matricule);
+    return this.listBilansFormateur(formateur.id);
+  }
+
+  async generateBilanPdf(bilanId: string, matricule: string): Promise<Buffer> {
+    const formateur = await this.findFormateurOrThrow(matricule);
+    const bilan = await this.prisma.bilanFormateur.findUnique({ where: { id: bilanId } });
+    if (!bilan || bilan.formateurId !== formateur.id) {
+      throw new NotFoundException("Bilan introuvable.");
+    }
+    return generateBilanHebdoPdf({
+      formateurNom: `${formateur.prenom} ${formateur.nom}`,
+      createdAt: bilan.createdAt,
+      constat: bilan.constat,
+      analyse: bilan.analyse,
+      axes: bilan.axes,
+      statsSnapshot: bilan.statsSnapshot as {
+        moyenneGenerale: number | null;
+        tauxPresenceGlobal: number | null;
+        rendusCorriges7j: number;
+        vivierC1Total: number;
+        alertesDecrochageActuelles: number;
+      },
     });
   }
 
