@@ -51,6 +51,9 @@ describe("PresenceService", () => {
       prisma.presence.count.mockResolvedValue(0); // aucun formateur déjà connecté
 
       await service.recordJoin({ room: "seance-1", user_id: "form-1", session_id: "s-1" });
+      // La notification "classe démarrée" n'est plus attendue par recordJoin
+      // (audit scalabilité du 2026-10-08, fire-and-forget).
+      await new Promise((resolve) => setImmediate(resolve));
 
       expect(email.send).toHaveBeenCalledTimes(2);
       const recipients = email.send.mock.calls.map((c) => c[0].to);

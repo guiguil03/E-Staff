@@ -86,8 +86,8 @@ export class CockpitController {
   }
 
   @Get("rapport-hebdo")
-  getRapportHebdo() {
-    return this.service.getRapportHebdo();
+  getRapportHebdo(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.getRapportHebdo(formateurMatricule);
   }
 
   @Post("bilan-hebdo")
@@ -96,6 +96,25 @@ export class CockpitController {
     @Body() dto: SubmitBilanDto
   ) {
     return this.service.submitBilanHebdo(formateurMatricule, dto);
+  }
+
+  @Get("bilans-hebdo")
+  listMesBilans(@Headers("x-formateur-matricule") formateurMatricule: string) {
+    return this.service.listMesBilans(formateurMatricule);
+  }
+
+  @Get("bilan-hebdo/:id/pdf")
+  async getBilanPdf(
+    @Param("id") id: string,
+    @Headers("x-formateur-matricule") formateurMatricule: string,
+    @Res() res: Response
+  ) {
+    const pdf = await this.service.generateBilanPdf(id, formateurMatricule);
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": 'attachment; filename="bilan-hebdo.pdf"',
+    });
+    res.send(pdf);
   }
 
   @Post("documents")
