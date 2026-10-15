@@ -157,7 +157,9 @@ export default function StudioMetier() {
             (plus de titre commun "Mur des Performances" : deux sections
             indépendantes, offres d'abord, médias ensuite). */}
         <section className="mt-10 border-t border-accent/15 px-4 pb-16 pt-12 sm:px-6">
-          <div ref={murRef} aria-labelledby="mur-offres" className="mx-auto max-w-7xl scroll-mt-24">
+          <div className="mx-auto max-w-7xl">
+          <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1fr_360px]">
+          <div ref={murRef} aria-labelledby="mur-offres" className="scroll-mt-24">
             <Reveal>
               <h2 id="mur-offres" className="font-display text-2xl font-bold text-accent sm:text-3xl">
                 Nos offres d&apos;emploi
@@ -307,6 +309,12 @@ export default function StudioMetier() {
                 </div>
               )}
           </div>
+
+          <aside className="lg:sticky lg:top-24 lg:self-start">
+            <TemoignagesEmbauche />
+          </aside>
+          </div>
+          </div>
         </section>
 
         {/* Photos & vidéos de l'équipe — section indépendante, après les
@@ -324,13 +332,6 @@ export default function StudioMetier() {
             <div className="mt-8">
               <MediaWall showHeading={false} />
             </div>
-          </div>
-        </section>
-
-        {/* Témoignages — pleine largeur. */}
-        <section className="border-t border-accent/15 px-4 pb-20 pt-12 sm:px-6">
-          <div className="mx-auto max-w-3xl">
-            <TemoignagesEmbauche />
           </div>
         </section>
       </div>
