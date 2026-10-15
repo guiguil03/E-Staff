@@ -161,7 +161,7 @@ export default function ProjetsClientsPanel() {
                   <button
                     type="button"
                     onClick={() => supprimer(p)}
-                    className="rounded border border-red-400/40 px-3 py-1.5 font-sans text-xs text-red-300 transition-colors hover:bg-red-400/10"
+                    className="rounded border border-red-500 bg-red-600 px-4 py-2 font-sans text-sm font-semibold text-white transition-colors hover:bg-red-500"
                   >
                     Supprimer cette demande
                   </button>
