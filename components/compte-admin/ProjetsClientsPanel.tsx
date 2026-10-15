@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet, apiPut, ApiError } from "@/lib/api";
+import { apiDelete, apiGet, apiPut, ApiError } from "@/lib/api";
 import type { EntrepriseProjetStatus } from "@/lib/types";
 import { adminHeaders } from "./adminHeaders";
 
@@ -65,6 +65,17 @@ export default function ProjetsClientsPanel() {
       setItems((cur) =>
         Array.isArray(cur) ? cur.map((p) => (p.id === id ? { ...p, status } : p)) : cur
       );
+    } catch (err) {
+      setErreur(messageErreur(err));
+    }
+  }
+
+  async function supprimer(p: ProjetClient) {
+    if (!window.confirm(`Supprimer définitivement la demande de « ${p.companyName} » ?`)) return;
+    setErreur(null);
+    try {
+      await apiDelete(`/rh/entreprises-projets/${p.id}`, adminHeaders());
+      setItems((cur) => (Array.isArray(cur) ? cur.filter((x) => x.id !== p.id) : cur));
     } catch (err) {
       setErreur(messageErreur(err));
     }
@@ -145,6 +156,15 @@ export default function ProjetsClientsPanel() {
                 <Info label="Démarrage souhaité" value={p.startDate} />
                 <div className="sm:col-span-2">
                   <Info label="Besoins & attentes" value={p.needsDetails} />
+                </div>
+                <div className="sm:col-span-2">
+                  <button
+                    type="button"
+                    onClick={() => supprimer(p)}
+                    className="rounded border border-red-400/40 px-3 py-1.5 font-sans text-xs text-red-300 transition-colors hover:bg-red-400/10"
+                  >
+                    Supprimer cette demande
+                  </button>
                 </div>
               </dl>
             )}
