@@ -279,7 +279,7 @@ export default function ConnecteurFlow() {
 
   if (step === "calendrier") {
     const calLink =
-      process.env.NEXT_PUBLIC_CAL_LINK_CONNECTEUR ?? "e-staf/cadrage-connecteur";
+      process.env.NEXT_PUBLIC_CAL_LINK_RH ?? "e-staf/cadrage-rh";
     const calendarReady = isCalendarConfigured(calLink);
 
     return (
@@ -292,12 +292,14 @@ export default function ConnecteurFlow() {
         </h3>
         <p className="mt-2 font-sans text-sm text-white/70">
           {calendarReady
-            ? "Choisissez un créneau d'échange privé avec un membre de l'équipe e-Staf."
-            : "Un membre de l'équipe e-Staf vous recontactera très prochainement pour fixer votre créneau d'échange privé."}
+            ? "Choisissez un créneau d'échange avec notre équipe RH pour discuter des modalités du partenariat."
+            : "Un membre de l'équipe RH e-Staf vous recontactera très prochainement pour fixer votre créneau d'échange."}
         </p>
         <CalendarEmbed
           className="mt-6"
           link={calLink}
+          prefillName={`${coordonnees.firstName} ${coordonnees.lastName}`.trim()}
+          prefillEmail={coordonnees.email}
           title="Réserver un créneau de cadrage Connecteur"
         />
         <div className="mt-6 text-center">
