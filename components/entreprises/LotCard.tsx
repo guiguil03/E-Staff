@@ -9,6 +9,7 @@ interface LotCardProps {
   name: string;
   mission: string;
   trainingEndDate: string;
+  statutLabel: string;
   segment: string;
 }
 
@@ -16,7 +17,7 @@ interface LotCardProps {
 // reveal the same RegistrationForm, tagged with a distinct CTA label so the
 // (currently backend-less) submission still records intent. Mirrors the
 // reveal-a-form pattern used by components/examens/DiplomaCard.tsx.
-export default function LotCard({ name, mission, trainingEndDate, segment }: LotCardProps) {
+export default function LotCard({ name, mission, trainingEndDate, statutLabel, segment }: LotCardProps) {
   const [formOpen, setFormOpen] = useState(false);
   const [activeCtaLabel, setActiveCtaLabel] = useState("Collaborer (Dispo Immédiate)");
   const formRef = useRef<HTMLDivElement>(null);
@@ -35,7 +36,7 @@ export default function LotCard({ name, mission, trainingEndDate, segment }: Lot
       <p className="mt-3 font-sans text-sm text-white/70">{mission}</p>
 
       <div className="mt-5">
-        <Badge tone="accent">En attente de déploiement</Badge>
+        <Badge tone="accent">{statutLabel}</Badge>
         <p className="mt-2 font-mono text-xs text-white/50">
           Fin de formation : {trainingEndDate}
         </p>

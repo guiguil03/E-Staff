@@ -65,7 +65,7 @@ export default function ProjetExternalisationFlow() {
 
   if (step === "calendar") {
     const calLink =
-      process.env.NEXT_PUBLIC_CAL_LINK_COMMERCIAL ?? "e-staf/cadrage-commercial";
+      process.env.NEXT_PUBLIC_CAL_LINK_RH ?? "e-staf/cadrage-rh";
     const calendarReady = isCalendarConfigured(calLink);
 
     return (
@@ -75,13 +75,15 @@ export default function ProjetExternalisationFlow() {
         </p>
         <p className="mt-2 font-sans text-sm text-white/70">
           {calendarReady
-            ? "Réservez dès maintenant votre créneau de cadrage commercial (30 min)."
-            : "Un membre de l'équipe e-Staf vous recontactera très prochainement pour fixer votre créneau de cadrage commercial."}
+            ? "Réservez dès maintenant votre rendez-vous avec notre équipe RH (30 min)."
+            : "Un membre de l'équipe RH e-Staf vous recontactera très prochainement pour fixer votre rendez-vous."}
         </p>
         <CalendarEmbed
           className="mt-6"
           link={calLink}
-          title="Réserver un créneau de cadrage commercial"
+          prefillName={values.contactName}
+          prefillEmail={values.email}
+          title="Réserver un rendez-vous avec l'équipe RH"
         />
         <div className="mt-6 text-center">
           <Button variant="dark" onClick={() => setStep("final")}>

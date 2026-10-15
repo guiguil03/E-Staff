@@ -10,6 +10,7 @@
 const PLACEHOLDER_LINKS = new Set([
   "e-staf/cadrage-commercial",
   "e-staf/cadrage-connecteur",
+  "e-staf/cadrage-rh",
 ]);
 
 // Permet aux écrans appelants d'adapter le texte/CTA autour du calendrier
@@ -23,12 +24,17 @@ interface CalendarEmbedProps {
   link: string;
   title: string;
   className?: string;
+  // Préremplissage du formulaire Cal.com (évite une double saisie).
+  prefillName?: string;
+  prefillEmail?: string;
 }
 
 export default function CalendarEmbed({
   link,
   title,
   className = "",
+  prefillName,
+  prefillEmail,
 }: CalendarEmbedProps) {
   if (PLACEHOLDER_LINKS.has(link)) {
     return (
@@ -47,12 +53,16 @@ export default function CalendarEmbed({
     );
   }
 
+  const params = new URLSearchParams({ embed: "true", theme: "dark" });
+  if (prefillName) params.set("name", prefillName);
+  if (prefillEmail) params.set("email", prefillEmail);
+
   return (
     <div
       className={`overflow-hidden rounded border border-white/10 bg-obsidianCard ${className}`.trim()}
     >
       <iframe
-        src={`https://cal.com/${link}?embed=true&theme=dark`}
+        src={`https://cal.com/${link}?${params.toString()}`}
         title={title}
         className="h-[700px] w-full"
         frameBorder={0}

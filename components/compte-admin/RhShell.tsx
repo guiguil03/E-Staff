@@ -15,6 +15,8 @@ const NAV_ITEMS = [
   { href: "/compte/admin/coordonnees", label: "Coordonnées", icon: "☎", roles: ["rh"] },
   { href: "/compte/admin/recrutement", label: "Recrutement", icon: "✦", roles: ["rh"] },
   { href: "/compte/admin/offres-emploi", label: "Offres & Médias", icon: "☷", roles: ["rh"] },
+  { href: "/compte/admin/offres-entreprises", label: "Offres Entreprises", icon: "▣", roles: ["rh"] },
+  { href: "/compte/admin/projets-clients", label: "Projets clients", icon: "✉", roles: ["rh"] },
   { href: "/compte/admin/inscriptions", label: "Inscriptions", icon: "✎", roles: ["rh"] },
   { href: "/compte/admin/academie", label: "Académie & Vagues", icon: "❖", roles: ["admin"] },
   { href: "/compte/admin/production", label: "Production", icon: "▲", roles: ["rh"] },

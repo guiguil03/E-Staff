@@ -1,98 +1,13 @@
 import Reveal from "@/components/Reveal";
 import LotCard from "@/components/entreprises/LotCard";
 import MissionCard from "@/components/entreprises/MissionCard";
-
-const LOTS = [
-  {
-    name: 'Lot de 10 "Setters"',
-    mission:
-      "Saturez vos agendas, brisez les barrières et qualifiez un maximum de prospects pour remplir votre pipeline commercial.",
-    trainingEndDate: "15 Août 2026",
-    segment: "lot-setters",
-  },
-  {
-    name: 'Lot de 10 "Closers"',
-    mission:
-      "Maîtrisez la négociation à fort impact, éliminez les dernières objections et transformez vos prospects chauds en cash immédiat.",
-    trainingEndDate: "18 Août 2026",
-    segment: "lot-closers",
-  },
-  {
-    name: 'Lot de 10 "Campagnes Collecte de Dons"',
-    mission:
-      "Maniez la persuasion avec une rigueur absolue pour convaincre, engager et décrocher des prélèvements automatiques et des dons à fort volume.",
-    trainingEndDate: "25 Août 2026",
-    segment: "lot-collecte-dons",
-  },
-  {
-    name: 'Lot de 10 "Campagnes & Mailing"',
-    mission:
-      "Inondez les boîtes de réception et pilotez des campagnes de prospection écrite à haut taux de conversion.",
-    trainingEndDate: "1er Septembre 2026",
-    segment: "lot-campagnes-mailing",
-  },
-  {
-    name: 'Lot de 10 "Opérateurs Téléphoniques & Support"',
-    mission:
-      "Maîtrisez la voix, encadrez chaque interaction et gérez vos flux de support et d'appels massifs sans fausse note.",
-    trainingEndDate: "10 Août 2026",
-    segment: "lot-operateurs-telephoniques",
-  },
-  {
-    name: 'Lot de 10 "Opérateurs de Saisie & Back-Office"',
-    mission:
-      "Alimentez vos CRM, nettoyez vos fichiers et garantissez une rigueur administrative infaillible.",
-    trainingEndDate: "20 Août 2026",
-    segment: "lot-saisie-back-office",
-  },
-];
-
-const MISSIONS = [
-  {
-    title: "Voix Off",
-    subtitle: "L'Autorité Vocale",
-    description:
-      "Ne confiez pas votre image à une voix sans relief. Dominez l'attention dès la première seconde sur vos spots publicitaires, modules e-learning ou vidéos de vente.",
-    available: true,
-    statusDetail: "Livraison sous 24/48h.",
-    ctaLabel: "Démarrer ce projet",
-    segment: "mission-voix-off",
-  },
-  {
-    title: "Montage Vidéo",
-    subtitle: "Le Rythme qui Perce",
-    description:
-      "Captivez les algorithmes et pulvérisez l'attention. Du format court (TikTok, Reels, Shorts) au montage institutionnel.",
-    available: true,
-    statusDetail: "Livraison rapide, délai communiqué sur devis.",
-    ctaLabel: "Démarrer ce projet",
-    segment: "mission-montage-video",
-  },
-  {
-    title: "Assistanat Virtuel",
-    subtitle: "Le Sceau de l'Exécutif",
-    description:
-      "Vous êtes dirigeant, pas secrétaire. Libérez votre temps stratégique en déléguant la gestion d'agendas complexes et le filtrage d'urgence à une élite rigoureuse.",
-    available: false,
-    statusDetail: "Prochain créneau : 10 Août 2026.",
-    ctaLabel: "Réserver mon créneau",
-    segment: "mission-assistanat-virtuel",
-  },
-  {
-    title: "Copywriting & Rédaction",
-    subtitle: "Les Mots qui Frappent",
-    description:
-      "Pages de vente, e-mails et scripts rédigés pour convertir, pas seulement pour être lus.",
-    available: true,
-    statusDetail: "Disponible immédiatement.",
-    ctaLabel: "Démarrer ce projet",
-    segment: "mission-copywriting",
-  },
-];
+import { fetchOffresEntreprises, formatDateFr } from "@/lib/offresEntreprises";
 
 // "Vos Options de Collaboration" — the two collaboration models: the
-// long-term squad (lots of 10) and punctual missions/prestations.
-export default function CollaborationSection() {
+// long-term squad (lots of 10) and punctual missions/prestations. Lots and
+// missions come from the API (managed in the Portail RH, /compte/admin/offres-entreprises).
+export default async function CollaborationSection() {
+  const { lots, missions } = await fetchOffresEntreprises();
   return (
     <>
       <section className="bg-obsidian px-4 py-16 sm:px-6 sm:py-20">
@@ -135,8 +50,15 @@ export default function CollaborationSection() {
 
           <Reveal delay={150}>
             <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {LOTS.map((lot) => (
-                <LotCard key={lot.segment} {...lot} />
+              {lots.map((lot) => (
+                <LotCard
+                  key={lot.id}
+                  name={lot.nom}
+                  mission={lot.mission}
+                  trainingEndDate={formatDateFr(lot.dateFinFormation)}
+                  statutLabel={lot.statutLabel}
+                  segment={lot.segment}
+                />
               ))}
             </div>
           </Reveal>
@@ -162,8 +84,17 @@ export default function CollaborationSection() {
 
           <Reveal delay={100}>
             <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2">
-              {MISSIONS.map((mission) => (
-                <MissionCard key={mission.segment} {...mission} />
+              {missions.map((mission) => (
+                <MissionCard
+                  key={mission.id}
+                  title={mission.titre}
+                  subtitle={mission.sousTitre}
+                  description={mission.description}
+                  available={mission.disponible}
+                  statusDetail={mission.detailStatut}
+                  ctaLabel={mission.ctaLabel}
+                  segment={mission.segment}
+                />
               ))}
             </div>
           </Reveal>

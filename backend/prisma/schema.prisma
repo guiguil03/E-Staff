@@ -1565,3 +1565,42 @@ model CompteurAbus {
   debutFenetre     DateTime  @default(now())
   verrouilleJusqua DateTime?
 }
+
+// Page vitrine /entreprises — « Squad Long Terme » (lots de 10). Gérés depuis
+// le Portail RH (/compte/admin/offres-entreprises) ; remplace les tableaux
+// codés en dur de components/entreprises/CollaborationSection.tsx.
+model LotEntreprise {
+  id String @id @default(cuid())
+
+  nom              String
+  mission          String
+  dateFinFormation DateTime
+  // Slug transmis au formulaire d'inscription (Registration.segment).
+  segment          String   @unique
+  // Texte du badge, ex. « En attente de déploiement ».
+  statutLabel      String   @default("En attente de déploiement")
+  ordre            Int      @default(0)
+  publie           Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Page vitrine /entreprises — missions & prestations ponctuelles.
+model MissionEntreprise {
+  id String @id @default(cuid())
+
+  titre       String
+  sousTitre   String
+  description String
+  disponible  Boolean @default(true)
+  // Ex. « Livraison sous 24/48h. » ou « Prochain créneau : 10 Août 2026. »
+  detailStatut String
+  ctaLabel     String  @default("Démarrer ce projet")
+  segment      String  @unique
+  ordre        Int     @default(0)
+  publie       Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
