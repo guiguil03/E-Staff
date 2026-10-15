@@ -6,7 +6,13 @@ import { DailyService } from "./daily.service";
 describe("EnregistrementService", () => {
   let prisma: {
     seance: { findUnique: jest.Mock };
-    enregistrement: { upsert: jest.Mock; findMany: jest.Mock; findUnique: jest.Mock; delete: jest.Mock };
+    enregistrement: {
+      upsert: jest.Mock;
+      findMany: jest.Mock;
+      findUnique: jest.Mock;
+      delete: jest.Mock;
+      deleteMany: jest.Mock;
+    };
     apprenant: { findUnique: jest.Mock };
     groupe: { findUnique: jest.Mock };
     formateur: { findUnique: jest.Mock };
@@ -17,7 +23,13 @@ describe("EnregistrementService", () => {
   beforeEach(() => {
     prisma = {
       seance: { findUnique: jest.fn() },
-      enregistrement: { upsert: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
+      enregistrement: {
+        upsert: jest.fn(),
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+        delete: jest.fn(),
+        deleteMany: jest.fn(),
+      },
       apprenant: { findUnique: jest.fn() },
       groupe: { findUnique: jest.fn() },
       formateur: { findUnique: jest.fn() },
@@ -90,7 +102,8 @@ describe("EnregistrementService", () => {
       where: { createdAt: { lt: new Date("2026-10-02T00:00:00Z") } },
       select: { id: true, dailyRecordingId: true },
     });
-    expect(prisma.enregistrement.delete).toHaveBeenCalledTimes(1);
-    expect(prisma.enregistrement.delete).toHaveBeenCalledWith({ where: { id: "e-1" } });
+    expect(prisma.enregistrement.delete).not.toHaveBeenCalled();
+    expect(prisma.enregistrement.deleteMany).toHaveBeenCalledTimes(1);
+    expect(prisma.enregistrement.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ["e-1"] } } });
   });
 });

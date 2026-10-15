@@ -29,8 +29,9 @@ const STATUT_LABELS: Record<string, string> = {
 // Répertoire des partenaires / apporteurs d'affaires — la table Connecteur
 // existait déjà (formulaire "Devenir Connecteur e-Staf") mais n'avait aucune
 // vue de gestion côté RH ; ce panneau ajoute la première (liste + mise à
-// jour de statut). Pas encore de suivi de commissions réel (aucun modèle de
-// deal/commission en base) — volontairement absent plutôt qu'inventé.
+// jour de statut). Le détail des apports et commissions de chaque partenaire
+// (modèle construit depuis, voir ProductionService.getCommissionsApporteurs/
+// getCommissionsDemarrage) est sur sa fiche Casier, pas ici.
 export default function PartenairesPanel() {
   const [rows, setRows] = useState<Partenaire[] | "loading" | "erreur">("loading");
   const [savingId, setSavingId] = useState<string | null>(null);

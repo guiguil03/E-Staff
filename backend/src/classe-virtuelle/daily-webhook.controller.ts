@@ -14,7 +14,7 @@ import {
 import type { RawBodyRequest } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
-import { FormateurGuard } from "../common/formateur.guard";
+import { AdminGuard } from "../common/admin.guard";
 import { DailyService } from "./daily.service";
 import { PresenceService } from "./presence.service";
 import { EnregistrementService } from "./enregistrement.service";
@@ -100,7 +100,7 @@ export class DailyWebhookController {
   // dans DAILY_WEBHOOK_SECRET. Pas d'appel automatique au démarrage — le
   // secret ne serait sinon récupérable nulle part après coup.
   @Post("admin/daily-webhook/setup")
-  @UseGuards(FormateurGuard)
+  @UseGuards(AdminGuard)
   async setupWebhook() {
     const backendUrl = process.env.BACKEND_PUBLIC_URL;
     if (!backendUrl) {
@@ -117,7 +117,7 @@ export class DailyWebhookController {
   // recording.ready-to-download / recording.error au webhook existant
   // (créé avant, avec seulement participant.*), sans changer son secret.
   @Post("admin/daily-webhook/enable-recordings")
-  @UseGuards(FormateurGuard)
+  @UseGuards(AdminGuard)
   async enableRecordingEvents() {
     const backendUrl = process.env.BACKEND_PUBLIC_URL;
     if (!backendUrl) {

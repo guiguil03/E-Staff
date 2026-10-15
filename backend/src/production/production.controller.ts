@@ -247,13 +247,16 @@ export class ProductionController {
   }
 
   @Get("commissions-apporteurs")
-  getCommissionsApporteurs(@Query("periode") periode?: string) {
-    return this.service.getCommissionsApporteurs(periode);
+  getCommissionsApporteurs(
+    @Query("periode") periode?: string,
+    @Query("connecteurId") connecteurId?: string
+  ) {
+    return this.service.getCommissionsApporteurs(periode, connecteurId);
   }
 
   @Get("commissions-demarrage")
-  getCommissionsDemarrage() {
-    return this.service.getCommissionsDemarrage();
+  getCommissionsDemarrage(@Query("connecteurId") connecteurId?: string) {
+    return this.service.getCommissionsDemarrage(connecteurId);
   }
 
   @Post("commissions-demarrage/:id/payer")

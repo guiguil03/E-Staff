@@ -1084,11 +1084,12 @@ export class ProductionService {
   // les agents en formation/essai/inactifs). Vue détail justifiant le poste
   // global "Commissions Apporteurs d'Affaires" (paiement effectif géré au
   // niveau du DecaissementProduction global, pas ici).
-  async getCommissionsApporteurs(periode?: string) {
+  async getCommissionsApporteurs(periode?: string, connecteurId?: string) {
     const p = periode ?? currentPeriode();
     const commissionPct = POSTES_BUDGET.find((x) => x.key === "commissions_apporteurs")?.pct ?? 0;
 
     const connecteurs = await this.prisma.connecteur.findMany({
+      where: connecteurId ? { id: connecteurId } : undefined,
       include: {
         apprenantsApportes: {
           where: { statutAgent: "actif" },
@@ -1139,33 +1140,75 @@ export class ProductionService {
   // avec son propre statut de paiement (distinct du poste global mensuel
   // "Commission Démarrage Client" du tableau de bord, qui reste une
   // enveloppe de planification récurrente — voir POSTES_BUDGET).
-  async getCommissionsDemarrage() {
+  async getCommissionsDemarrage(connecteurId?: string) {
     const demarragePct = POSTES_BUDGET.find((x) => x.key === "commission_demarrage")?.pct ?? 0;
     const contrats = await this.prisma.contratB2B.findMany({
-      where: { connecteurId: { not: null } },
+      where: { connecteurId: connecteurId ?? { not: null } },
       include: { connecteur: true, commissionDemarrage: true },
       orderBy: { dateDebut: "desc" },
     });
 
-    return Promise.all(
-      contrats.map(async (c) => {
-        const montant = round2((c.tarifMensuel ?? 0) * demarragePct);
-        const row =
-          c.commissionDemarrage ??
-          (await this.prisma.commissionDemarrageApporteur.create({
-            data: { contratId: c.id, connecteurId: c.connecteurId as string, montant },
-          }));
-        return {
-          id: row.id,
+    // Get-or-create GROUPÉ (audit scalabilité du 2026-10-08, même recette
+    // que getDetailPaieAgents/getDetailPoolSuperviseurs plus haut) : un seul
+    // createMany({skipDuplicates: true}) pour les contrats sans ligne
+    // CommissionDemarrageApporteur encore, suivi d'un seul findMany —
+    // remplace le create par contrat qu'il y avait avant dans la boucle.
+    const sansCommission = contrats.filter((c) => !c.commissionDemarrage);
+    if (sansCommission.length > 0) {
+      await this.prisma.commissionDemarrageApporteur.createMany({
+        data: sansCommission.map((c) => ({
           contratId: c.id,
-          clientNom: c.clientNom,
-          connecteurNom: c.connecteur ? `${c.connecteur.firstName} ${c.connecteur.lastName}` : null,
-          montant: row.montant,
-          statut: row.statut,
-          datePaiement: row.datePaiement,
-        };
-      })
+          connecteurId: c.connecteurId as string,
+          montant: round2((c.tarifMensuel ?? 0) * demarragePct),
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    const rows = await this.prisma.commissionDemarrageApporteur.findMany({
+      where: { contratId: { in: contrats.map((c) => c.id) } },
+    });
+    const rowByContratId = new Map(rows.map((r) => [r.contratId, r]));
+
+    return contrats.map((c) => {
+      const row = rowByContratId.get(c.id)!;
+      return {
+        id: row.id,
+        contratId: c.id,
+        clientNom: c.clientNom,
+        connecteurNom: c.connecteur ? `${c.connecteur.firstName} ${c.connecteur.lastName}` : null,
+        montant: row.montant,
+        statut: row.statut,
+        datePaiement: row.datePaiement,
+      };
+    });
+  }
+
+  // Cumul historique (toutes périodes confondues) de la commission récurrente
+  // d'un apporteur, ventilé payé / en attente selon PaiementAgent.statut —
+  // contrairement à getCommissionsApporteurs (période courante uniquement,
+  // vue "poste budgétaire du mois"), sert à afficher sur la fiche du
+  // partenaire tout ce qu'il a généré depuis le début. Pas de table de
+  // snapshot séparée : PaiementAgent porte déjà l'historique par période.
+  async getCommissionRecurrenteCumulee(connecteurId: string) {
+    const commissionPct = POSTES_BUDGET.find((x) => x.key === "commissions_apporteurs")?.pct ?? 0;
+
+    const paiements = await this.prisma.paiementAgent.findMany({
+      where: { mission: { apprenant: { connecteurId } } },
+    });
+
+    const baseParStatut = paiements.reduce(
+      (acc, p) => {
+        acc[p.statut === "paye" ? "paye" : "enAttente"] += p.montantBase;
+        return acc;
+      },
+      { paye: 0, enAttente: 0 }
     );
+
+    return {
+      montantPaye: round2(baseParStatut.paye * commissionPct),
+      montantEnAttente: round2(baseParStatut.enAttente * commissionPct),
+    };
   }
 
   async payerCommissionDemarrage(id: string) {

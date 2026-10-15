@@ -13,6 +13,25 @@
 // légitime) — voir l'audit du 2026-09-21 pour la discussion ClamAV/API
 // cloud, qui demande soit un changement d'infra soit un compte externe.
 
+import { open } from "node:fs/promises";
+
+// Lit seulement les tout premiers octets d'un fichier sur disque — pour les
+// endpoints passés en `diskStorage` (audit scalabilité du 2026-10-08) :
+// vérifier la signature d'un fichier de 300 Mo ne doit jamais charger ces
+// 300 Mo en RAM, seulement la poignée d'octets que les fonctions ci-dessous
+// regardent réellement (`length` largement généreux par rapport à l'offset
+// le plus profond utilisé, WEBP/FTYP à l'offset 8).
+export async function readLeadingBytes(filePath: string, length = 64): Promise<Buffer> {
+  const handle = await open(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(length);
+    const { bytesRead } = await handle.read(buffer, 0, length, 0);
+    return buffer.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
+}
+
 function startsWith(buffer: Buffer, signature: Buffer, offset = 0): boolean {
   if (buffer.length < offset + signature.length) return false;
   return buffer.subarray(offset, offset + signature.length).equals(signature);
