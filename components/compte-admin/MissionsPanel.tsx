@@ -14,6 +14,15 @@ interface ApprenantDisponible {
   groupeLabel: string;
 }
 
+interface AgentDisponible {
+  id: string;
+  matricule: string;
+  prenom: string;
+  nom: string;
+  poste: string | null;
+  statut: string;
+}
+
 interface Contrat {
   id: string;
   clientNom: string;
@@ -33,16 +42,55 @@ interface Mission {
   dateDebut: string;
   dateFin: string | null;
   qualityScore: number | null;
-  apprenant: { matricule: string; prenom: string; nom: string };
+  objectifJournalier: number | null;
+  objectifHebdo: number | null;
+  // Titulaire : un agent (compte de production, cas normal depuis le
+  // 2026-10-22) ou un apprenant (missions créées avant ce compte).
+  agent: { matricule: string; prenom: string; nom: string } | null;
+  apprenant: { matricule: string; prenom: string; nom: string } | null;
   contrat: { clientNom: string };
   superviseur: { prenom: string; nom: string } | null;
+}
+
+function titulaire(m: Mission): { nom: string; matricule: string; type: string } {
+  if (m.agent) {
+    return {
+      nom: `${m.agent.prenom} ${m.agent.nom}`,
+      matricule: m.agent.matricule,
+      type: "Agent",
+    };
+  }
+  if (m.apprenant) {
+    return {
+      nom: `${m.apprenant.prenom} ${m.apprenant.nom}`,
+      matricule: m.apprenant.matricule,
+      type: "Apprenant",
+    };
+  }
+  return { nom: "—", matricule: "—", type: "" };
 }
 
 function fmtDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString("fr-FR") : "—";
 }
 
-const emptyForm = { apprenantId: "", contratId: "", superviseurId: "", role: "" };
+const emptyForm = {
+  // "agent" (compte de production) ou "apprenant" (diplômé pas encore doté
+  // d'un compte agent) — voir ProductionService.createMission, qui exige
+  // exactement l'un des deux.
+  titulaireType: "agent" as "agent" | "apprenant",
+  agentId: "",
+  apprenantId: "",
+  contratId: "",
+  superviseurId: "",
+  role: "",
+  objectifJournalier: "",
+  objectifHebdo: "",
+};
+
+const selectClass =
+  "mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent";
+const fieldLabelClass = "block font-mono text-xs uppercase tracking-widest text-white/50";
 
 // Agents en production — assignation d'un apprenant diplômé (voir
 // listApprenantsDisponibles, filtré aux apprenants sans mission active) à un
@@ -51,6 +99,7 @@ const emptyForm = { apprenantId: "", contratId: "", superviseurId: "", role: "" 
 export default function MissionsPanel() {
   const [missions, setMissions] = useState<Mission[] | "loading" | "erreur">("loading");
   const [apprenants, setApprenants] = useState<ApprenantDisponible[]>([]);
+  const [agents, setAgents] = useState<AgentDisponible[]>([]);
   const [contrats, setContrats] = useState<Contrat[]>([]);
   const [superviseurs, setSuperviseurs] = useState<Superviseur[]>([]);
   const [form, setForm] = useState(emptyForm);
@@ -70,6 +119,9 @@ export default function MissionsPanel() {
     apiGet<ApprenantDisponible[]>("/production/apprenants-disponibles", adminHeaders())
       .then(setApprenants)
       .catch(() => {});
+    apiGet<AgentDisponible[]>("/production/agents-disponibles", adminHeaders())
+      .then(setAgents)
+      .catch(() => {});
     apiGet<Contrat[]>("/production/contrats", adminHeaders())
       .then((list) => setContrats(list.filter((c) => c.statut === "actif")))
       .catch(() => {});
@@ -80,19 +132,27 @@ export default function MissionsPanel() {
 
   useEffect(refresh, []);
 
+  const titulaireChoisi = form.titulaireType === "agent" ? form.agentId : form.apprenantId;
+  const vivier = form.titulaireType === "agent" ? agents.length : apprenants.length;
+
   async function create() {
-    if (!form.apprenantId || !form.contratId || !form.role.trim()) return;
+    if (!titulaireChoisi || !form.contratId || !form.role.trim()) return;
     setStatus("saving");
     setError(null);
     try {
       await apiPostAuthed(
         "/production/missions",
         {
-          apprenantId: form.apprenantId,
+          agentId: form.titulaireType === "agent" ? form.agentId : undefined,
+          apprenantId: form.titulaireType === "apprenant" ? form.apprenantId : undefined,
           contratId: form.contratId,
           superviseurId: form.superviseurId || undefined,
           role: form.role.trim(),
           dateDebut: new Date().toISOString(),
+          objectifJournalier: form.objectifJournalier
+            ? Number(form.objectifJournalier)
+            : undefined,
+          objectifHebdo: form.objectifHebdo ? Number(form.objectifHebdo) : undefined,
         },
         adminHeaders()
       );
@@ -142,33 +202,71 @@ export default function MissionsPanel() {
 
         {open && (
           <div className="mt-4 rounded border border-white/10 bg-obsidian p-4">
-            {apprenants.length === 0 ? (
-              <p className="font-sans text-xs text-white/50">
-                Aucun apprenant disponible actuellement (tous en formation ou déjà en mission).
+            <div className="flex flex-wrap items-center gap-4">
+              <span className={fieldLabelClass}>Titulaire</span>
+              {(["agent", "apprenant"] as const).map((type) => (
+                <label key={type} className="flex items-center gap-2 font-sans text-sm text-white/70">
+                  <input
+                    type="radio"
+                    name="titulaire-type"
+                    value={type}
+                    checked={form.titulaireType === type}
+                    onChange={() => setForm((f) => ({ ...f, titulaireType: type }))}
+                    className="accent-accent"
+                  />
+                  {type === "agent" ? "Agent de production" : "Apprenant diplômé"}
+                </label>
+              ))}
+            </div>
+            <p className="mt-2 font-sans text-xs text-white/40">
+              Les agents ont leur propre compte (Portail &gt; Agents de production) et voient leurs
+              objectifs dans leur espace. L&apos;option « apprenant » reste là pour les diplômés
+              placés avant la création des comptes agents.
+            </p>
+
+            {vivier === 0 ? (
+              <p className="mt-3 font-sans text-xs text-white/50">
+                {form.titulaireType === "agent"
+                  ? "Aucun agent disponible (tous déjà en mission, ou aucun compte créé)."
+                  : "Aucun apprenant disponible actuellement (tous en formation ou déjà en mission)."}
               </p>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
-                    Apprenant
+                  <label className={fieldLabelClass}>
+                    {form.titulaireType === "agent" ? "Agent" : "Apprenant"}
                   </label>
-                  <select
-                    value={form.apprenantId}
-                    onChange={(e) => setForm((f) => ({ ...f, apprenantId: e.target.value }))}
-                    className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white outline-none focus:border-accent"
-                  >
-                    <option value="">— Choisir —</option>
-                    {apprenants.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.prenom} {a.nom} ({a.matricule} — {a.groupeLabel})
-                      </option>
-                    ))}
-                  </select>
+                  {form.titulaireType === "agent" ? (
+                    <select
+                      value={form.agentId}
+                      onChange={(e) => setForm((f) => ({ ...f, agentId: e.target.value }))}
+                      className={selectClass}
+                    >
+                      <option value="">— Choisir —</option>
+                      {agents.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.prenom} {a.nom} ({a.matricule}
+                          {a.poste ? ` — ${a.poste}` : ""})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <select
+                      value={form.apprenantId}
+                      onChange={(e) => setForm((f) => ({ ...f, apprenantId: e.target.value }))}
+                      className={selectClass}
+                    >
+                      <option value="">— Choisir —</option>
+                      {apprenants.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.prenom} {a.nom} ({a.matricule} — {a.groupeLabel})
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div>
-                  <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
-                    Contrat
-                  </label>
+                  <label className={fieldLabelClass}>Contrat</label>
                   <select
                     value={form.contratId}
                     onChange={(e) => setForm((f) => ({ ...f, contratId: e.target.value }))}
@@ -183,9 +281,7 @@ export default function MissionsPanel() {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
-                    Superviseur
-                  </label>
+                  <label className={fieldLabelClass}>Superviseur</label>
                   <select
                     value={form.superviseurId}
                     onChange={(e) => setForm((f) => ({ ...f, superviseurId: e.target.value }))}
@@ -200,9 +296,7 @@ export default function MissionsPanel() {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-mono text-xs uppercase tracking-widest text-white/50">
-                    Rôle
-                  </label>
+                  <label className={fieldLabelClass}>Rôle</label>
                   <input
                     value={form.role}
                     onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
@@ -210,15 +304,37 @@ export default function MissionsPanel() {
                     className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
                   />
                 </div>
+                <div>
+                  <label className={fieldLabelClass}>Objectif journalier</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.objectifJournalier}
+                    onChange={(e) => setForm((f) => ({ ...f, objectifJournalier: e.target.value }))}
+                    placeholder="Facultatif"
+                    className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
+                  />
+                </div>
+                <div>
+                  <label className={fieldLabelClass}>Objectif hebdomadaire</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.objectifHebdo}
+                    onChange={(e) => setForm((f) => ({ ...f, objectifHebdo: e.target.value }))}
+                    placeholder="Facultatif"
+                    className="mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent"
+                  />
+                </div>
               </div>
             )}
-            {apprenants.length > 0 && (
+            {vivier > 0 && (
               <div className="mt-3">
                 <Button
                   variant="dark"
                   onClick={create}
                   disabled={
-                    status === "saving" || !form.apprenantId || !form.contratId || !form.role.trim()
+                    status === "saving" || !titulaireChoisi || !form.contratId || !form.role.trim()
                   }
                 >
                   {status === "saving" ? "Assignation..." : "Assigner la mission"}
@@ -253,9 +369,9 @@ export default function MissionsPanel() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="font-sans text-sm text-white">
-                        {m.apprenant.prenom} {m.apprenant.nom}
+                        {titulaire(m).nom}
                         <span className="ml-2 font-mono text-[11px] text-white/40">
-                          {m.apprenant.matricule}
+                          {titulaire(m).matricule}
                         </span>
                         {!active && (
                           <span className="ml-2 font-mono text-[10px] uppercase tracking-widest text-accent">
@@ -269,6 +385,12 @@ export default function MissionsPanel() {
                       </p>
                       <p className="mt-0.5 font-mono text-[11px] text-white/40">
                         {fmtDate(m.dateDebut)} → {fmtDate(m.dateFin)}
+                        {(m.objectifJournalier !== null || m.objectifHebdo !== null) && (
+                          <>
+                            {" · objectifs "}
+                            {m.objectifJournalier ?? "—"}/j · {m.objectifHebdo ?? "—"}/sem.
+                          </>
+                        )}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">

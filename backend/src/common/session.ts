@@ -9,7 +9,7 @@ import { prismaEnregistre } from "./anti-abus";
 // consumeViewAs) et vérifié à chaque requête par les guards de common/.
 // Un client ne peut plus s'auto-attribuer un rôle ou un matricule en
 // forgeant un header.
-export type SessionRole = "admin" | "rh" | "formateur" | "apprenant";
+export type SessionRole = "admin" | "rh" | "formateur" | "agent" | "apprenant";
 
 export interface SessionPayload {
   matricule: string;
@@ -145,6 +145,16 @@ export async function sessionToujoursValide(session: SessionPayload): Promise<bo
   if (role === "formateur") {
     const f = await prisma.formateur.findUnique({ where: { matricule }, select: { sessionsRevoqueesAt: true } });
     return !!f && emiseApres(session, f.sessionsRevoqueesAt);
+  }
+  if (role === "agent") {
+    const ag = await prisma.agent.findUnique({
+      where: { matricule },
+      select: { sessionsRevoqueesAt: true, statut: true },
+    });
+    // Un agent passé "inactif" (fin de contrat) perd l'accès immédiatement,
+    // même avec un cookie encore valide — son compte n'est pas supprimé
+    // pour autant (historique missions/paie conservé, voir Agent.statut).
+    return !!ag && ag.statut !== "inactif" && emiseApres(session, ag.sessionsRevoqueesAt);
   }
   if (role === "apprenant") {
     const a = await prisma.apprenant.findUnique({ where: { matricule }, select: { sessionsRevoqueesAt: true } });

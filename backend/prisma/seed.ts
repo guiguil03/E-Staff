@@ -241,8 +241,102 @@ async function main() {
     }
   }
 
+  // ---- Agent de production (compte du 2026-10-22) ------------------------
+  // Un agent de démo, staffé sur un contrat client, avec 20 jours de relevés
+  // journaliers — sinon l'Espace Agent (performances, temps travaillé, taux
+  // d'atteinte) s'ouvre entièrement vide, comme le Compte Apprenant avant
+  // que ce seed ne plante séances et notations.
+  const agentMatricule = process.env.AGENT_TEST_MATRICULE ?? "ETF-AG-2026-0001";
+  const agentTestPassword = process.env.AGENT_TEST_PASSWORD ?? "agent-demo-2026";
+  const agent = await prisma.agent.upsert({
+    where: { matricule: agentMatricule },
+    // Comme pour le formateur : pas de password dans `update`, pour ne pas
+    // écraser un mot de passe déjà régénéré par la RH si le seed est rejoué.
+    update: {},
+    create: {
+      matricule: agentMatricule,
+      prenom: "Tiana",
+      nom: "Agent",
+      email: "agent.demo@exemple.e-staf.mg",
+      telephone: "+261 34 00 000 00",
+      statut: "actif",
+      poste: "Téléopérateur — télévente",
+      dateEmbauche: new Date(now - 90 * JOUR_MS),
+      salaireBase: 500000,
+      moyenPaiementType: "MVola",
+      ribOuMobileMoney: "034 00 000 00",
+      coordonneesVerifieesLe: new Date(now - 85 * JOUR_MS),
+      password: await bcrypt.hash(agentTestPassword, 10),
+    },
+  });
+
+  const superviseurDemo = await prisma.superviseur.upsert({
+    where: { matricule: "ETF-SUP-2026-0001" },
+    update: {},
+    create: {
+      matricule: "ETF-SUP-2026-0001",
+      prenom: "Rina",
+      nom: "Superviseur",
+      email: "superviseur.demo@exemple.e-staf.mg",
+      tarifFixe: 900000,
+    },
+  });
+
+  // Le contrat de démo n'a pas de clé naturelle (pas d'unique sur
+  // clientNom) : on le cherche par nom avant de le créer, pour que le seed
+  // reste rejouable sans empiler des contrats identiques.
+  const contratDemo =
+    (await prisma.contratB2B.findFirst({ where: { clientNom: "Client Démo — Télévente" } })) ??
+    (await prisma.contratB2B.create({
+      data: {
+        clientNom: "Client Démo — Télévente",
+        description: "Campagne de prospection téléphonique (démo).",
+        dateSignature: new Date(now - 95 * JOUR_MS),
+        dateDebut: new Date(now - 90 * JOUR_MS),
+        statut: "actif",
+        tarifMensuel: 4000000,
+      },
+    }));
+
+  const missionDemo =
+    (await prisma.mission.findFirst({ where: { agentId: agent.id, dateFin: null } })) ??
+    (await prisma.mission.create({
+      data: {
+        agentId: agent.id,
+        contratId: contratDemo.id,
+        superviseurId: superviseurDemo.id,
+        role: "Closer",
+        dateDebut: new Date(now - 60 * JOUR_MS),
+        qualityScore: 4,
+        tarifNegocie: 600000,
+        objectifJournalier: 40,
+        objectifHebdo: 200,
+      },
+    }));
+
+  // 20 derniers jours ouvrés : réalisé qui oscille autour de la cible, pour
+  // que le graphique journalier et le comparatif hebdo aient du relief.
+  for (let i = 0; i < 28; i++) {
+    const jour = new Date(now - i * JOUR_MS);
+    jour.setUTCHours(0, 0, 0, 0);
+    const jourSemaine = jour.getUTCDay();
+    if (jourSemaine === 0 || jourSemaine === 6) continue; // week-end non travaillé
+    const realise = 28 + ((i * 7) % 20); // 28..47 pour une cible de 40
+    await prisma.suiviAgentJournalier.upsert({
+      where: { missionId_jour: { missionId: missionDemo.id, jour } },
+      update: {},
+      create: {
+        missionId: missionDemo.id,
+        jour,
+        realise,
+        tauxAtteint: Math.round((realise / 40) * 100 * 100) / 100,
+        heuresTravaillees: realise >= 40 ? 8.5 : 8,
+      },
+    });
+  }
+
   console.log(
-    "Seed terminé : 6 groupes, 30 apprenants (+ diagnostic initial), 1 formateur, 72 séances (5 programmées), présences et notations sur les 4 premières séances de chaque groupe."
+    "Seed terminé : 6 groupes, 30 apprenants (+ diagnostic initial), 1 formateur, 72 séances (5 programmées), présences et notations sur les 4 premières séances de chaque groupe, 1 agent de production (1 mission, 20 relevés journaliers)."
   );
 }
 

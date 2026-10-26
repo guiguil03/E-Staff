@@ -15,6 +15,11 @@ import { UpdatePaiementAgentDto } from "./dto/update-paiement-agent.dto";
 import { UpdatePerformanceSuperviseurClientDto } from "./dto/update-performance-superviseur-client.dto";
 import { UpdatePaiementSuperviseurDto } from "./dto/update-paiement-superviseur.dto";
 import { UpsertChargeInfrastructureDto } from "./dto/upsert-charge-infrastructure.dto";
+import {
+  agregerPointage,
+  calculerPaieAgent,
+  moisDeLaSemaine,
+} from "../common/paie-agent";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -74,36 +79,55 @@ function isoWeekLabel(d: Date): string {
   return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 }
 
-// Lundi de la semaine ISO donnée — sert à rattacher un SuiviAgentHebdo
-// (suivi par semaine) à un mois de paie ("AAAA-MM") pour agréger le
-// pointage/les métriques de la période. Approximation : une semaine à
-// cheval sur deux mois est rattachée au mois de son lundi.
-function isoWeekToMonday(label: string): Date {
-  const [yearStr, weekStr] = label.split("-W");
-  const year = Number(yearStr);
-  const week = Number(weekStr);
-  const jan4 = new Date(Date.UTC(year, 0, 4));
-  const jan4DayNum = jan4.getUTCDay() || 7;
-  const week1Monday = new Date(jan4);
-  week1Monday.setUTCDate(jan4.getUTCDate() - jan4DayNum + 1);
-  const monday = new Date(week1Monday);
-  monday.setUTCDate(week1Monday.getUTCDate() + (week - 1) * 7);
-  return monday;
+// Titulaire d'une mission : un Agent (compte de production, cas normal
+// depuis le 2026-10-22) ou un Apprenant (missions créées avant l'arrivée du
+// compte Agent — voir Mission.agentId/apprenantId). Un seul des deux est
+// renseigné ; ce helper évite de répéter le même repli dans chaque écran.
+interface TitulaireMission {
+  nom: string;
+  matricule: string;
+  email: string;
+  moyenPaiementType: string | null;
+  ribOuMobileMoney: string | null;
+  coordonneesVerifieesLe: Date | null;
 }
 
-function moisDeLaSemaine(label: string): string {
-  const monday = isoWeekToMonday(label);
-  return `${monday.getUTCFullYear()}-${String(monday.getUTCMonth() + 1).padStart(2, "0")}`;
-}
+type PersonneMission = {
+  prenom: string;
+  nom: string;
+  matricule: string;
+  email: string;
+  moyenPaiementType: string | null;
+  ribOuMobileMoney: string | null;
+  coordonneesVerifieesLe: Date | null;
+};
 
-// Heures mensuelles standard utilisées pour convertir un tarif négocié
-// (mensuel) en taux horaire — 173,33h/mois est la référence usuelle pour un
-// temps plein 40h/semaine (52 semaines / 12 mois × 40h). Pas de donnée
-// contractuelle par agent pour affiner ce chiffre à ce jour.
-const HEURES_MENSUELLES_STANDARD = 173.33;
-// Majoration heures supplémentaires — valeur par défaut usuelle (+50%), pas
-// de barème négocié par agent en base.
-const MAJORATION_HEURES_SUP = 1.5;
+function titulaireMission(mission: {
+  agent?: PersonneMission | null;
+  apprenant?: PersonneMission | null;
+}): TitulaireMission {
+  const personne = mission.agent ?? mission.apprenant;
+  // Ni agent ni apprenant : impossible via createMission, mais une mission
+  // en base pourrait être incomplète — on l'affiche sans inventer de nom.
+  if (!personne) {
+    return {
+      nom: "—",
+      matricule: "—",
+      email: "",
+      moyenPaiementType: null,
+      ribOuMobileMoney: null,
+      coordonneesVerifieesLe: null,
+    };
+  }
+  return {
+    nom: `${personne.prenom} ${personne.nom}`,
+    matricule: personne.matricule,
+    email: personne.email,
+    moyenPaiementType: personne.moyenPaiementType,
+    ribOuMobileMoney: personne.ribOuMobileMoney,
+    coordonneesVerifieesLe: personne.coordonneesVerifieesLe,
+  };
+}
 
 @Injectable()
 export class ProductionService {
@@ -170,7 +194,7 @@ export class ProductionService {
       where: { id },
       include: {
         missions: {
-          include: { apprenant: true, contrat: true },
+          include: { agent: true, apprenant: true, contrat: true },
           orderBy: { dateDebut: "desc" },
         },
       },
@@ -183,8 +207,8 @@ export class ProductionService {
       nom: superviseur.nom,
       email: superviseur.email,
       missions: superviseur.missions.map((m) => ({
-        agentNom: `${m.apprenant.prenom} ${m.apprenant.nom}`,
-        agentMatricule: m.apprenant.matricule,
+        agentNom: titulaireMission(m).nom,
+        agentMatricule: titulaireMission(m).matricule,
         clientNom: m.contrat.clientNom,
         role: m.role,
         dateDebut: m.dateDebut,
@@ -248,7 +272,7 @@ export class ProductionService {
       where: { id },
       include: {
         missions: {
-          include: { apprenant: true, superviseur: true },
+          include: { agent: true, apprenant: true, superviseur: true },
           orderBy: { dateDebut: "desc" },
         },
         factures: { orderBy: { dateEmission: "desc" } },
@@ -273,8 +297,8 @@ export class ProductionService {
       totalPaye,
       totalEnAttente: round2(totalFacture - totalPaye),
       missions: contrat.missions.map((m) => ({
-        agentNom: `${m.apprenant.prenom} ${m.apprenant.nom}`,
-        agentMatricule: m.apprenant.matricule,
+        agentNom: titulaireMission(m).nom,
+        agentMatricule: titulaireMission(m).matricule,
         role: m.role,
         dateDebut: m.dateDebut,
         dateFin: m.dateFin,
@@ -295,16 +319,34 @@ export class ProductionService {
 
   listMissions() {
     return this.prisma.mission.findMany({
-      include: { apprenant: true, contrat: true, superviseur: true },
+      include: { agent: true, apprenant: true, contrat: true, superviseur: true },
       orderBy: { dateDebut: "desc" },
     });
   }
 
   async createMission(dto: CreateMissionDto) {
-    const apprenant = await this.prisma.apprenant.findUnique({
-      where: { id: dto.apprenantId },
-    });
-    if (!apprenant) throw new NotFoundException("Apprenant introuvable.");
+    // Titulaire : un Agent (cas normal) ou un Apprenant (montage
+    // historique, voir Mission.apprenantId). Exactement l'un des deux —
+    // vérifié ici plutôt qu'en base, convention du projet.
+    if (!dto.agentId === !dto.apprenantId) {
+      throw new BadRequestException(
+        "Renseignez soit un agent, soit un apprenant comme titulaire de la mission."
+      );
+    }
+    if (dto.agentId) {
+      const agent = await this.prisma.agent.findUnique({ where: { id: dto.agentId } });
+      if (!agent) throw new NotFoundException("Agent introuvable.");
+      if (agent.statut === "inactif") {
+        throw new BadRequestException(
+          "Cet agent est inactif — réactivez son compte avant de lui confier une mission."
+        );
+      }
+    } else {
+      const apprenant = await this.prisma.apprenant.findUnique({
+        where: { id: dto.apprenantId },
+      });
+      if (!apprenant) throw new NotFoundException("Apprenant introuvable.");
+    }
     const contrat = await this.prisma.contratB2B.findUnique({ where: { id: dto.contratId } });
     if (!contrat) throw new NotFoundException("Contrat introuvable.");
     if (dto.superviseurId) {
@@ -314,28 +356,33 @@ export class ProductionService {
       if (!superviseur) throw new NotFoundException("Superviseur introuvable.");
     }
 
-    // Un apprenant ne peut avoir qu'une mission active (dateFin=null) à la
+    // Un titulaire ne peut avoir qu'une mission active (dateFin=null) à la
     // fois — clôturer l'ancienne avant d'en créer une nouvelle plutôt que
     // de laisser un agent apparaître staffé sur deux contrats en même temps.
     const missionActive = await this.prisma.mission.findFirst({
-      where: { apprenantId: dto.apprenantId, dateFin: null },
+      where: dto.agentId
+        ? { agentId: dto.agentId, dateFin: null }
+        : { apprenantId: dto.apprenantId, dateFin: null },
     });
     if (missionActive) {
       throw new BadRequestException(
-        "Cet apprenant a déjà une mission active — clôturez-la avant d'en créer une nouvelle."
+        "Ce titulaire a déjà une mission active — clôturez-la avant d'en créer une nouvelle."
       );
     }
 
     return this.prisma.mission.create({
       data: {
-        apprenantId: dto.apprenantId,
+        agentId: dto.agentId ?? null,
+        apprenantId: dto.apprenantId ?? null,
         contratId: dto.contratId,
         superviseurId: dto.superviseurId,
         role: dto.role,
         dateDebut: new Date(dto.dateDebut),
         tarifNegocie: dto.tarifNegocie ?? null,
+        objectifJournalier: dto.objectifJournalier ?? null,
+        objectifHebdo: dto.objectifHebdo ?? null,
       },
-      include: { apprenant: true, contrat: true, superviseur: true },
+      include: { agent: true, apprenant: true, contrat: true, superviseur: true },
     });
   }
 
@@ -350,8 +397,11 @@ export class ProductionService {
         dateFin: dto.dateFin === undefined ? undefined : dto.dateFin ? new Date(dto.dateFin) : null,
         qualityScore: dto.qualityScore === undefined ? undefined : dto.qualityScore,
         tarifNegocie: dto.tarifNegocie === undefined ? undefined : dto.tarifNegocie,
+        objectifJournalier:
+          dto.objectifJournalier === undefined ? undefined : dto.objectifJournalier,
+        objectifHebdo: dto.objectifHebdo === undefined ? undefined : dto.objectifHebdo,
       },
-      include: { apprenant: true, contrat: true, superviseur: true },
+      include: { agent: true, apprenant: true, contrat: true, superviseur: true },
     });
   }
 
@@ -374,6 +424,26 @@ export class ProductionService {
         prenom: a.prenom,
         nom: a.nom,
         groupeLabel: a.groupe.label,
+      }));
+  }
+
+  // Agents sans mission active — vivier déployable du formulaire "Assigner
+  // une mission". Un agent "inactif" (fin de contrat) n'est pas proposé.
+  async listAgentsDisponibles() {
+    const agents = await this.prisma.agent.findMany({
+      where: { statut: { not: "inactif" } },
+      include: { missions: { where: { dateFin: null } } },
+      orderBy: { nom: "asc" },
+    });
+    return agents
+      .filter((a) => a.missions.length === 0)
+      .map((a) => ({
+        id: a.id,
+        matricule: a.matricule,
+        prenom: a.prenom,
+        nom: a.nom,
+        poste: a.poste,
+        statut: a.statut,
       }));
   }
 
@@ -507,7 +577,7 @@ export class ProductionService {
       include: {
         missions: {
           where: { dateFin: null },
-          include: { apprenant: true, superviseur: true },
+          include: { agent: true, apprenant: true, superviseur: true },
           orderBy: { dateDebut: "desc" },
         },
         objectifsJournaliers: { orderBy: { jour: "asc" } },
@@ -556,11 +626,13 @@ export class ProductionService {
       const suivi = dernierSuiviParMission.get(m.id) ?? null;
       return {
         missionId: m.id,
-        agentNom: `${m.apprenant.prenom} ${m.apprenant.nom}`,
-        agentMatricule: m.apprenant.matricule,
-        agentEmail: m.apprenant.email,
+        agentNom: titulaireMission(m).nom,
+        agentMatricule: titulaireMission(m).matricule,
+        agentEmail: titulaireMission(m).email,
         superviseurNom: m.superviseur ? `${m.superviseur.prenom} ${m.superviseur.nom}` : null,
         superviseurEmail: m.superviseur?.email ?? null,
+        objectifJournalier: m.objectifJournalier,
+        objectifHebdo: m.objectifHebdo,
         semaine: suivi?.semaine ?? null,
         concretisations: suivi?.concretisations ?? null,
         tauxAbsence: suivi?.tauxAbsence ?? null,
@@ -781,10 +853,12 @@ export class ProductionService {
     const missions = await this.prisma.mission.findMany({
       where: { dateFin: null },
       include: {
+        agent: true,
         apprenant: true,
         contrat: true,
         superviseur: true,
         suivisHebdo: true,
+        suivisJournaliers: true,
       },
       orderBy: { dateDebut: "desc" },
     });
@@ -793,31 +867,45 @@ export class ProductionService {
       // Agrège le pointage/les métriques de toutes les semaines rattachées
       // à ce mois de paie (voir moisDeLaSemaine).
       const suivisDuMois = m.suivisHebdo.filter((s) => moisDeLaSemaine(s.semaine) === p);
-      const heuresAbsence = suivisDuMois.reduce((sum, s) => sum + s.heuresAbsenceNonJustifiee, 0);
-      const heuresRetard = suivisDuMois.reduce((sum, s) => sum + s.heuresRetardCumulees, 0);
-      const heuresSup = suivisDuMois.reduce((sum, s) => sum + s.heuresSupValidees, 0);
       const caRealiseMois = round2(suivisDuMois.reduce((sum, s) => sum + s.caRealise, 0));
+      const { heuresAbsence, heuresRetard, heuresSup } = agregerPointage(m.suivisHebdo, p);
 
-      const tarif = m.tarifNegocie ?? 0;
-      const tauxHoraire = m.tarifNegocie ? round2(tarif / HEURES_MENSUELLES_STANDARD) : null;
-      // Retenue sur salaire — absences non justifiées ET retards cumulés, au
-      // même taux horaire (voir la maquette "FENÊTRE DÉTAILLÉE : PAIE ET
-      // PERFORMANCES AGENTS", qui déduit aussi les retards).
-      const retenue = tauxHoraire !== null ? round2(tauxHoraire * (heuresAbsence + heuresRetard)) : 0;
-      const primeHeuresSup =
-        tauxHoraire !== null ? round2(tauxHoraire * heuresSup * MAJORATION_HEURES_SUP) : 0;
+      // Taux d'atteinte réel du mois — moyenne des relevés journaliers de
+      // l'agent (voir SuiviAgentJournalier, saisis depuis le Casier Agent).
+      // Null tant qu'aucun relevé n'existe pour ce mois : le repli reste
+      // alors le qualityScore, comme avant l'arrivée du compte Agent.
+      const relevesDuMois = m.suivisJournaliers.filter(
+        (j) => `${j.jour.getUTCFullYear()}-${String(j.jour.getUTCMonth() + 1).padStart(2, "0")}` === p
+      );
+      const tauxReelMois =
+        relevesDuMois.length > 0
+          ? round2(relevesDuMois.reduce((sum, j) => sum + j.tauxAtteint, 0) / relevesDuMois.length)
+          : null;
+
+      const tarif = m.tarifNegocie ?? m.agent?.salaireBase ?? 0;
+      const { retenue, primeHeuresSup } = calculerPaieAgent({
+        tarif,
+        montantBase: 0,
+        montantPrime: 0,
+        heuresAbsence,
+        heuresRetard,
+        heuresSup,
+      });
 
       // Prime de performance suggérée — basée sur le CA réalisé si des
-      // métriques de télévente ont été saisies ce mois, sinon repli sur le
-      // qualityScore (proxy de taux d'atteinte, faute de mieux).
+      // métriques de télévente ont été saisies ce mois ; sinon sur le taux
+      // d'atteinte réel des objectifs s'il existe ; sinon repli sur le
+      // qualityScore (proxy, faute de mieux). Reste corrigeable par la RH.
       const primeSuggeree =
         caRealiseMois > 0
           ? round2(caRealiseMois * primePct)
-          : m.qualityScore !== null
-            ? round2(tarif * primePct * (m.qualityScore / 5))
-            : 0;
+          : tauxReelMois !== null
+            ? round2(tarif * primePct * (tauxReelMois / 100))
+            : m.qualityScore !== null
+              ? round2(tarif * primePct * (m.qualityScore / 5))
+              : 0;
 
-      return { m, tarif, caRealiseMois, heuresAbsence, heuresRetard, heuresSup, retenue, primeHeuresSup, primeSuggeree };
+      return { m, tarif, caRealiseMois, tauxReelMois, heuresAbsence, heuresRetard, heuresSup, retenue, primeHeuresSup, primeSuggeree };
     });
 
     if (computed.length > 0) {
@@ -838,19 +926,30 @@ export class ProductionService {
     const rowByMissionId = new Map(rows.map((r) => [r.missionId, r]));
 
     const lignes = computed.map((c) => {
-      const { m, caRealiseMois, heuresAbsence, heuresRetard, heuresSup, retenue, primeHeuresSup } = c;
+      const { m, caRealiseMois, tauxReelMois, heuresAbsence, heuresRetard, heuresSup } = c;
       const row = rowByMissionId.get(m.id)!;
-      const netAPayer = round2(row.montantBase - retenue + primeHeuresSup + row.montantPrime);
+      const titulaire = titulaireMission(m);
+      // Même formule que l'Espace Agent (voir common/paie-agent.ts), pour
+      // que l'agent et la RH lisent exactement le même net à payer.
+      const { retenue, primeHeuresSup, netAPayer } = calculerPaieAgent({
+        tarif: c.tarif,
+        montantBase: row.montantBase,
+        montantPrime: row.montantPrime,
+        heuresAbsence,
+        heuresRetard,
+        heuresSup,
+      });
 
       return {
         missionId: m.id,
-        agentNom: `${m.apprenant.prenom} ${m.apprenant.nom}`,
-        agentMatricule: m.apprenant.matricule,
+        agentNom: titulaire.nom,
+        agentMatricule: titulaire.matricule,
         clientNom: m.contrat.clientNom,
         superviseurNom: m.superviseur ? `${m.superviseur.prenom} ${m.superviseur.nom}` : null,
         tarifNegocie: m.tarifNegocie,
         qualityScore: m.qualityScore,
-        tauxAtteinteObjectifs: m.qualityScore !== null ? round2((m.qualityScore / 5) * 100) : null,
+        tauxAtteinteObjectifs:
+          tauxReelMois ?? (m.qualityScore !== null ? round2((m.qualityScore / 5) * 100) : null),
         caRealiseMois,
         heuresAbsence,
         heuresRetard,
@@ -861,11 +960,11 @@ export class ProductionService {
         montantPrime: row.montantPrime,
         netAPayer,
         coordonneesPaiement:
-          m.apprenant.moyenPaiementType && m.apprenant.ribOuMobileMoney
+          titulaire.moyenPaiementType && titulaire.ribOuMobileMoney
             ? {
-                type: m.apprenant.moyenPaiementType,
-                numero: m.apprenant.ribOuMobileMoney,
-                verifieLe: m.apprenant.coordonneesVerifieesLe,
+                type: titulaire.moyenPaiementType,
+                numero: titulaire.ribOuMobileMoney,
+                verifieLe: titulaire.coordonneesVerifieesLe,
               }
             : null,
         statut: row.statut,

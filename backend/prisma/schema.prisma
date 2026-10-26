@@ -1113,11 +1113,136 @@ model ContratB2B {
   @@index([connecteurId])
 }
 
+// Agent de production — personne qui passe les appels pour les clients
+// (télévente, prise de rendez-vous, support). Compte à part entière depuis
+// le 2026-10-22 : un agent est recruté directement, sans passer par
+// l'Académie, donc ce n'est PAS un Apprenant placé en mission (c'était le
+// seul montage possible avant ce modèle — voir Mission.apprenantId, gardé
+// pour les missions déjà en base). Mêmes champs d'auth que Formateur
+// (password/resetToken/sessionsRevoqueesAt) et un matricule qui ne
+// chevauche aucun autre préfixe ("ETF-AG-2026-...").
+model Agent {
+  id        String  @id @default(cuid())
+  matricule String  @unique
+  prenom    String
+  nom       String
+  email     String
+  telephone String?
+
+  // Hash bcrypt — jamais le mot de passe en clair. Généré par la RH à la
+  // création (AgentsService.createAgent) ou à la régénération, envoyé une
+  // seule fois en clair par e-mail. Nullable par symétrie avec Formateur :
+  // un compte sans mot de passe ne peut simplement pas se connecter.
+  password            String?
+  resetToken          String?   @unique
+  resetTokenExpiresAt DateTime?
+  // « Déconnecter partout » / changement de mot de passe : toute session
+  // émise avant cette date est refusée (voir common/session.ts).
+  sessionsRevoqueesAt DateTime?
+
+  // "essai" | "actif" | "inactif" — statut RH du contrat de l'agent. Un
+  // agent "inactif" (départ, fin de contrat) ne peut plus se connecter
+  // (voir AuthService.loginAgent et sessionToujoursValide), sans être
+  // supprimé : son historique de missions et de paie reste consultable.
+  statut String @default("essai")
+
+  // Poste générique de l'agent (ex. "Téléopérateur", "Closer") — distinct
+  // de Mission.role, qui est le poste réellement occupé chez un client.
+  poste        String?
+  dateEmbauche DateTime?
+
+  // Fixe mensuel négocié — même rôle que Formateur.tarifFixe : base de la
+  // paie quand aucun tarif n'est négocié sur la mission elle-même
+  // (Mission.tarifNegocie, qui prime). Nullable tant que la RH ne l'a pas
+  // renseigné.
+  salaireBase Float?
+
+  // Coffre-fort coordonnées de paiement — même principe que sur Apprenant
+  // (saisi/vérifié une fois par la RH, réutilisé à chaque paiement).
+  ribOuMobileMoney       String?
+  moyenPaiementType      String? // "RIB" | "MVola" | "Orange Money" | "Airtel Money"
+  coordonneesVerifieesLe DateTime?
+
+  missions  Mission[]
+  documents AgentDocument[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Documents rattachés à un agent — contrat de travail déposé par la RH
+// (visible et téléchargeable par l'agent dans son espace) et pièces
+// annexes. Calqué sur FormateurDocument : fichier réel dans le bucket
+// S3-compatible (voir StorageService), storageKey seule en base.
+model AgentDocument {
+  id      String @id @default(cuid())
+  agentId String
+  agent   Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  type       String // "contrat" | "autre"
+  filename   String
+  storageKey String
+  uploadedBy String // "rh"
+
+  createdAt DateTime @default(now())
+
+  @@index([agentId])
+}
+
+// Relevé journalier d'un agent en mission — saisie manuelle par la RH/le
+// superviseur (aucune synchronisation téléphonie/plateau n'existe dans ce
+// produit à ce jour), une ligne par mission et par jour. Distinct
+// d'ObjectifJournalier, qui est rattaché au CONTRAT (performance de toute
+// l'équipe du client) : ici le chiffre est individuel, c'est ce que l'agent
+// voit dans son espace (taux d'atteinte du jour, agrégé par semaine ISO
+// pour le taux hebdo, et temps réellement travaillé).
+model SuiviAgentJournalier {
+  id String @id @default(cuid())
+
+  missionId String
+  mission   Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  jour DateTime // horodatage normalisé à minuit (UTC), comme ObjectifJournalier.jour
+
+  // Production du jour (appels concrétisés, ventes, RDV... selon le poste).
+  // Nullable : la RH peut ne saisir que le taux, sans détailler le réalisé.
+  realise Int?
+  // % de l'objectif journalier atteint — calculé depuis `realise` et
+  // Mission.objectifJournalier quand les deux sont connus, sinon saisi
+  // directement (voir AgentsService.upsertSuiviJournalier).
+  tauxAtteint Float
+  // Heures réellement travaillées ce jour-là — base du "temps travaillé"
+  // de l'espace agent, le pointage hebdo (retards/absences/heures sup)
+  // restant sur SuiviAgentHebdo.
+  heuresTravaillees Float @default(0)
+
+  remarques String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([missionId, jour])
+}
+
 model Mission {
   id String @id @default(cuid())
 
-  apprenantId String
-  apprenant   Apprenant @relation(fields: [apprenantId], references: [id])
+  // Titulaire de la mission : un Agent (cas normal depuis le 2026-10-22) OU
+  // un Apprenant (missions créées avant l'arrivée du compte Agent, quand un
+  // agent n'existait en base que comme apprenant diplômé). Exactement l'un
+  // des deux est renseigné — vérifié côté service
+  // (ProductionService.createMission), pas en base : même convention que
+  // les autres règles métier du projet.
+  // onDelete: Restrict explicite des deux côtés : par défaut Prisma met une
+  // relation optionnelle en SET NULL, ce qui laisserait une mission sans
+  // titulaire (et donc une paie orpheline) si on supprimait la personne.
+  // Un agent/apprenant qui a des missions ne se supprime pas — voir
+  // AgentsService.removeAgent, qui renvoie la même règle côté métier.
+  agentId String?
+  agent   Agent?  @relation(fields: [agentId], references: [id], onDelete: Restrict)
+
+  apprenantId String?
+  apprenant   Apprenant? @relation(fields: [apprenantId], references: [id], onDelete: Restrict)
 
   contratId String
   contrat   ContratB2B @relation(fields: [contratId], references: [id])
@@ -1139,11 +1264,21 @@ model Mission {
   // Nullable : pas toujours négocié/saisi au moment de la création.
   tarifNegocie Float?
 
-  suivisHebdo SuiviAgentHebdo[]
-  paiements   PaiementAgent[]
+  // Cibles chiffrées de l'agent sur cette mission — négociées avec le
+  // client, saisies par la RH. Servent à calculer les taux d'atteinte de
+  // l'espace agent : journalier depuis SuiviAgentJournalier.realise, hebdo
+  // depuis la somme des réalisés de la semaine ISO. Nullables : pas de taux
+  // affiché tant qu'aucune cible n'est fixée (jamais un objectif inventé).
+  objectifJournalier Int?
+  objectifHebdo      Int?
+
+  suivisHebdo       SuiviAgentHebdo[]
+  suivisJournaliers SuiviAgentJournalier[]
+  paiements         PaiementAgent[]
 
   createdAt DateTime @default(now())
 
+  @@index([agentId])
   @@index([apprenantId])
   @@index([contratId])
   @@index([superviseurId])

@@ -43,6 +43,19 @@ describe("LoginForm", () => {
     expect(sessionStorage.getItem(ACCOUNT_MATRICULE_KEY)).toBe("ETF-2026-0001");
   });
 
+  // Compte agent de production (2026-10-22) : son espace est une route à
+  // part, il ne doit pas retomber sur "/" faute d'entrée dans ROLE_ROUTES.
+  it("redirige un agent vers son Espace Agent", async () => {
+    vi.mocked(apiPost).mockResolvedValue({ ok: true, role: "agent" });
+    render(<LoginForm />);
+
+    fillAndSubmit("ETF-AG-2026-0001", "Sup3rSecret!");
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/compte/agent"));
+    expect(sessionStorage.getItem(ACCOUNT_ROLE_KEY)).toBe("agent");
+    expect(sessionStorage.getItem(ACCOUNT_MATRICULE_KEY)).toBe("ETF-AG-2026-0001");
+  });
+
   it("redirige vers '/' si le rôle renvoyé par le backend n'est pas dans ROLE_ROUTES", async () => {
     vi.mocked(apiPost).mockResolvedValue({ ok: true, role: "role-inconnu" });
     render(<LoginForm />);

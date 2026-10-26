@@ -96,8 +96,18 @@ describe("ProductionService — paie (get-or-create groupé, ex-N+1)", () => {
         tarifNegocie: 600000,
         qualityScore: 4,
         suivisHebdo: [],
+        // Relevés journaliers de l'agent (compte Agent du 2026-10-22) —
+        // vide par défaut : le taux d'atteinte retombe alors sur le
+        // qualityScore, comportement d'avant ce modèle.
+        suivisJournaliers: [],
         ...overrides,
       };
+    }
+
+    // Un relevé journalier (voir SuiviAgentJournalier) rattaché au mois de
+    // paie testé.
+    function releve(jour: string, tauxAtteint: number) {
+      return { jour: new Date(`${jour}T00:00:00.000Z`), realise: null, tauxAtteint, heuresTravaillees: 8 };
     }
 
     it("crée une ligne par défaut pour une mission sans paie existante", async () => {
@@ -197,6 +207,62 @@ describe("ProductionService — paie (get-or-create groupé, ex-N+1)", () => {
         numero: "034 00 000 00",
         verifieLe: new Date("2026-08-01"),
       });
+    });
+
+    // Compte Agent (2026-10-22) : le titulaire d'une mission est désormais
+    // un Agent, l'Apprenant restant le montage des missions antérieures.
+    // La paie doit lire l'un ou l'autre indifféremment.
+    it("lit le titulaire côté Agent quand la mission porte un agent", async () => {
+      prisma.mission.findMany.mockResolvedValue([
+        mission({
+          apprenant: null,
+          agent: {
+            prenom: "Tiana",
+            nom: "Randria",
+            matricule: "ETF-AG-2026-0003",
+            salaireBase: 500000,
+            moyenPaiementType: "Orange Money",
+            ribOuMobileMoney: "032 11 111 11",
+            coordonneesVerifieesLe: new Date("2026-10-01"),
+          },
+        }),
+      ]);
+
+      const { lignes } = await service.getDetailPaieAgents("2026-09");
+
+      expect(lignes[0].agentNom).toBe("Tiana Randria");
+      expect(lignes[0].agentMatricule).toBe("ETF-AG-2026-0003");
+      expect(lignes[0].coordonneesPaiement).toEqual({
+        type: "Orange Money",
+        numero: "032 11 111 11",
+        verifieLe: new Date("2026-10-01"),
+      });
+    });
+
+    it("préfère le taux d'atteinte réel (relevés journaliers) au proxy qualityScore", async () => {
+      prisma.mission.findMany.mockResolvedValue([
+        mission({
+          suivisJournaliers: [
+            releve("2026-09-01", 80),
+            releve("2026-09-02", 120),
+            // Hors du mois de paie : ignoré.
+            releve("2026-08-28", 10),
+          ],
+        }),
+      ]);
+
+      const { lignes } = await service.getDetailPaieAgents("2026-09");
+
+      // Moyenne des deux relevés de septembre, pas (qualityScore/5)*100 = 80.
+      expect(lignes[0].tauxAtteinteObjectifs).toBe(100);
+    });
+
+    it("retombe sur le qualityScore quand aucun relevé journalier n'existe", async () => {
+      prisma.mission.findMany.mockResolvedValue([mission()]);
+
+      const { lignes } = await service.getDetailPaieAgents("2026-09");
+
+      expect(lignes[0].tauxAtteinteObjectifs).toBe(80); // 4/5
     });
   });
 

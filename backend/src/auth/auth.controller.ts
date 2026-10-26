@@ -32,6 +32,7 @@ import {
   verifierSession,
 } from "../common/session";
 import { StaffGuard } from "../common/staff.guard";
+import { RhGuard } from "../common/rh.guard";
 
 // Identifiants partagés Admin/RH (ADMIN_TEST_* / RH_TEST_*) : uniquement
 // pour démarrer. Dès qu'un compte nominatif actif existe pour un rôle
@@ -93,6 +94,9 @@ export class AuthController {
 
     const formateur = await this.authService.loginFormateur(dto.matricule, dto.password);
     if (formateur) return connecter(formateur.matricule, "formateur");
+
+    const agent = await this.authService.loginAgent(dto.matricule, dto.password);
+    if (agent) return connecter(agent.matricule, "agent");
 
     const apprenant = await this.authService.loginApprenant(dto.matricule, dto.password);
     if (apprenant) return connecter(apprenant.matricule, "apprenant");
@@ -208,6 +212,17 @@ export class AuthController {
   @Post("view-as/:matricule")
   createViewAs(@Param("matricule") matricule: string) {
     return this.authService.createApprenantViewAsToken(matricule);
+  }
+
+  // "Se connecter en tant que" (RH -> compte agent de production) — voir
+  // AuthService.createAgentViewAsToken. Appelé depuis l'annuaire des Agents
+  // et le Casier Agent (pages RH) : RhGuard, comme le reste de la
+  // Production (voir production.controller.ts), là où les formateurs
+  // relèvent de l'Admin/Académie.
+  @UseGuards(RhGuard)
+  @Post("view-as/agent/:matricule")
+  createAgentViewAs(@Param("matricule") matricule: string) {
+    return this.authService.createAgentViewAsToken(matricule);
   }
 
   // "Se connecter en tant que" (RH -> compte formateur) — voir

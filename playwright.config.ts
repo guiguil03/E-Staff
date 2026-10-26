@@ -24,6 +24,9 @@ export const E2E_CREDENTIALS = {
   rh: { matricule: "E2E-RH", password: "E2eRhPw!12" },
   formateur: { matricule: "ETF-FORM-E2E-0001", password: "e2e-formateur-pw" },
   apprenant: { matricule: "ETF-E2E-0001", password: "e2e-apprenant-pw" },
+  // Agent de production (compte du 2026-10-22) — même mécanique que
+  // formateur/apprenant : le seed crée le compte avec ces identifiants.
+  agent: { matricule: "ETF-AG-E2E-0001", password: "e2e-agent-pw" },
 };
 
 // Le backend démarre à chaque run contre une base jetable qu'il migre et
@@ -44,6 +47,8 @@ const backendEnv = {
   FORMATEUR_TEST_PASSWORD: E2E_CREDENTIALS.formateur.password,
   APPRENANT_TEST_MATRICULE: E2E_CREDENTIALS.apprenant.matricule,
   APPRENANT_TEST_PASSWORD: E2E_CREDENTIALS.apprenant.password,
+  AGENT_TEST_MATRICULE: E2E_CREDENTIALS.agent.matricule,
+  AGENT_TEST_PASSWORD: E2E_CREDENTIALS.agent.password,
   // Vide = emails en mode stub (voir common/email.service.ts) — les
   // parcours E2E n'ont pas besoin d'e-mails réels, seulement des liens
   // publics (attemptId/registrationId) qu'ils récupèrent via l'UI RH.
