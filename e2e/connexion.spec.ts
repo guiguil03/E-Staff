@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
 import { loginAs, ROLE_LANDING_TITLE, type Role } from "./fixtures";
 
-// Golden path 1 : connexion + accès compte, pour chacun des 4 rôles gérés
+// Golden path 1 : connexion + accès compte, pour chacun des 5 rôles gérés
 // par /auth/login (voir backend/src/auth/auth.controller.ts) — le plus
 // simple des 3 parcours E2E, sert surtout à valider l'infra (backend +
 // frontend + base jetable) avant les parcours plus longs.
-for (const role of ["apprenant", "formateur", "admin", "rh"] as Role[]) {
+for (const role of ["apprenant", "formateur", "agent", "admin", "rh"] as Role[]) {
   test(`connexion ${role} redirige vers son tableau de bord`, async ({ page }) => {
     await loginAs(page, role);
     await expect(page).toHaveTitle(ROLE_LANDING_TITLE[role]);

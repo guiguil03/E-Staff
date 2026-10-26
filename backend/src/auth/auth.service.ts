@@ -17,12 +17,15 @@ import { ResetPasswordDto } from "./dto/reset-password.dto";
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1h
 const APP_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
-// Un « compte » est un Apprenant, un Formateur ou un compte nominatif
-// Admin/RH (CompteStaff, audit du 2026-09-28). Les trois modèles ont les
-// mêmes champs d'auth (password, resetToken, resetTokenExpiresAt,
-// sessionsRevoqueesAt) et des matricules qui ne se chevauchent pas
-// ("ETF-2026-", "ETF-FORM-2026-", "ADM-"/"RH-").
-type TypeCompte = "apprenant" | "formateur" | "staff";
+// Un « compte » est un Apprenant, un Formateur, un Agent de production
+// (2026-10-22) ou un compte nominatif Admin/RH (CompteStaff, audit du
+// 2026-09-28). Les quatre modèles ont les mêmes champs d'auth (password,
+// resetToken, resetTokenExpiresAt, sessionsRevoqueesAt) et des matricules
+// qui ne se chevauchent pas ("ETF-2026-", "ETF-FORM-2026-", "ETF-AG-2026-",
+// "ADM-"/"RH-") — d'où une recherche de compte commune (findAccount), qui
+// fait marcher « mot de passe oublié » et « déconnecter partout » pour tous
+// sans code dédié par rôle.
+type TypeCompte = "apprenant" | "formateur" | "agent" | "staff";
 type Account = {
   type: TypeCompte;
   id: string;
@@ -47,6 +50,8 @@ export class AuthService {
     if (apprenant) return { ...apprenant, type: "apprenant" };
     const formateur = await this.prisma.formateur.findUnique({ where });
     if (formateur) return { ...formateur, type: "formateur" };
+    const agent = await this.prisma.agent.findUnique({ where });
+    if (agent) return { ...agent, type: "agent" };
     const staff = await this.prisma.compteStaff.findUnique({ where });
     if (staff && staff.actif) return { ...staff, type: "staff" };
     return null;
@@ -62,6 +67,7 @@ export class AuthService {
 
   private updateAccountPassword(account: Account, data: Record<string, unknown>) {
     if (account.type === "formateur") return this.prisma.formateur.update({ where: { id: account.id }, data });
+    if (account.type === "agent") return this.prisma.agent.update({ where: { id: account.id }, data });
     if (account.type === "staff") return this.prisma.compteStaff.update({ where: { id: account.id }, data });
     return this.prisma.apprenant.update({ where: { id: account.id }, data });
   }
@@ -100,6 +106,17 @@ export class AuthService {
 
     const valid = await bcrypt.compare(password, formateur.password);
     return valid ? formateur : null;
+  }
+
+  // Un agent "inactif" (fin de contrat) ne peut plus se connecter — son
+  // compte reste en base pour l'historique (missions, paie), voir
+  // Agent.statut et sessionToujoursValide.
+  async loginAgent(matricule: string, password: string) {
+    const agent = await this.prisma.agent.findUnique({ where: { matricule } });
+    if (!agent || !agent.password || agent.statut === "inactif") return null;
+
+    const valid = await bcrypt.compare(password, agent.password);
+    return valid ? agent : null;
   }
 
   async changePassword(dto: ChangePasswordDto) {
@@ -182,6 +199,20 @@ export class AuthService {
     const apprenant = await this.prisma.apprenant.findUnique({ where: { matricule } });
     if (!apprenant) throw new NotFoundException("Apprenant introuvable.");
     return { token: createViewAsToken(matricule, "apprenant") };
+  }
+
+  // Équivalent agent de production — la RH consulte son casier côté
+  // Production (AgentsService.getAgentCasier) ; ce jeton ouvre son espace
+  // tel que l'agent le voit (performances, temps travaillé, paie), sans
+  // connaître son mot de passe. Un agent "inactif" n'est pas ouvrable : ce
+  // serait une session que lui-même ne peut plus obtenir.
+  async createAgentViewAsToken(matricule: string) {
+    const agent = await this.prisma.agent.findUnique({ where: { matricule } });
+    if (!agent) throw new NotFoundException("Agent introuvable.");
+    if (agent.statut === "inactif") {
+      throw new BadRequestException("Cet agent est inactif : son espace n'est plus accessible.");
+    }
+    return { token: createViewAsToken(matricule, "agent") };
   }
 
   // Équivalent formateur — n'a de sens réel que depuis que chaque formateur

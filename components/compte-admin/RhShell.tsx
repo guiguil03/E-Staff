@@ -21,6 +21,12 @@ const NAV_ITEMS = [
   { href: "/compte/admin/inscriptions", label: "Inscriptions", icon: "✎", roles: ["rh"] },
   { href: "/compte/admin/academie", label: "Académie & Vagues", icon: "❖", roles: ["admin"] },
   { href: "/compte/admin/production", label: "Production", icon: "▲", roles: ["rh"] },
+  // "agents-production" et pas "agents" : la nav marque le lien actif avec
+  // startsWith, et "/compte/admin/agents" serait aussi un préfixe de
+  // "/compte/admin/agents-acquisition" (deux métiers différents — l'agent
+  // de production passe les appels clients, l'agent d'acquisition amène des
+  // apprenants).
+  { href: "/compte/admin/agents-production", label: "Agents de production", icon: "☏", roles: ["rh"] },
   { href: "/compte/admin/partenaires", label: "Partenaires", icon: "◎", roles: ["rh"] },
   { href: "/compte/admin/agents-acquisition", label: "Agents d'Acquisition", icon: "✚", roles: ["rh"] },
   { href: "/compte/admin/reunions", label: "Réunions", icon: "☰", roles: ["admin"] },

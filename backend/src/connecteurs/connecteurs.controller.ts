@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { ConnecteursService } from "./connecteurs.service";
 import { CreateConnecteurDto } from "./create-connecteur.dto";
@@ -29,5 +29,11 @@ export class ConnecteursController {
   @Put("rh/connecteurs/:id/status")
   updateStatus(@Param("id") id: string, @Body() dto: UpdateConnecteurStatusDto) {
     return this.service.updateStatus(id, dto.status);
+  }
+
+  @UseGuards(RhGuard)
+  @Delete("rh/connecteurs/:id")
+  remove(@Param("id") id: string) {
+    return this.service.remove(id);
   }
 }

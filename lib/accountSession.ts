@@ -16,6 +16,10 @@ export const ACCOUNT_VIEW_AS_ADMIN_KEY = "estaf-view-as-admin";
 export const ROLE_ROUTES: Record<string, string> = {
   apprenant: "/compte/apprenant",
   formateur: "/compte/formateur",
+  // Agent de production (compte du 2026-10-22) — la personne qui passe les
+  // appels pour les clients : performances, temps travaillé, taux
+  // d'atteinte de ses objectifs, contrat et paiements.
+  agent: "/compte/agent",
   // Compte RH surchargé, ventilé en deux le 2026-09-18 : Admin garde la
   // génération de comptes/identifiants, les événements (réunions) et les
   // rentrées — sa page d'accueil est donc Académie, pas Vue d'ensemble

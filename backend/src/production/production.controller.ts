@@ -103,6 +103,11 @@ export class ProductionController {
     return this.service.listApprenantsDisponibles();
   }
 
+  @Get("agents-disponibles")
+  listAgentsDisponibles() {
+    return this.service.listAgentsDisponibles();
+  }
+
   @Get("performance-superviseurs")
   getPerformanceSuperviseurs() {
     return this.service.getPerformanceSuperviseurs();

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet, apiPut, ApiError } from "@/lib/api";
+import { apiDelete, apiGet, apiPut, ApiError } from "@/lib/api";
 import type { ConnecteurStatus } from "@/lib/types";
 import { adminHeaders } from "./adminHeaders";
 
@@ -72,6 +72,17 @@ export default function ConnecteursPanel() {
       setItems((cur) =>
         Array.isArray(cur) ? cur.map((c) => (c.id === id ? { ...c, status } : c)) : cur
       );
+    } catch (err) {
+      setErreur(messageErreur(err));
+    }
+  }
+
+  async function supprimer(c: Connecteur) {
+    if (!window.confirm(`Supprimer définitivement ${c.firstName} ${c.lastName} ?`)) return;
+    setErreur(null);
+    try {
+      await apiDelete(`/rh/connecteurs/${c.id}`, adminHeaders());
+      setItems((cur) => (Array.isArray(cur) ? cur.filter((x) => x.id !== c.id) : cur));
     } catch (err) {
       setErreur(messageErreur(err));
     }
@@ -152,6 +163,15 @@ export default function ConnecteursPanel() {
                 <Info label="Mode de présentation" value={c.presentationMode} />
                 <Info label="Paiement" value={c.paymentChannel} />
                 <Info label="Opportunité" value={c.opportunityTiming} />
+                <div className="sm:col-span-2">
+                  <button
+                    type="button"
+                    onClick={() => supprimer(c)}
+                    className="rounded border border-red-500 bg-red-600 px-4 py-2 font-sans text-sm font-semibold text-white transition-colors hover:bg-red-500"
+                  >
+                    Supprimer ce connecteur
+                  </button>
+                </div>
               </dl>
             )}
           </div>

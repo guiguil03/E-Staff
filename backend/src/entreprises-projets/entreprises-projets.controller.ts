@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { EntreprisesProjetsService } from "./entreprises-projets.service";
 import { CreateEntrepriseProjetDto } from "./create-entreprise-projet.dto";
@@ -29,5 +29,11 @@ export class EntreprisesProjetsController {
   @Put("rh/entreprises-projets/:id/status")
   updateStatus(@Param("id") id: string, @Body() dto: UpdateEntrepriseProjetStatusDto) {
     return this.service.updateStatus(id, dto.status);
+  }
+
+  @UseGuards(RhGuard)
+  @Delete("rh/entreprises-projets/:id")
+  remove(@Param("id") id: string) {
+    return this.service.remove(id);
   }
 }

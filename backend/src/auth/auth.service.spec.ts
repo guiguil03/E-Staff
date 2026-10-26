@@ -38,10 +38,29 @@ async function makeFormateur(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+// Même principe côté Agent de production (matricule "ETF-AG-2026-..." —
+// compte du 2026-10-22, voir AuthService.loginAgent). `statut` conditionne
+// l'accès : un agent "inactif" ne peut plus se connecter.
+async function makeAgent(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: "agent-1",
+    matricule: "ETF-AG-2026-0003",
+    prenom: "Tiana",
+    nom: "Randria",
+    email: "tiana@example.com",
+    statut: "actif",
+    password: await bcrypt.hash("Sup3rSecret!", 10),
+    resetToken: null,
+    resetTokenExpiresAt: null,
+    ...overrides,
+  };
+}
+
 describe("AuthService", () => {
   let prisma: {
     apprenant: { findUnique: jest.Mock; update: jest.Mock };
     formateur: { findUnique: jest.Mock; update: jest.Mock };
+    agent: { findUnique: jest.Mock; update: jest.Mock };
     compteStaff: { findUnique: jest.Mock; update: jest.Mock };
   };
   let email: { send: jest.Mock };
@@ -54,6 +73,10 @@ describe("AuthService", () => {
         update: jest.fn(),
       },
       formateur: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
+      },
+      agent: {
         findUnique: jest.fn().mockResolvedValue(null),
         update: jest.fn(),
       },
@@ -112,6 +135,59 @@ describe("AuthService", () => {
       const formateur = await makeFormateur();
       prisma.formateur.findUnique.mockResolvedValue(formateur);
       expect(await service.loginFormateur("ETF-FORM-2026-0002", "Sup3rSecret!")).toBe(formateur);
+    });
+  });
+
+  describe("loginAgent", () => {
+    it("retourne null si le matricule est introuvable", async () => {
+      prisma.agent.findUnique.mockResolvedValue(null);
+      expect(await service.loginAgent("ETF-AG-2026-0003", "whatever")).toBeNull();
+    });
+
+    it("retourne null si le compte n'a pas encore de mot de passe", async () => {
+      prisma.agent.findUnique.mockResolvedValue(await makeAgent({ password: null }));
+      expect(await service.loginAgent("ETF-AG-2026-0003", "whatever")).toBeNull();
+    });
+
+    it("retourne null si le mot de passe est incorrect", async () => {
+      prisma.agent.findUnique.mockResolvedValue(await makeAgent());
+      expect(await service.loginAgent("ETF-AG-2026-0003", "mauvais-mdp")).toBeNull();
+    });
+
+    // Fin de contrat : le compte reste en base (historique missions/paie)
+    // mais ne donne plus accès à l'Espace Agent.
+    it("retourne null si l'agent est inactif, même avec le bon mot de passe", async () => {
+      prisma.agent.findUnique.mockResolvedValue(await makeAgent({ statut: "inactif" }));
+      expect(await service.loginAgent("ETF-AG-2026-0003", "Sup3rSecret!")).toBeNull();
+    });
+
+    it("retourne l'agent si le mot de passe est correct", async () => {
+      const agent = await makeAgent();
+      prisma.agent.findUnique.mockResolvedValue(agent);
+      expect(await service.loginAgent("ETF-AG-2026-0003", "Sup3rSecret!")).toBe(agent);
+    });
+  });
+
+  describe("changePassword — matricule Agent", () => {
+    it("cherche dans Agent quand le matricule n'est ni Apprenant ni Formateur, et écrit dans Agent", async () => {
+      prisma.apprenant.findUnique.mockResolvedValue(null);
+      prisma.formateur.findUnique.mockResolvedValue(null);
+      const agent = await makeAgent();
+      prisma.agent.findUnique.mockResolvedValue(agent);
+
+      await service.changePassword({
+        matricule: "ETF-AG-2026-0003",
+        oldPassword: "Sup3rSecret!",
+        newPassword: "nouveaunouveau",
+      });
+
+      expect(prisma.apprenant.update).not.toHaveBeenCalled();
+      expect(prisma.formateur.update).not.toHaveBeenCalled();
+      const { where, data } = prisma.agent.update.mock.calls[0][0];
+      expect(where).toEqual({ id: agent.id });
+      expect(await bcrypt.compare("nouveaunouveau", data.password)).toBe(true);
+      // Changement de mot de passe = toutes les sessions tombent.
+      expect(data.sessionsRevoqueesAt).toBeInstanceOf(Date);
     });
   });
 
@@ -314,6 +390,32 @@ describe("AuthService", () => {
 
       expect(consumeViewAsToken(token)).toEqual({ matricule: "ETF-2026-0001", role: "apprenant" });
       // Usage unique : la deuxième consommation échoue.
+      expect(consumeViewAsToken(token)).toBeNull();
+    });
+  });
+
+  describe("createAgentViewAsToken", () => {
+    it("rejette un matricule introuvable", async () => {
+      prisma.agent.findUnique.mockResolvedValue(null);
+      await expect(service.createAgentViewAsToken("inconnu")).rejects.toThrow(NotFoundException);
+    });
+
+    it("refuse un agent inactif (session qu'il ne peut plus obtenir lui-même)", async () => {
+      prisma.agent.findUnique.mockResolvedValue(await makeAgent({ statut: "inactif" }));
+      await expect(service.createAgentViewAsToken("ETF-AG-2026-0003")).rejects.toThrow(
+        BadRequestException
+      );
+    });
+
+    it("émet un jeton consommable une seule fois, résolvant vers le rôle agent", async () => {
+      prisma.agent.findUnique.mockResolvedValue(await makeAgent());
+
+      const { token } = await service.createAgentViewAsToken("ETF-AG-2026-0003");
+
+      expect(consumeViewAsToken(token)).toEqual({
+        matricule: "ETF-AG-2026-0003",
+        role: "agent",
+      });
       expect(consumeViewAsToken(token)).toBeNull();
     });
   });

@@ -16,8 +16,16 @@ const PLACEHOLDER_LINKS = new Set([
 // Permet aux écrans appelants d'adapter le texte/CTA autour du calendrier
 // (ex. "Réservez votre créneau" n'a pas de sens tant que le calendrier
 // n'est pas configuré).
+// Accepte aussi bien "user/evenement" que l'URL complète collée depuis Cal.com.
+function normalizeLink(link: string) {
+  return link
+    .trim()
+    .replace(/^https?:\/\/(www\.)?cal\.com\//i, "")
+    .replace(/^\/+|\/+$/g, "");
+}
+
 export function isCalendarConfigured(link: string) {
-  return !PLACEHOLDER_LINKS.has(link);
+  return !PLACEHOLDER_LINKS.has(normalizeLink(link));
 }
 
 interface CalendarEmbedProps {
@@ -36,7 +44,8 @@ export default function CalendarEmbed({
   prefillName,
   prefillEmail,
 }: CalendarEmbedProps) {
-  if (PLACEHOLDER_LINKS.has(link)) {
+  const slug = normalizeLink(link);
+  if (PLACEHOLDER_LINKS.has(slug)) {
     return (
       <div
         className={`flex h-[320px] flex-col items-center justify-center gap-2 rounded border border-dashed border-accent/30 bg-obsidianCard px-6 text-center ${className}`.trim()}
@@ -62,7 +71,7 @@ export default function CalendarEmbed({
       className={`overflow-hidden rounded border border-white/10 bg-obsidianCard ${className}`.trim()}
     >
       <iframe
-        src={`https://cal.com/${link}?${params.toString()}`}
+        src={`https://cal.com/${slug}?${params.toString()}`}
         title={title}
         className="h-[700px] w-full"
         frameBorder={0}

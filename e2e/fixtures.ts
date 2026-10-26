@@ -6,6 +6,7 @@ export type Role = keyof typeof E2E_CREDENTIALS;
 export const ROLE_LANDING_TITLE: Record<Role, string> = {
   apprenant: "Espace Apprenant — e-Staf",
   formateur: "Cockpit Formateur — e-Staf",
+  agent: "Mes performances — Espace Agent — e-Staf",
   admin: "Académie & Vagues — Portail RH — e-Staf",
   rh: "Portail RH — e-Staf",
 };

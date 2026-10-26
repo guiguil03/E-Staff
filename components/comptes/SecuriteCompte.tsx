@@ -15,7 +15,7 @@ const labelClass = "block text-sm font-medium mb-1 text-white/80";
 // changer son mot de passe (déconnecte les autres appareils) et
 // « Déconnecter tous mes appareils ».
 export default function SecuriteCompte() {
-  const checked = useRequireRole(["apprenant", "formateur", "admin", "rh"]);
+  const checked = useRequireRole(["apprenant", "formateur", "agent", "admin", "rh"]);
   const router = useRouter();
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
