@@ -21,7 +21,12 @@ import { StaffGuard } from "../common/staff.guard";
 import { isOfficeDocument } from "../common/file-signature";
 import { AgentsService } from "./agents.service";
 import { UpsertAgentDto } from "./dto/upsert-agent.dto";
+import { LierCandidatDto } from "./dto/lier-candidat.dto";
+import { NoteClientDto } from "./dto/note-client.dto";
+import { SaisieJourneeDto } from "./dto/saisie-journee.dto";
+import { StatutPresenceDto } from "./dto/statut-presence.dto";
 import { UpsertSuiviJournalierDto } from "./dto/upsert-suivi-journalier.dto";
+import { ValiderJourneeDto } from "./dto/valider-journee.dto";
 
 // Mêmes limites que le contrat formateur déposé par la RH (voir
 // rh.controller.ts) — un contrat de travail est un PDF ou un Word.
@@ -90,7 +95,82 @@ export class AgentsController {
     return this.service.supprimerSuiviJournalier(id);
   }
 
+  // Validation / réouverture d'une journée saisie par l'agent. Le
+  // superviseur n'a pas de compte : c'est la RH qui valide à sa place, avec
+  // une note facultative.
+  @UseGuards(RhGuard)
+  @Put("suivi-journalier/:id/validation")
+  validerJournee(@Param("id") id: string, @Body() dto: ValiderJourneeDto) {
+    return this.service.validerJournee(id, dto);
+  }
+
+  @UseGuards(RhGuard)
+  @Put("suivi-journalier/:id/reouverture")
+  rouvrirJournee(@Param("id") id: string) {
+    return this.service.rouvrirJournee(id);
+  }
+
+  @UseGuards(RhGuard)
+  @Post("missions/:missionId/notes-client")
+  ajouterNoteClient(@Param("missionId") missionId: string, @Body() dto: NoteClientDto) {
+    return this.service.ajouterNoteClient(missionId, dto);
+  }
+
+  @UseGuards(RhGuard)
+  @Delete("notes-client/:id")
+  supprimerNoteClient(@Param("id") id: string) {
+    return this.service.supprimerNoteClient(id);
+  }
+
+  @UseGuards(RhGuard)
+  @Put(":id/candidat")
+  lierCandidat(@Param("id") id: string, @Body() dto: LierCandidatDto) {
+    return this.service.lierCandidat(id, dto.email);
+  }
+
+  @UseGuards(RhGuard)
+  @Delete(":id/candidat")
+  delierCandidat(@Param("id") id: string) {
+    return this.service.delierCandidat(id);
+  }
+
   // ---- Espace Agent (session agent) ----------------------------------------
+
+  @UseGuards(AgentGuard)
+  @Get(":matricule/mon-casier")
+  getMonCasier(@Param("matricule") matricule: string) {
+    return this.service.getMonCasier(matricule);
+  }
+
+  @UseGuards(AgentGuard)
+  @Get(":matricule/suivi-activite")
+  getSuiviActivite(@Param("matricule") matricule: string) {
+    return this.service.getSuiviActivite(matricule);
+  }
+
+  @UseGuards(AgentGuard)
+  @Put(":matricule/suivi-activite")
+  saisirMaJournee(@Param("matricule") matricule: string, @Body() dto: SaisieJourneeDto) {
+    return this.service.saisirMaJournee(matricule, dto);
+  }
+
+  @UseGuards(AgentGuard)
+  @Post(":matricule/appels/demarrer")
+  demarrerAppel(@Param("matricule") matricule: string) {
+    return this.service.demarrerAppel(matricule);
+  }
+
+  @UseGuards(AgentGuard)
+  @Post(":matricule/appels/terminer")
+  terminerAppel(@Param("matricule") matricule: string) {
+    return this.service.terminerAppel(matricule);
+  }
+
+  @UseGuards(AgentGuard)
+  @Put(":matricule/statut-presence")
+  changerStatutPresence(@Param("matricule") matricule: string, @Body() dto: StatutPresenceDto) {
+    return this.service.changerStatutPresence(matricule, dto.statut);
+  }
 
   @UseGuards(AgentGuard)
   @Get(":matricule/dashboard")

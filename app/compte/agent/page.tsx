@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import AgentShell from "@/components/compte-agent/AgentShell";
 import AgentDashboard from "@/components/compte-agent/AgentDashboard";
+import SuiviActiviteAgent from "@/components/compte-agent/SuiviActiviteAgent";
 
 export const metadata: Metadata = {
   title: "Mes performances — Espace Agent — e-Staf",
@@ -13,7 +14,10 @@ export default function CompteAgentPage() {
       title="Mes performances"
       subtitle="Objectifs atteints, temps travaillé et production de votre mission."
     >
-      <AgentDashboard />
+      <div className="space-y-8">
+        <SuiviActiviteAgent />
+        <AgentDashboard />
+      </div>
     </AgentShell>
   );
 }

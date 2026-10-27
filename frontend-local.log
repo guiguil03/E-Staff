@@ -1,0 +1,215 @@
+ ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\guill\package-lock.json as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * C:\Users\guill\Documents\Freelance\Projet_Mada-Orga\Projet_Mada\package-lock.json
+
+   ▲ Next.js 15.5.26
+   - Local:        http://localhost:3000
+   - Network:      http://172.26.16.1:3000
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 22.7s
+ ○ Compiling / ...
+Request timed out after 3000ms
+
+Retrying 1/3...
+Request timed out after 3000ms
+
+Retrying 1/3...
+Request timed out after 3000ms
+
+Retrying 1/3...
+Request timed out after 3000ms
+
+Retrying 1/3...
+Request timed out after 3000ms
+
+Retrying 1/3...
+Request timed out after 3000ms
+
+Retrying 1/3...
+Request timed out after 3000ms
+
+Retrying 1/3...
+Request timed out after 3000ms
+
+Retrying 1/3...
+ ✓ Compiled /_not-found in 49.2s (1235 modules)
+ GET / 200 in 4424ms
+ GET /sw.js 404 in 17777ms
+ GET / 200 in 513ms
+ GET / 200 in 713ms
+ GET / 200 in 638ms
+ GET / 200 in 313ms
+ GET / 200 in 459ms
+ GET / 200 in 480ms
+ GET /sw.js 404 in 162ms
+ GET / 200 in 399ms
+ GET / 200 in 372ms
+ GET / 200 in 1568ms
+ GET / 200 in 289ms
+ GET / 200 in 477ms
+ GET / 200 in 376ms
+ GET / 200 in 593ms
+ GET / 200 in 391ms
+ GET / 200 in 986ms
+ GET / 200 in 418ms
+ GET / 200 in 259ms
+ GET /sw.js 404 in 137ms
+ GET / 200 in 296ms
+ GET / 200 in 1165ms
+ GET / 200 in 419ms
+ GET / 200 in 388ms
+ GET / 200 in 376ms
+ GET / 200 in 477ms
+ GET / 200 in 705ms
+ GET / 200 in 278ms
+ GET / 200 in 311ms
+ GET /sw.js 404 in 216ms
+ GET / 200 in 372ms
+ GET / 200 in 675ms
+ GET / 200 in 592ms
+ GET / 200 in 518ms
+ GET /sw.js 404 in 154ms
+ GET /sw.js 404 in 228ms
+ GET /sw.js 404 in 531ms
+ GET /sw.js 404 in 360ms
+ GET /sw.js 404 in 518ms
+ GET /sw.js 404 in 1263ms
+ GET /sw.js 404 in 383ms
+ GET /sw.js 404 in 230ms
+ ○ Compiling /connexion ...
+ ✓ Compiled /connexion in 4.3s (1234 modules)
+ GET /connexion 200 in 5967ms
+ ○ Compiling /icon.png ...
+ ✓ Compiled /icon.png in 1361ms (720 modules)
+ ✓ Compiled (722 modules)
+ GET /icon.png?959f9f8d5416bb80 200 in 2793ms
+ GET /favicon.ico 200 in 3130ms
+ GET /sw.js 404 in 3005ms
+ GET /sw.js 404 in 150ms
+ ○ Compiling /compte/agent ...
+ ✓ Compiled /compte/agent in 1603ms (1263 modules)
+ GET /sw.js 404 in 1154ms
+ GET /compte/agent 200 in 2245ms
+ GET /sw.js 404 in 148ms
+ GET /icon.png?959f9f8d5416bb80 200 in 115ms
+ GET /sw.js 404 in 118ms
+ GET /sw.js 404 in 85ms
+ GET /sw.js 404 in 161ms
+ GET /sw.js 404 in 150ms
+ GET /sw.js 404 in 134ms
+ ○ Compiling /compte/agent/mon-dossier ...
+ ✓ Compiled /compte/agent/paiements in 18s (1268 modules)
+ GET /sw.js 404 in 15767ms
+ GET /compte/agent/mon-dossier 200 in 21986ms
+ GET /compte/securite 200 in 12209ms
+ GET /compte/agent/paiements 200 in 10799ms
+ GET /compte/agent/mon-dossier 200 in 427ms
+ GET /compte/agent/mon-dossier 200 in 452ms
+ GET /compte/agent/mon-dossier 200 in 442ms
+ GET /compte/agent/mon-dossier 200 in 445ms
+ GET /sw.js 404 in 238ms
+ ○ Compiling /icon.png ...
+ ✓ Compiled /icon.png in 1252ms (753 modules)
+ GET /icon.png?959f9f8d5416bb80 200 in 4246ms
+ GET /sw.js 404 in 3881ms
+ GET /sw.js 404 in 313ms
+ GET /compte/agent 200 in 208ms
+ GET /compte/agent/mon-dossier 200 in 224ms
+ GET /compte/agent/paiements 200 in 188ms
+ GET /compte/agent/mon-dossier 200 in 104ms
+ GET /icon.png?959f9f8d5416bb80 200 in 60ms
+ GET /sw.js 404 in 142ms
+ GET /compte/securite 200 in 109ms
+ GET /icon.png?959f9f8d5416bb80 200 in 53ms
+ GET /sw.js 404 in 126ms
+ GET /icon.png?959f9f8d5416bb80 200 in 57ms
+ GET /compte/agent 200 in 87ms
+ GET /sw.js 404 in 155ms
+ GET /icon.png?959f9f8d5416bb80 200 in 77ms
+ GET /sw.js 404 in 124ms
+ GET /sw.js 404 in 119ms
+ GET /sw.js 404 in 108ms
+ GET /sw.js 404 in 117ms
+ GET /sw.js 404 in 93ms
+ GET /sw.js 404 in 88ms
+ GET /sw.js 404 in 122ms
+ GET /sw.js 404 in 97ms
+ GET /sw.js 404 in 83ms
+ GET /sw.js 404 in 80ms
+ GET /sw.js 404 in 107ms
+ ✓ Compiled in 1908ms (1276 modules)
+ GET /compte/agent 200 in 508ms
+ ✓ Compiled /icon.png in 379ms (747 modules)
+ GET /icon.png?959f9f8d5416bb80 200 in 1733ms
+ GET /sw.js 404 in 1607ms
+ GET /sw.js 404 in 90ms
+ GET /sw.js 404 in 157ms
+ GET /sw.js 404 in 128ms
+ GET /sw.js 404 in 98ms
+ GET /compte/agent 200 in 171ms
+ GET /icon.png?959f9f8d5416bb80 200 in 58ms
+ GET /sw.js 404 in 108ms
+ GET /sw.js 404 in 94ms
+ GET /sw.js 404 in 88ms
+ GET /sw.js 404 in 98ms
+ GET /sw.js 404 in 94ms
+ GET /compte/agent 200 in 171ms
+ GET /icon.png?959f9f8d5416bb80 200 in 65ms
+ GET /sw.js 404 in 103ms
+ GET /sw.js 404 in 158ms
+ GET /sw.js 404 in 98ms
+ GET /sw.js 404 in 182ms
+ GET /sw.js 404 in 139ms
+ GET /sw.js 404 in 76ms
+ GET /compte/agent 200 in 119ms
+ GET /icon.png?959f9f8d5416bb80 200 in 48ms
+ GET /sw.js 404 in 99ms
+ GET /sw.js 404 in 110ms
+ GET /sw.js 404 in 98ms
+ GET /sw.js 404 in 99ms
+ GET /entonnoir 404 in 43ms
+ GET /entonnoir 404 in 116ms
+ GET /icon.png?959f9f8d5416bb80 200 in 49ms
+ GET /sw.js 404 in 134ms
+ GET /sw.js 404 in 82ms
+ GET /coachs 404 in 101ms
+ GET /icon.png?959f9f8d5416bb80 200 in 119ms
+ GET /sw.js 404 in 119ms
+ GET /sw.js 404 in 105ms
+ ✓ Compiled in 737ms (546 modules)
+ GET /compte/agent 200 in 679ms
+ GET /coachs 404 in 613ms
+ ✓ Compiled in 2.6s (1293 modules)
+ GET /icon.png?959f9f8d5416bb80 200 in 2776ms
+ GET /sw.js 404 in 2572ms
+ GET /coachs 404 in 2365ms
+ GET /coachs 404 in 55ms
+ GET /coachs 404 in 133ms
+ GET /sw.js 404 in 132ms
+ GET /icon.png?959f9f8d5416bb80 200 in 50ms
+ GET /sw.js 404 in 122ms
+ ✓ Compiled in 436ms (546 modules)
+ GET /coachs 404 in 72ms
+ GET /coachs 404 in 108ms
+ GET /sw.js 404 in 89ms
+ GET /icon.png?959f9f8d5416bb80 200 in 63ms
+ GET /sw.js 404 in 83ms
+ ✓ Compiled in 389ms (546 modules)
+ ✓ Compiled in 741ms (546 modules)
+ GET /coachs 404 in 482ms
+ GET /coachs 404 in 130ms
+ GET /coachs 404 in 110ms
+ GET /sw.js 404 in 155ms
+ GET /icon.png?959f9f8d5416bb80 200 in 55ms
+ GET /sw.js 404 in 108ms
+ GET /icon.png?959f9f8d5416bb80 200 in 49ms
+ GET /sw.js 404 in 88ms
+ ○ Compiling /compte/agent/mon-casier ...
+ ✓ Compiled /compte/agent/mon-casier in 1732ms (1287 modules)
+ GET /compte/agent/mon-casier 200 in 2329ms
+ GET /sw.js 404 in 123ms

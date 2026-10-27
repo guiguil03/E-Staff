@@ -44,6 +44,20 @@ function makePrismaMock() {
       delete: jest.fn(),
     },
     paiementAgent: { findMany: jest.fn().mockResolvedValue([]) },
+    candidat: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
+    evaluationAttempt: { findMany: jest.fn().mockResolvedValue([]) },
+    noteClientAgent: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn(),
+      create: jest.fn((args: { data: Record<string, unknown> }) => Promise.resolve({ id: "n1", ...args.data })),
+      delete: jest.fn(),
+    },
+    appelAgent: {
+      findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+      create: jest.fn().mockResolvedValue({ id: "appel-1", debut: new Date() }),
+      update: jest.fn().mockResolvedValue({}),
+    },
   };
 }
 
@@ -470,6 +484,192 @@ describe("AgentsService", () => {
       await service.getMonDocumentStream("ETF-AG-2026-0001", "doc-1");
 
       expect(storage.getObjectStream).toHaveBeenCalledWith("agents/agent-1/contrat/1.pdf");
+    });
+  });
+  describe("saisirMaJournee (saisie par l'agent)", () => {
+    const dto = { heuresTravaillees: 7, heuresPanne: 1, realise: 4 };
+    const aujourdhui = () => {
+      const d = new Date();
+      d.setUTCHours(0, 0, 0, 0);
+      return d;
+    };
+    const agentAvecMission = (over: Record<string, unknown> = {}, releves: unknown[] = []) => ({
+      id: "agent-1",
+      missions: [
+        {
+          id: "mission-1",
+          dateFin: null,
+          objectifJournalier: 80,
+          contrat: { clientNom: "Acme" },
+          superviseur: null,
+          suivisHebdo: [],
+          suivisJournaliers: releves,
+          ...over,
+        },
+      ],
+      documents: [],
+    });
+
+    it("calcule le taux depuis l'objectif et renvoie le niveau d'alerte", async () => {
+      prisma.agent.findUnique.mockResolvedValue(agentAvecMission());
+
+      const r = await service.saisirMaJournee("ETF-AG-2026-0001", dto);
+
+      expect(r.tauxAtteint).toBe(5);
+      expect(r.alerte).toBe("vert");
+      expect(prisma.suiviAgentJournalier.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ heuresPanne: 1, tauxAtteint: 5 }),
+        })
+      );
+    });
+
+    it("refuse de modifier une journée déjà validée", async () => {
+      prisma.agent.findUnique.mockResolvedValue(
+        agentAvecMission({}, [{ jour: aujourdhui(), statutValidation: "valide" }])
+      );
+
+      await expect(service.saisirMaJournee("ETF-AG-2026-0001", dto)).rejects.toThrow(
+        BadRequestException
+      );
+      expect(prisma.suiviAgentJournalier.upsert).not.toHaveBeenCalled();
+    });
+
+    it("refuse sans objectif journalier plutôt que d'inventer un taux", async () => {
+      prisma.agent.findUnique.mockResolvedValue(agentAvecMission({ objectifJournalier: null }));
+
+      await expect(service.saisirMaJournee("ETF-AG-2026-0001", dto)).rejects.toThrow(
+        /objectif journalier/
+      );
+    });
+  });
+
+  describe("validation / réouverture", () => {
+    it("valide avec une note du superviseur", async () => {
+      prisma.suiviAgentJournalier.findUnique.mockResolvedValue({ id: "rel-1" });
+      (prisma.suiviAgentJournalier as any).update = jest.fn().mockResolvedValue({});
+
+      await service.validerJournee("rel-1", { commentaire: " Panne fibre validée " });
+
+      expect((prisma.suiviAgentJournalier as any).update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            statutValidation: "valide",
+            commentaireSuperviseur: "Panne fibre validée",
+          }),
+        })
+      );
+    });
+  });
+
+  describe("chrono d'appel", () => {
+    beforeEach(() => prisma.agent.findUnique.mockResolvedValue({ id: "agent-1" }));
+
+    it("ouvre un appel quand aucun n'est en cours", async () => {
+      await service.demarrerAppel("ETF-AG-2026-0001");
+
+      expect(prisma.appelAgent.create).toHaveBeenCalledWith({ data: { agentId: "agent-1" } });
+    });
+
+    it("n'ouvre pas un second appel s'il y en a déjà un (double clic)", async () => {
+      const debut = new Date();
+      prisma.appelAgent.findFirst.mockResolvedValue({ id: "appel-0", debut });
+
+      const r = await service.demarrerAppel("ETF-AG-2026-0001");
+
+      expect(r).toEqual({ id: "appel-0", debut });
+      expect(prisma.appelAgent.create).not.toHaveBeenCalled();
+    });
+
+    it("clôt l'appel en cours et renvoie sa durée", async () => {
+      prisma.appelAgent.findFirst.mockResolvedValue({
+        id: "appel-0",
+        debut: new Date(Date.now() - 90_000),
+      });
+
+      const r = await service.terminerAppel("ETF-AG-2026-0001");
+
+      expect(r.secondes).toBeGreaterThanOrEqual(90);
+      expect(prisma.appelAgent.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: "appel-0" } })
+      );
+    });
+
+    it("refuse de terminer sans appel en cours", async () => {
+      await expect(service.terminerAppel("ETF-AG-2026-0001")).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe("lierCandidat", () => {
+    beforeEach(() => prisma.agent.findUnique.mockResolvedValue({ id: "agent-1" }));
+
+    it("rattache l'agent au candidat de même e-mail", async () => {
+      prisma.candidat.findMany.mockResolvedValue([
+        { id: "c1", firstName: "Tiana", lastName: "Test", agent: null },
+      ]);
+
+      await service.lierCandidat("agent-1", "tiana@example.com");
+
+      expect(prisma.agent.update).toHaveBeenCalledWith({
+        where: { id: "agent-1" },
+        data: { candidatId: "c1" },
+      });
+    });
+
+    it("refuse si plusieurs candidats portent cet e-mail", async () => {
+      prisma.candidat.findMany.mockResolvedValue([
+        { id: "c1", agent: null },
+        { id: "c2", agent: null },
+      ]);
+
+      await expect(service.lierCandidat("agent-1", "x@example.com")).rejects.toThrow(/Plusieurs/);
+      expect(prisma.agent.update).not.toHaveBeenCalled();
+    });
+
+    it("refuse un candidat déjà rattaché à un autre agent", async () => {
+      prisma.candidat.findMany.mockResolvedValue([{ id: "c1", agent: { id: "autre" } }]);
+
+      await expect(service.lierCandidat("agent-1", "x@example.com")).rejects.toThrow(
+        /déjà rattaché/
+      );
+    });
+  });
+
+  describe("notes client", () => {
+    it("refuse une date invalide", async () => {
+      prisma.mission.findUnique.mockResolvedValue({ id: "m1" });
+
+      await expect(
+        service.ajouterNoteClient("m1", { date: "pas-une-date", note: 4 })
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe("getMonCasier", () => {
+    it("cumule la somme perçue par mois et ne compte que les paiements payés", async () => {
+      prisma.agent.findUnique.mockResolvedValue({
+        id: "agent-1",
+        matricule: "ETF-AG-2026-0001",
+        candidatId: null,
+        salaireBase: 300,
+        documents: [],
+        missions: [
+          { id: "m1", tarifNegocie: null, contrat: { clientNom: "Acme" }, role: "Closer", suivisHebdo: [], suivisJournaliers: [] },
+        ],
+      });
+      (prisma.paiementAgent as any).findMany.mockResolvedValue([
+        { periode: "2026-09", missionId: "m1", montantBase: 300, montantPrime: 30, statut: "paye", moyenPaiement: "MVola", datePaiement: null },
+        { periode: "2026-10", missionId: "m1", montantBase: 300, montantPrime: 0, statut: "en_attente", moyenPaiement: null, datePaiement: null },
+      ]);
+
+      const r = await service.getMonCasier("ETF-AG-2026-0001");
+
+      expect(r.tests).toBeNull();
+      expect(r.paiements.parMois).toEqual([
+        { periode: "2026-10", percu: 0, enAttente: 300 },
+        { periode: "2026-09", percu: 330, enAttente: 0 },
+      ]);
+      expect(r.paiements.totalPercu).toBe(330);
     });
   });
 });

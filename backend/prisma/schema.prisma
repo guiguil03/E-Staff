@@ -155,8 +155,8 @@ model Registration {
   // Jeton des liens publics (contrat, paiement) envoyés par e-mail — voir
   // common/lien-token.ts. accesParIdAutorise : lignes antérieures aux
   // jetons, dont les liens déjà envoyés contiennent l'identifiant.
-  lienToken          String?  @unique
-  accesParIdAutorise Boolean  @default(false)
+  lienToken          String? @unique
+  accesParIdAutorise Boolean @default(false)
 
   // Comptage des candidatures par offre (OffresEmploiService.list, _count)
   // — sans index, un full scan de Registration (tous funnels confondus,
@@ -240,13 +240,13 @@ model Candidat {
   // candidat du parcours "admission".
   // posteVise : "teleoperateur" | "televente" | "teleprospecteur" | "sdr"
   // | "fundraising" | "autre" (posteAutre précise alors le libellé).
-  posteVise          String?
-  posteAutre         String?
-  experienceAnnees   Int?
-  experienceSecteurs String?
-  parcoursPoste      String?
+  posteVise                   String?
+  posteAutre                  String?
+  experienceAnnees            Int?
+  experienceSecteurs          String?
+  parcoursPoste               String?
   // Taux d'atteinte des objectifs sur le dernier poste, en % (ex. 110).
-  tauxObjectifs      Int?
+  tauxObjectifs               Int?
   // Vidéo de présentation (S3), non notée — consultée par le formateur/RH.
   videoPresentationKey        String?
   videoPresentationUploadedAt DateTime?
@@ -261,6 +261,7 @@ model Candidat {
   agentAcquisition   AgentAcquisition? @relation(fields: [agentAcquisitionId], references: [id])
 
   attempts EvaluationAttempt[]
+  agent    Agent?
 
   // Purge RGPD manuelle déclenchée par la RH (voir RhService.
   // purgeCandidatData) — non null = CV/audio/vidéo supprimés du stockage et
@@ -393,17 +394,17 @@ model EvaluationAttempt {
   correcteur        Formateur? @relation("CorrecteurTests", fields: [correcteurId], references: [id], onDelete: SetNull)
   correctionPriseAt DateTime?
 
+  // Jeton des liens publics (contrat, paiement) envoyés par e-mail — voir
+  // common/lien-token.ts. accesParIdAutorise : lignes antérieures aux
+  // jetons, dont les liens déjà envoyés contiennent l'identifiant.
+  lienToken          String? @unique
+  accesParIdAutorise Boolean @default(false)
+
   @@index([candidatId])
   // Filtre le plus utilisé du modèle (file de correction, pipeline RH,
   // compteur de l'overview RH) — sans index, full scan de toutes les
   // tentatives jamais passées à chaque chargement de ces vues.
   @@index([status])
-
-  // Jeton des liens publics (contrat, paiement) envoyés par e-mail — voir
-  // common/lien-token.ts. accesParIdAutorise : lignes antérieures aux
-  // jetons, dont les liens déjà envoyés contiennent l'identifiant.
-  lienToken          String?  @unique
-  accesParIdAutorise Boolean  @default(false)
 }
 
 // Une réponse audio à une des 10 situations professionnelles (le candidat
@@ -549,17 +550,17 @@ model Groupe {
 // RhService.assertFormateurTypeCoursCompatible) plutôt qu'une vraie
 // diffusion académie entière.
 model Diffusion {
-  id          String    @id @default(cuid())
+  id          String     @id @default(cuid())
   formateurId String
-  formateur   Formateur @relation(fields: [formateurId], references: [id])
+  formateur   Formateur  @relation(fields: [formateurId], references: [id])
   groupeId    String?
-  groupe      Groupe?   @relation(fields: [groupeId], references: [id])
+  groupe      Groupe?    @relation(fields: [groupeId], references: [id])
   // Renseigné = message privé du formateur à cet apprenant (jamais listé
   // dans les annonces de groupe, visible dans "Commentaire du formateur").
   apprenantId String?
   apprenant   Apprenant? @relation(fields: [apprenantId], references: [id], onDelete: Cascade)
   message     String
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime   @default(now())
 
   @@index([formateurId])
   @@index([groupeId])
@@ -1157,6 +1158,12 @@ model Agent {
   // renseigné.
   salaireBase Float?
 
+  // Statut de présence en direct choisi par l'agent dans son en-tête :
+  // "hors_ligne" | "en_ligne" | "en_pause" | "en_formation" | "en_panne".
+  // `statutPresenceDepuis` date le dernier changement (durée écoulée).
+  statutPresence       String   @default("hors_ligne")
+  statutPresenceDepuis DateTime @default(now())
+
   // Coffre-fort coordonnées de paiement — même principe que sur Apprenant
   // (saisi/vérifié une fois par la RH, réutilisé à chaque paiement).
   ribOuMobileMoney       String?
@@ -1165,6 +1172,14 @@ model Agent {
 
   missions  Mission[]
   documents AgentDocument[]
+  appels    AppelAgent[]
+
+  // Candidat dont l'agent est issu — permet d'afficher ses résultats de test
+  // (admission/recrutement) dans son casier. Lien posé explicitement par la
+  // RH (jamais déduit de l'e-mail : une coquille exposerait les résultats
+  // d'un autre candidat).
+  candidatId String?   @unique
+  candidat   Candidat? @relation(fields: [candidatId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1206,17 +1221,28 @@ model SuiviAgentJournalier {
 
   // Production du jour (appels concrétisés, ventes, RDV... selon le poste).
   // Nullable : la RH peut ne saisir que le taux, sans détailler le réalisé.
-  realise Int?
+  realise           Int?
   // % de l'objectif journalier atteint — calculé depuis `realise` et
   // Mission.objectifJournalier quand les deux sont connus, sinon saisi
   // directement (voir AgentsService.upsertSuiviJournalier).
-  tauxAtteint Float
+  tauxAtteint       Float
   // Heures réellement travaillées ce jour-là — base du "temps travaillé"
   // de l'espace agent, le pointage hebdo (retards/absences/heures sup)
   // restant sur SuiviAgentHebdo.
   heuresTravaillees Float @default(0)
 
+  // Temps d'interruption technique du jour (heures) — saisi par l'agent,
+  // déduit de la paie au taux horaire une fois la journée validée.
+  heuresPanne Float @default(0)
+
   remarques String?
+
+  // "a_valider" | "valide" — une journée validée par la RH/le superviseur
+  // n'est plus modifiable par l'agent (voir AgentsService.saisirMaJournee) ;
+  // seule la réouverture côté RH la repasse en "a_valider".
+  statutValidation       String    @default("a_valider")
+  commentaireSuperviseur String?
+  valideLe               DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1275,6 +1301,7 @@ model Mission {
   suivisHebdo       SuiviAgentHebdo[]
   suivisJournaliers SuiviAgentJournalier[]
   paiements         PaiementAgent[]
+  notesClient       NoteClientAgent[]
 
   createdAt DateTime @default(now())
 
@@ -1685,14 +1712,14 @@ model TableauFichier {
 // existe pour un rôle, l'identifiant partagé de ce rôle est refusé (voir
 // AuthController.login). Gérés par l'admin (Paramètres > Comptes d'accès).
 model CompteStaff {
-  id        String   @id @default(cuid())
-  matricule String   @unique // ex. "ADM-2026-0001", "RH-2026-0001"
+  id        String  @id @default(cuid())
+  matricule String  @unique // ex. "ADM-2026-0001", "RH-2026-0001"
   role      String // "admin" | "rh"
   prenom    String
   nom       String
   email     String
   password  String // hash bcrypt
-  actif     Boolean  @default(true)
+  actif     Boolean @default(true)
 
   resetToken          String?   @unique
   resetTokenExpiresAt DateTime?
@@ -1737,10 +1764,10 @@ model LotEntreprise {
 model MissionEntreprise {
   id String @id @default(cuid())
 
-  titre       String
-  sousTitre   String
-  description String
-  disponible  Boolean @default(true)
+  titre        String
+  sousTitre    String
+  description  String
+  disponible   Boolean @default(true)
   // Ex. « Livraison sous 24/48h. » ou « Prochain créneau : 10 Août 2026. »
   detailStatut String
   ctaLabel     String  @default("Démarrer ce projet")
@@ -1750,4 +1777,38 @@ model MissionEntreprise {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Chrono d'appel : l'agent l'active quand il prend un appel et l'arrête à la
+// fin. Une seule ligne ouverte (fin = null) par agent à la fois — vérifié
+// côté service (AgentsService.demarrerAppel). Indépendant des heures de la
+// journée (SuiviAgentJournalier), que l'agent saisit lui-même.
+model AppelAgent {
+  id String @id @default(cuid())
+
+  agentId String
+  agent   Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  debut DateTime @default(now())
+  fin   DateTime?
+
+  @@index([agentId, debut])
+}
+
+// Note et remarque donnés par le client sur l'agent pendant son
+// accompagnement — saisis par la RH, qui relaie le retour du client. Visible
+// de l'agent dans « Mon casier ».
+model NoteClientAgent {
+  id String @id @default(cuid())
+
+  missionId String
+  mission   Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  date     DateTime
+  note     Float // /5
+  remarque String?
+
+  createdAt DateTime @default(now())
+
+  @@index([missionId, date])
 }

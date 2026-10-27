@@ -11,9 +11,21 @@ import {
   escapeHtml,
   renderEmailHtml,
 } from "../common/email-template";
-import { agregerPointage, calculerPaieAgent } from "../common/paie-agent";
+import { agregerPointage, calculerPaieAgent, isoWeekToMonday } from "../common/paie-agent";
+import {
+  cartesRemuneration,
+  type JourSuivi,
+  niveauAlerte,
+  SEUIL_ALERTE_ROUGE,
+  SEUIL_FEU_VERT,
+  STATUTS_PRESENCE,
+} from "../common/suivi-agent";
 import { UpsertAgentDto } from "./dto/upsert-agent.dto";
+import { LierCandidatDto } from "./dto/lier-candidat.dto";
+import { NoteClientDto } from "./dto/note-client.dto";
+import { SaisieJourneeDto } from "./dto/saisie-journee.dto";
 import { UpsertSuiviJournalierDto } from "./dto/upsert-suivi-journalier.dto";
+import { ValiderJourneeDto } from "./dto/valider-journee.dto";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -371,14 +383,21 @@ export class AgentsService {
         realise: dto.realise ?? null,
         tauxAtteint,
         heuresTravaillees: dto.heuresTravaillees ?? 0,
+        heuresPanne: dto.heuresPanne ?? 0,
         remarques: dto.remarques ?? null,
+        // Saisi par la RH : pas de validation à attendre.
+        statutValidation: "valide",
+        valideLe: new Date(),
       },
       update: {
         realise: dto.realise === undefined ? undefined : dto.realise,
         tauxAtteint,
         heuresTravaillees:
           dto.heuresTravaillees === undefined ? undefined : dto.heuresTravaillees,
+        heuresPanne: dto.heuresPanne === undefined ? undefined : dto.heuresPanne,
         remarques: dto.remarques === undefined ? undefined : dto.remarques,
+        statutValidation: "valide",
+        valideLe: new Date(),
       },
     });
   }
@@ -577,6 +596,244 @@ export class AgentsService {
     };
   }
 
+  // ---- Suivi d'activité saisi par l'agent ----------------------------------
+
+  private aujourdhuiUtc(): Date {
+    const d = new Date();
+    d.setUTCHours(0, 0, 0, 0);
+    return d;
+  }
+
+  async changerStatutPresence(matricule: string, statut: string) {
+    const agent = await this.prisma.agent.findUnique({ where: { matricule } });
+    if (!agent) throw new NotFoundException("Agent introuvable.");
+    if (!(STATUTS_PRESENCE as readonly string[]).includes(statut)) {
+      throw new BadRequestException("Statut inconnu.");
+    }
+    const maj = await this.prisma.agent.update({
+      where: { id: agent.id },
+      data: { statutPresence: statut, statutPresenceDepuis: new Date() },
+    });
+    return { statut: maj.statutPresence, depuis: maj.statutPresenceDepuis };
+  }
+
+  // Tableau de bord de saisie : saisie du jour, récap de la semaine, courbes
+  // heures/pannes/taux de la semaine, jauge du mois, historique et les
+  // quatre cartes de rémunération. Tout vient des SuiviAgentJournalier de
+  // la mission (les mêmes lignes que la RH valide).
+  async getSuiviActivite(matricule: string) {
+    const agent = await this.agentParMatricule(matricule);
+    const mission = agent.missions.find((m) => m.dateFin === null) ?? null;
+    const now = new Date();
+    const aujourdhui = this.aujourdhuiUtc();
+    const periode = moisDuJour(aujourdhui);
+    const semaine = isoWeekLabel(aujourdhui);
+
+    const appelsDuJour = await this.prisma.appelAgent.findMany({
+      where: { agentId: agent.id, debut: { gte: aujourdhui } },
+      orderBy: { debut: "asc" },
+    });
+    const appelEnCours = appelsDuJour.find((a) => a.fin === null) ?? null;
+    const secondesAppels = appelsDuJour
+      .filter((a) => a.fin !== null)
+      .reduce((sum, a) => sum + Math.round((a.fin!.getTime() - a.debut.getTime()) / 1000), 0);
+
+    const jours: JourSuivi[] = (mission?.suivisJournaliers ?? []).map((r) => ({
+      jour: r.jour,
+      tauxAtteint: r.tauxAtteint,
+      heuresTravaillees: r.heuresTravaillees,
+      heuresPanne: r.heuresPanne,
+      statutValidation: r.statutValidation,
+    }));
+
+    const detail = (r: NonNullable<typeof mission>["suivisJournaliers"][number]) => ({
+      id: r.id,
+      jour: r.jour,
+      realise: r.realise,
+      tauxAtteint: r.tauxAtteint,
+      alerte: niveauAlerte(r.tauxAtteint),
+      heuresTravaillees: r.heuresTravaillees,
+      heuresPanne: r.heuresPanne,
+      remarques: r.remarques,
+      statutValidation: r.statutValidation,
+      commentaireSuperviseur: r.commentaireSuperviseur,
+    });
+
+    const releves = [...(mission?.suivisJournaliers ?? [])].sort(
+      (a, b) => a.jour.getTime() - b.jour.getTime()
+    );
+    const duJour = releves.find((r) => r.jour.getTime() === aujourdhui.getTime()) ?? null;
+    const deLaSemaine = releves.filter((r) => isoWeekLabel(r.jour) === semaine);
+    const duMois = releves.filter((r) => moisDuJour(r.jour) === periode);
+
+    // Courbe de la semaine : un point par jour, lundi -> dimanche (les jours
+    // sans saisie restent à zéro — jamais de chiffre inventé).
+    const lundi = isoWeekToMonday(semaine);
+    const courbeSemaine = Array.from({ length: 7 }, (_, i) => {
+      const jour = new Date(lundi);
+      jour.setUTCDate(lundi.getUTCDate() + i);
+      const r = deLaSemaine.find((x) => x.jour.getTime() === jour.getTime());
+      return {
+        jour,
+        heures: r?.heuresTravaillees ?? 0,
+        panne: r?.heuresPanne ?? 0,
+        tauxAtteint: r?.tauxAtteint ?? null,
+        alerte: r ? niveauAlerte(r.tauxAtteint) : null,
+      };
+    });
+
+    // Jauge mensuelle 0-100 % : taux moyen des journées saisies du mois
+    // rapporté au seuil de feu vert (5 % = jauge pleine).
+    const tauxMoyenMois =
+      duMois.length > 0 ? round2(duMois.reduce((s, r) => s + r.tauxAtteint, 0) / duMois.length) : null;
+
+    return {
+      agent: {
+        statutPresence: agent.statutPresence,
+        statutPresenceDepuis: agent.statutPresenceDepuis,
+      },
+      assistance: {
+        superviseurNom: mission?.superviseur
+          ? `${mission.superviseur.prenom} ${mission.superviseur.nom}`
+          : null,
+        superviseurEmail: mission?.superviseur?.email ?? null,
+        supportEmail: process.env.SUPPORT_EMAIL ?? null,
+      },
+      mission: mission
+        ? {
+            id: mission.id,
+            clientNom: mission.contrat.clientNom,
+            objectifJournalier: mission.objectifJournalier,
+          }
+        : null,
+      // Chrono d'appel : `debut` de l'appel en cours (le front calcule le
+      // temps écoulé), et le cumul des appels terminés aujourd'hui.
+      appels: {
+        enCours: appelEnCours ? { id: appelEnCours.id, debut: appelEnCours.debut } : null,
+        terminesAujourdhui: appelsDuJour.filter((a) => a.fin !== null).length,
+        secondesAujourdhui: secondesAppels,
+      },
+      aujourdhui,
+      seuils: { rouge: SEUIL_ALERTE_ROUGE, vert: SEUIL_FEU_VERT },
+      saisieDuJour: duJour ? detail(duJour) : null,
+      recapSemaine: {
+        semaine,
+        heures: round2(deLaSemaine.reduce((s, r) => s + r.heuresTravaillees, 0)),
+        panne: round2(deLaSemaine.reduce((s, r) => s + r.heuresPanne, 0)),
+        ventesValidees: deLaSemaine
+          .filter((r) => r.statutValidation === "valide")
+          .reduce((s, r) => s + (r.realise ?? 0), 0),
+      },
+      courbeSemaine,
+      jaugeMensuelle: {
+        periode,
+        tauxMoyen: tauxMoyenMois,
+        pourcentage:
+          tauxMoyenMois === null
+            ? null
+            : Math.min(100, Math.round((tauxMoyenMois / SEUIL_FEU_VERT) * 100)),
+      },
+      cartes: cartesRemuneration({ jours, periode, salaireBase: agent.salaireBase, now }),
+      historique: [...releves].reverse().slice(0, 31).map(detail),
+    };
+  }
+
+  // L'agent saisit sa propre journée (toujours le jour courant). Le
+  // pourcentage atteint est calculé depuis l'objectif journalier de la
+  // mission ; sans objectif fixé on refuse plutôt que d'inventer un taux.
+  // Une journée déjà validée est verrouillée.
+  async saisirMaJournee(matricule: string, dto: SaisieJourneeDto) {
+    const agent = await this.agentParMatricule(matricule);
+    const mission = agent.missions.find((m) => m.dateFin === null);
+    if (!mission) {
+      throw new BadRequestException("Aucune mission active : saisie impossible.");
+    }
+    if (!mission.objectifJournalier) {
+      throw new BadRequestException(
+        "Aucun objectif journalier fixé sur votre mission : demandez à la RH de le renseigner."
+      );
+    }
+    const jour = this.aujourdhuiUtc();
+    const existant = mission.suivisJournaliers.find((r) => r.jour.getTime() === jour.getTime());
+    if (existant?.statutValidation === "valide") {
+      throw new BadRequestException(
+        "Cette journée a été validée par votre superviseur : elle n'est plus modifiable. Contactez la RH pour demander une modification."
+      );
+    }
+
+    const tauxAtteint = round2((dto.realise / mission.objectifJournalier) * 100);
+    const donnees = {
+      realise: dto.realise,
+      tauxAtteint,
+      heuresTravaillees: dto.heuresTravaillees,
+      heuresPanne: dto.heuresPanne,
+      remarques: dto.remarques?.trim() || null,
+    };
+    const releve = await this.prisma.suiviAgentJournalier.upsert({
+      where: { missionId_jour: { missionId: mission.id, jour } },
+      create: { missionId: mission.id, jour, ...donnees },
+      update: donnees,
+    });
+    return {
+      id: releve.id,
+      tauxAtteint,
+      alerte: niveauAlerte(tauxAtteint),
+      statutValidation: releve.statutValidation,
+    };
+  }
+
+  // Chrono d'appel : un seul appel ouvert à la fois. Démarrer alors qu'un
+  // appel est déjà en cours renvoie celui-ci (double clic, deuxième onglet)
+  // au lieu d'en ouvrir un second.
+  async demarrerAppel(matricule: string) {
+    const agent = await this.prisma.agent.findUnique({ where: { matricule } });
+    if (!agent) throw new NotFoundException("Agent introuvable.");
+    const enCours = await this.prisma.appelAgent.findFirst({
+      where: { agentId: agent.id, fin: null },
+    });
+    if (enCours) return { id: enCours.id, debut: enCours.debut };
+    const appel = await this.prisma.appelAgent.create({ data: { agentId: agent.id } });
+    return { id: appel.id, debut: appel.debut };
+  }
+
+  async terminerAppel(matricule: string) {
+    const agent = await this.prisma.agent.findUnique({ where: { matricule } });
+    if (!agent) throw new NotFoundException("Agent introuvable.");
+    const enCours = await this.prisma.appelAgent.findFirst({
+      where: { agentId: agent.id, fin: null },
+    });
+    if (!enCours) throw new BadRequestException("Aucun appel en cours.");
+    const fin = new Date();
+    await this.prisma.appelAgent.update({ where: { id: enCours.id }, data: { fin } });
+    return { secondes: Math.round((fin.getTime() - enCours.debut.getTime()) / 1000) };
+  }
+
+  // Validation par la RH/le superviseur, avec une note facultative
+  // (« Panne fibre validée », « Point prévu demain matin »...).
+  async validerJournee(id: string, dto: ValiderJourneeDto) {
+    const releve = await this.prisma.suiviAgentJournalier.findUnique({ where: { id } });
+    if (!releve) throw new NotFoundException("Relevé introuvable.");
+    return this.prisma.suiviAgentJournalier.update({
+      where: { id },
+      data: {
+        statutValidation: "valide",
+        valideLe: new Date(),
+        commentaireSuperviseur: dto.commentaire?.trim() || null,
+      },
+    });
+  }
+
+  // Réouverture : rend la journée modifiable par l'agent (demande de
+  // modification acceptée).
+  async rouvrirJournee(id: string) {
+    const releve = await this.prisma.suiviAgentJournalier.findUnique({ where: { id } });
+    if (!releve) throw new NotFoundException("Relevé introuvable.");
+    return this.prisma.suiviAgentJournalier.update({
+      where: { id },
+      data: { statutValidation: "a_valider", valideLe: null },
+    });
+  }
+
   // Dossier de l'agent — l'équivalent du "Casier" côté RH, vu par l'agent :
   // son identité, son contrat de travail déposé par la RH, et l'historique
   // de ses missions.
@@ -683,6 +940,139 @@ export class AgentsService {
     };
   }
 
+  // ---- Mon casier (Espace Agent) -------------------------------------------
+
+  // Le casier vu par l'agent : résultats de ses tests, retours du client,
+  // contrat, historique de paie et somme perçue par mois. Les paiements
+  // passent par getPaiements : même net que la RH et que « Mes paiements ».
+  async getMonCasier(matricule: string) {
+    const agent = await this.agentParMatricule(matricule);
+    const missionsById = new Map(agent.missions.map((m) => [m.id, m]));
+
+    const [attempts, notes, paiements] = await Promise.all([
+      agent.candidatId
+        ? this.prisma.evaluationAttempt.findMany({
+            where: { candidatId: agent.candidatId },
+            orderBy: { createdAt: "desc" },
+          })
+        : Promise.resolve(null),
+      this.prisma.noteClientAgent.findMany({
+        where: { missionId: { in: [...missionsById.keys()] } },
+        orderBy: { date: "desc" },
+      }),
+      this.getPaiements(matricule),
+    ]);
+
+    const parMois = new Map<string, { percu: number; enAttente: number }>();
+    for (const l of paiements.lignes) {
+      const m = parMois.get(l.periode) ?? { percu: 0, enAttente: 0 };
+      if (l.statut === "paye") m.percu = round2(m.percu + l.netAPayer);
+      else m.enAttente = round2(m.enAttente + l.netAPayer);
+      parMois.set(l.periode, m);
+    }
+
+    return {
+      matricule: agent.matricule,
+      prenom: agent.prenom,
+      nom: agent.nom,
+      // null = aucun test rattaché à ce compte (distinct de « test sans résultat »).
+      tests: attempts
+        ? attempts.map((a) => ({
+            id: a.id,
+            parcours: a.parcours,
+            status: a.status,
+            passeLe: a.submittedAt ?? a.createdAt,
+            corrigeLe: a.gradedAt,
+            scores: {
+              lexique: a.lexiqueScore,
+              oral: a.oralScore,
+              situations: a.situationsScore,
+              video: a.videoScore,
+              essai: a.essayScore,
+            },
+            totalScore: a.totalScore,
+            niveau: a.tier,
+          }))
+        : null,
+      notesClient: {
+        moyenne: notes.length > 0 ? round2(notes.reduce((sum, n) => sum + n.note, 0) / notes.length) : null,
+        liste: notes.map((n) => ({
+          id: n.id,
+          date: n.date,
+          note: n.note,
+          remarque: n.remarque,
+          clientNom: missionsById.get(n.missionId)?.contrat.clientNom ?? "—",
+          role: missionsById.get(n.missionId)?.role ?? "—",
+        })),
+      },
+      contrat: {
+        document: agent.documents.find((d) => d.type === "contrat") ?? null,
+        statut: agent.statut,
+        poste: agent.poste,
+        dateEmbauche: agent.dateEmbauche,
+        salaireBase: agent.salaireBase,
+      },
+      paiements: {
+        lignes: paiements.lignes,
+        parMois: Array.from(parMois.entries())
+          .map(([periode, v]) => ({ periode, ...v }))
+          .sort((a, b) => (a.periode < b.periode ? 1 : -1)),
+        totalPercu: paiements.totalPaye,
+        totalEnAttente: paiements.totalEnAttente,
+      },
+    };
+  }
+
+  // ---- Notes client & lien candidat (RH) -----------------------------------
+
+  async ajouterNoteClient(missionId: string, dto: NoteClientDto) {
+    const mission = await this.prisma.mission.findUnique({ where: { id: missionId } });
+    if (!mission) throw new NotFoundException("Mission introuvable.");
+    const date = new Date(dto.date);
+    if (Number.isNaN(date.getTime())) throw new BadRequestException("Date invalide.");
+    return this.prisma.noteClientAgent.create({
+      data: { missionId, date, note: dto.note, remarque: dto.remarque?.trim() || null },
+    });
+  }
+
+  async supprimerNoteClient(id: string) {
+    const note = await this.prisma.noteClientAgent.findUnique({ where: { id } });
+    if (!note) throw new NotFoundException("Note introuvable.");
+    await this.prisma.noteClientAgent.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  // Rattache l'agent au candidat de même e-mail pour afficher ses résultats
+  // de test. Refuse l'ambiguïté (plusieurs candidats) et un candidat déjà
+  // rattaché à un autre agent : jamais de choix silencieux.
+  async lierCandidat(agentId: string, email: string) {
+    const agent = await this.prisma.agent.findUnique({ where: { id: agentId } });
+    if (!agent) throw new NotFoundException("Agent introuvable.");
+    const candidats = await this.prisma.candidat.findMany({
+      where: { email: { equals: email.trim(), mode: "insensitive" } },
+      include: { agent: true },
+    });
+    if (candidats.length === 0) throw new NotFoundException("Aucun candidat avec cet e-mail.");
+    if (candidats.length > 1) {
+      throw new BadRequestException(
+        "Plusieurs candidats portent cet e-mail : rattachement impossible automatiquement."
+      );
+    }
+    const [candidat] = candidats;
+    if (candidat.agent && candidat.agent.id !== agentId) {
+      throw new BadRequestException("Ce candidat est déjà rattaché à un autre agent.");
+    }
+    await this.prisma.agent.update({ where: { id: agentId }, data: { candidatId: candidat.id } });
+    return { candidatId: candidat.id, nom: `${candidat.firstName} ${candidat.lastName}` };
+  }
+
+  async delierCandidat(agentId: string) {
+    const agent = await this.prisma.agent.findUnique({ where: { id: agentId } });
+    if (!agent) throw new NotFoundException("Agent introuvable.");
+    await this.prisma.agent.update({ where: { id: agentId }, data: { candidatId: null } });
+    return { ok: true };
+  }
+
   // ---- Casier Agent (RH) ---------------------------------------------------
 
   // Même fiche que l'Espace Agent, plus ce que seule la RH voit : les
@@ -706,9 +1096,30 @@ export class AgentsService {
       },
     });
 
+    const [candidatLie, notesClient] = await Promise.all([
+      agent.candidatId
+        ? this.prisma.candidat.findUnique({ where: { id: agent.candidatId } })
+        : Promise.resolve(null),
+      this.prisma.noteClientAgent.findMany({
+        where: { mission: { agentId: agent.id } },
+        include: { mission: { include: { contrat: true } } },
+        orderBy: { date: "desc" },
+      }),
+    ]);
+
     return {
       id: agent.id,
       ...dossier,
+      candidatLie: candidatLie
+        ? { nom: `${candidatLie.firstName} ${candidatLie.lastName}`, email: candidatLie.email }
+        : null,
+      notesClient: notesClient.map((n) => ({
+        id: n.id,
+        date: n.date,
+        note: n.note,
+        remarque: n.remarque,
+        clientNom: n.mission.contrat.clientNom,
+      })),
       peutSeConnecter: agent.password !== null,
       tauxJournaliers: dashboard.tauxJournaliers,
       comparatifHebdo: dashboard.comparatifHebdo,
@@ -732,7 +1143,11 @@ export class AgentsService {
               realise: r.realise,
               tauxAtteint: r.tauxAtteint,
               heuresTravaillees: r.heuresTravaillees,
+              heuresPanne: r.heuresPanne,
               remarques: r.remarques,
+              statutValidation: r.statutValidation,
+              commentaireSuperviseur: r.commentaireSuperviseur,
+              alerte: niveauAlerte(r.tauxAtteint),
             })),
           }
         : null,
