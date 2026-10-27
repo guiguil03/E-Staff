@@ -10,5 +10,6 @@ export class UpsertSuiviJournalierDto {
   @IsOptional() @IsNumber() tauxAtteint?: number;
 
   @IsOptional() @IsNumber() heuresTravaillees?: number;
+  @IsOptional() @IsNumber() heuresPanne?: number;
   @IsOptional() @IsString() remarques?: string | null;
 }

@@ -6,7 +6,7 @@ import Reveal from "@/components/Reveal";
 import Button from "@/components/ui/Button";
 import DailyLineChart from "./DailyLineChart";
 import ComparativeBarChart from "./ComparativeBarChart";
-import { apiDelete, apiGet, apiGetBlob, apiPut, apiUpload, ApiError } from "@/lib/api";
+import { apiDelete, apiGet, apiGetBlob, apiPostAuthed, apiPut, apiUpload, ApiError } from "@/lib/api";
 import { adminHeaders } from "./adminHeaders";
 
 interface DocumentApi {
@@ -22,7 +22,10 @@ interface Releve {
   realise: number | null;
   tauxAtteint: number;
   heuresTravaillees: number;
+  heuresPanne?: number;
   remarques?: string | null;
+  statutValidation?: "a_valider" | "valide";
+  commentaireSuperviseur?: string | null;
 }
 
 interface MissionApi {
@@ -67,6 +70,8 @@ interface AgentCasier {
   contrat: DocumentApi | null;
   autresDocuments: DocumentApi[];
   missions: MissionApi[];
+  candidatLie: { nom: string; email: string } | null;
+  notesClient: { id: string; date: string; note: number; remarque: string | null; clientNom: string }[];
   tauxJournaliers: Releve[];
   comparatifHebdo: {
     semaine: string;
@@ -174,6 +179,10 @@ export default function AgentCasierPanel({ id }: { id: string }) {
     heuresTravaillees: "",
     remarques: "",
   });
+
+  // Notes client + lien vers le test du candidat
+  const [noteClient, setNoteClient] = useState({ date: aujourdhuiInput(), note: "", remarque: "" });
+  const [emailCandidat, setEmailCandidat] = useState("");
 
   const [contratFile, setContratFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "error">("idle");
@@ -291,6 +300,127 @@ export default function AgentCasierPanel({ id }: { id: string }) {
         adminHeaders()
       );
       setReleve({ ...releve, realise: "", tauxAtteint: "", heuresTravaillees: "", remarques: "" });
+      reload();
+    } catch (err) {
+      setError(messageErreur(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Validation d'une journée saisie par l'agent, avec une note facultative
+  // (ex. "Panne fibre validée") affichée dans son historique.
+  async function validerReleve(releveId: string) {
+    const commentaire = window.prompt("Note pour l'agent (facultatif) :", "");
+    if (commentaire === null) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPut(
+        `/agents/suivi-journalier/${releveId}/validation`,
+        { commentaire: commentaire.trim() || null },
+        adminHeaders()
+      );
+      reload();
+    } catch (err) {
+      setError(messageErreur(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function rouvrirReleve(releveId: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPut(`/agents/suivi-journalier/${releveId}/reouverture`, {}, adminHeaders());
+      reload();
+    } catch (err) {
+      setError(messageErreur(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function ajouterNoteClient(missionId: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPostAuthed(
+        `/agents/missions/${missionId}/notes-client`,
+        {
+          date: noteClient.date,
+          note: Number(noteClient.note),
+          remarque: noteClient.remarque.trim() || null,
+        },
+        adminHeaders()
+      );
+      setNoteClient({ ...noteClient, note: "", remarque: "" });
+      reload();
+    } catch (err) {
+      setError(messageErreur(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function supprimerNoteClient(noteId: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      await apiDelete(`/agents/notes-client/${noteId}`, adminHeaders());
+      reload();
+    } catch (err) {
+      setError(messageErreur(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function ouvrirSalleBrief() {
+    setError(null);
+    const fenetre = window.open("", "_blank");
+    try {
+      const r = await apiPostAuthed<{ configured: boolean; url: string | null }>(
+        `/agents/${id}/salle-brief-rh`,
+        {},
+        adminHeaders()
+      );
+      if (r.url && fenetre) {
+        fenetre.location.href = r.url;
+      } else {
+        fenetre?.close();
+        setError(
+          r.configured
+            ? "Impossible d'ouvrir la salle de brief."
+            : "La salle virtuelle n'est pas activée (clé Daily absente)."
+        );
+      }
+    } catch (err) {
+      fenetre?.close();
+      setError(messageErreur(err));
+    }
+  }
+
+  async function lierCandidat() {
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPut(`/agents/${id}/candidat`, { email: emailCandidat.trim() }, adminHeaders());
+      setEmailCandidat("");
+      reload();
+    } catch (err) {
+      setError(messageErreur(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function delierCandidat() {
+    setSaving(true);
+    setError(null);
+    try {
+      await apiDelete(`/agents/${id}/candidat`, adminHeaders());
       reload();
     } catch (err) {
       setError(messageErreur(err));
@@ -688,6 +818,8 @@ export default function AgentCasierPanel({ id }: { id: string }) {
                         <th className={`${LABEL} py-2`}>Réalisé</th>
                         <th className={`${LABEL} py-2`}>Taux</th>
                         <th className={`${LABEL} py-2`}>Heures</th>
+                        <th className={`${LABEL} py-2`}>Panne</th>
+                        <th className={`${LABEL} py-2`}>Statut</th>
                         <th className={`${LABEL} py-2`}>Remarque</th>
                         <th className={`${LABEL} py-2`}></th>
                       </tr>
@@ -703,10 +835,39 @@ export default function AgentCasierPanel({ id }: { id: string }) {
                           <td className="py-2 font-sans text-sm text-white">
                             {r.heuresTravaillees} h
                           </td>
+                          <td className="py-2 font-sans text-sm text-white">
+                            {r.heuresPanne ?? 0} h
+                          </td>
+                          <td className="py-2 font-sans text-sm text-white/70">
+                            {r.statutValidation === "a_valider" ? "À valider" : "Validé"}
+                            {r.commentaireSuperviseur && (
+                              <span className="block text-xs italic text-white/50">
+                                « {r.commentaireSuperviseur} »
+                              </span>
+                            )}
+                          </td>
                           <td className="py-2 font-sans text-xs text-white/50">
                             {r.remarques ?? "—"}
                           </td>
                           <td className="py-2 text-right">
+                            {r.id && r.statutValidation === "a_valider" && (
+                              <button
+                                onClick={() => validerReleve(r.id!)}
+                                disabled={saving}
+                                className="mr-3 font-mono text-[11px] uppercase tracking-widest text-accent hover:underline disabled:opacity-40"
+                              >
+                                Valider
+                              </button>
+                            )}
+                            {r.id && r.statutValidation === "valide" && (
+                              <button
+                                onClick={() => rouvrirReleve(r.id!)}
+                                disabled={saving}
+                                className="mr-3 font-mono text-[11px] uppercase tracking-widest text-white/40 hover:text-accent disabled:opacity-40"
+                              >
+                                Rouvrir
+                              </button>
+                            )}
                             <button
                               onClick={() => r.id && supprimerReleve(r.id)}
                               disabled={saving}
@@ -736,6 +897,147 @@ export default function AgentCasierPanel({ id }: { id: string }) {
           </div>
         </Reveal>
       )}
+
+      <Reveal>
+        <div className={CARD}>
+          <h3 className="font-display text-lg font-semibold text-white">
+            Retours du client &amp; test du candidat
+          </h3>
+          <p className="mt-1 font-sans text-xs text-white/50">
+            Ce que vous saisissez ici apparaît dans « Mon casier » de l&apos;agent.
+          </p>
+
+          <div className="mt-4 border-t border-white/10 pt-4">
+            <h4 className="font-display text-base font-semibold text-white">Salle de brief</h4>
+            <p className="mt-1 font-sans text-xs text-white/50">
+              Visio de la mission active, partagée avec l&apos;agent.
+            </p>
+            <div className="mt-2">
+              <Button variant="ghostDark" onClick={ouvrirSalleBrief}>
+                🎥 Ouvrir la salle de brief
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-4 border-t border-white/10 pt-4">
+            <h4 className="font-display text-base font-semibold text-white">Test du candidat</h4>
+            {casier.candidatLie ? (
+              <p className="mt-2 font-sans text-sm text-white/70">
+                Rattaché à <span className="text-white">{casier.candidatLie.nom}</span> (
+                {casier.candidatLie.email}){" "}
+                <button
+                  onClick={delierCandidat}
+                  disabled={saving}
+                  className="ml-2 font-mono text-[11px] uppercase tracking-widest text-white/40 hover:text-accent disabled:opacity-40"
+                >
+                  Détacher
+                </button>
+              </p>
+            ) : (
+              <div className="mt-2 flex flex-wrap items-end gap-3">
+                <div className="min-w-[240px] flex-1">
+                  <label className={LABEL} htmlFor="cand-email">
+                    E-mail du candidat
+                  </label>
+                  <input
+                    id="cand-email"
+                    type="email"
+                    className={`mt-1 ${inputClass}`}
+                    value={emailCandidat}
+                    onChange={(e) => setEmailCandidat(e.target.value)}
+                  />
+                </div>
+                <Button variant="ghostDark" onClick={lierCandidat} disabled={saving || !emailCandidat.trim()}>
+                  Rattacher
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 border-t border-white/10 pt-4">
+            <h4 className="font-display text-base font-semibold text-white">Note du client</h4>
+            {casier.missionActive ? (
+              <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <label className={LABEL} htmlFor="nc-date">
+                    Date
+                  </label>
+                  <input
+                    id="nc-date"
+                    type="date"
+                    className={`mt-1 ${inputClass}`}
+                    value={noteClient.date}
+                    onChange={(e) => setNoteClient({ ...noteClient, date: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className={LABEL} htmlFor="nc-note">
+                    Note (/5)
+                  </label>
+                  <input
+                    id="nc-note"
+                    type="number"
+                    min={0}
+                    max={5}
+                    step="0.5"
+                    className={`mt-1 ${inputClass}`}
+                    value={noteClient.note}
+                    onChange={(e) => setNoteClient({ ...noteClient, note: e.target.value })}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className={LABEL} htmlFor="nc-remarque">
+                    Remarque du client
+                  </label>
+                  <input
+                    id="nc-remarque"
+                    className={`mt-1 ${inputClass}`}
+                    value={noteClient.remarque}
+                    onChange={(e) => setNoteClient({ ...noteClient, remarque: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Button
+                    variant="dark"
+                    onClick={() => ajouterNoteClient(casier.missionActive!.id)}
+                    disabled={saving || noteClient.note === "" || Number(noteClient.note) > 5}
+                  >
+                    Ajouter la note
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-2 font-sans text-sm text-white/50">
+                Aucune mission active : affectez l&apos;agent à un contrat pour saisir un retour client.
+              </p>
+            )}
+
+            {casier.notesClient.length > 0 && (
+              <ul className="mt-3 space-y-2">
+                {casier.notesClient.map((n) => (
+                  <li
+                    key={n.id}
+                    className="flex flex-wrap items-start justify-between gap-2 border-b border-white/5 pb-2"
+                  >
+                    <p className="font-sans text-sm text-white/80">
+                      <span className="font-mono text-xs text-white/50">{fmtDate(n.date)}</span> ·{" "}
+                      {n.clientNom} · <span className="text-accent">{n.note}/5</span>
+                      {n.remarque && <span className="italic text-white/60"> — « {n.remarque} »</span>}
+                    </p>
+                    <button
+                      onClick={() => supprimerNoteClient(n.id)}
+                      disabled={saving}
+                      className="font-mono text-[11px] uppercase tracking-widest text-white/40 hover:text-accent disabled:opacity-40"
+                    >
+                      Supprimer
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </Reveal>
 
       <div className="grid gap-3 lg:grid-cols-2">
         <Reveal>

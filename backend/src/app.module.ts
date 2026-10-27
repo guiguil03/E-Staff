@@ -17,6 +17,7 @@ import { AccountRequestsModule } from "./account-requests/account-requests.modul
 import { CockpitModule } from "./cockpit/cockpit.module";
 import { RhModule } from "./rh/rh.module";
 import { AgentsModule } from "./agents/agents.module";
+import { SuperviseursModule } from "./superviseurs/superviseurs.module";
 import { ProductionModule } from "./production/production.module";
 import { SupportCoursModule } from "./support-cours/support-cours.module";
 import { OffresEmploiModule } from "./offres-emploi/offres-emploi.module";
@@ -43,6 +44,7 @@ import { AntiAbusCronService } from "./common/anti-abus-cron.service";
     CockpitModule,
     RhModule,
     AgentsModule,
+    SuperviseursModule,
     ProductionModule,
     SupportCoursModule,
     OffresEmploiModule,
