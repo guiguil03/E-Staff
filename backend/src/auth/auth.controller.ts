@@ -98,6 +98,9 @@ export class AuthController {
     const agent = await this.authService.loginAgent(dto.matricule, dto.password);
     if (agent) return connecter(agent.matricule, "agent");
 
+    const superviseur = await this.authService.loginSuperviseur(dto.matricule, dto.password);
+    if (superviseur) return connecter(superviseur.matricule, "superviseur");
+
     const apprenant = await this.authService.loginApprenant(dto.matricule, dto.password);
     if (apprenant) return connecter(apprenant.matricule, "apprenant");
 
@@ -223,6 +226,14 @@ export class AuthController {
   @Post("view-as/agent/:matricule")
   createAgentViewAs(@Param("matricule") matricule: string) {
     return this.authService.createAgentViewAsToken(matricule);
+  }
+
+  // "Se connecter en tant que" (RH -> compte superviseur) — voir
+  // AuthService.createSuperviseurViewAsToken.
+  @UseGuards(RhGuard)
+  @Post("view-as/superviseur/:matricule")
+  createSuperviseurViewAs(@Param("matricule") matricule: string) {
+    return this.authService.createSuperviseurViewAsToken(matricule);
   }
 
   // "Se connecter en tant que" (RH -> compte formateur) — voir

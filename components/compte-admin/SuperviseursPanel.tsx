@@ -14,6 +14,8 @@ interface Superviseur {
   nom: string;
   email: string;
   missions: { id: string }[]; // missions actives (dateFin=null)
+  // Présent = le superviseur a un accès à son Espace (jamais le hash).
+  compte: { id: string } | null;
 }
 
 const emptyForm = {
@@ -37,6 +39,56 @@ export default function SuperviseursPanel() {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [actionId, setActionId] = useState<string | null>(null);
+
+  // Envoie (ou renvoie) les identifiants : crée l'accès s'il n'existe pas.
+  async function envoyerIdentifiants(s: Superviseur) {
+    const nouveau = s.compte === null;
+    if (
+      !nouveau &&
+      !window.confirm(`Générer un nouveau mot de passe pour ${s.prenom} ${s.nom} et l'envoyer par e-mail ?`)
+    ) {
+      return;
+    }
+    setActionId(s.id);
+    setError(null);
+    setMessage(null);
+    try {
+      const r = await apiPostAuthed<{ emailEnvoye: boolean }>(
+        `/superviseurs/${s.id}/regenerer-identifiants`,
+        {},
+        adminHeaders()
+      );
+      setMessage(
+        r.emailEnvoye
+          ? `Identifiants envoyés à ${s.email}.`
+          : `Accès créé pour ${s.prenom} ${s.nom}, mais l'e-mail n'a pas pu partir (fournisseur d'e-mail non configuré ?). Régénérez les identifiants une fois la messagerie configurée.`
+      );
+      refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Échec de l'envoi des identifiants.");
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function seConnecterEnTantQue(s: Superviseur) {
+    setActionId(s.id);
+    setError(null);
+    try {
+      const { token } = await apiPostAuthed<{ token: string }>(
+        `/auth/view-as/superviseur/${s.matricule}`,
+        {},
+        adminHeaders()
+      );
+      window.open(`/compte/superviseur?viewAsToken=${token}`, "_blank");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ouverture impossible.");
+    } finally {
+      setActionId(null);
+    }
+  }
 
   function refresh() {
     setSuperviseurs("loading");
@@ -53,7 +105,7 @@ export default function SuperviseursPanel() {
     setStatus("saving");
     setError(null);
     try {
-      await apiPostAuthed(
+      const cree = await apiPostAuthed<{ id: string; prenom: string; nom: string; email: string }>(
         "/production/superviseurs",
         {
           matricule: form.matricule,
@@ -69,6 +121,9 @@ export default function SuperviseursPanel() {
       setForm(emptyForm);
       setOpen(false);
       setStatus("idle");
+      // Même flux que pour un agent : la création envoie directement les
+      // identifiants par e-mail.
+      await envoyerIdentifiants({ ...cree, matricule: form.matricule, missions: [], compte: null });
       refresh();
     } catch (e) {
       setStatus("error");
@@ -203,6 +258,17 @@ export default function SuperviseursPanel() {
           <p className="mt-4 font-sans text-sm text-white/50">Aucun superviseur enregistré.</p>
         )}
 
+        {message && (
+          <p className="mt-4 rounded border border-success/40 bg-success/10 px-3 py-2 font-sans text-sm text-success">
+            {message}
+          </p>
+        )}
+        {error && !open && (
+          <p className="mt-4 rounded border border-statusRed/40 bg-statusRed/10 px-3 py-2 font-sans text-sm text-statusRed">
+            {error}
+          </p>
+        )}
+
         {Array.isArray(superviseurs) && superviseurs.length > 0 && (
           <div className="mt-4 space-y-2">
             {superviseurs.map((s) => (
@@ -220,6 +286,31 @@ export default function SuperviseursPanel() {
                   {s.missions.length} agent{s.missions.length > 1 ? "s" : ""} sous supervision
                   actuellement
                 </p>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <span
+                    className={`font-mono text-[10px] uppercase tracking-widest ${
+                      s.compte ? "text-success" : "text-accent"
+                    }`}
+                  >
+                    {s.compte ? "● Accès actif" : "○ Pas d'accès"}
+                  </span>
+                  <button
+                    onClick={() => envoyerIdentifiants(s)}
+                    disabled={actionId === s.id}
+                    className="font-mono text-[11px] uppercase tracking-widest text-accent hover:underline disabled:opacity-40"
+                  >
+                    {s.compte ? "Régénérer les identifiants" : "Envoyer les identifiants"}
+                  </button>
+                  {s.compte && (
+                    <button
+                      onClick={() => seConnecterEnTantQue(s)}
+                      disabled={actionId === s.id}
+                      className="font-mono text-[11px] uppercase tracking-widest text-white/60 hover:text-accent disabled:opacity-40"
+                    >
+                      Se connecter en tant que
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

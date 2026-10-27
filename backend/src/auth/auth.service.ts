@@ -25,7 +25,7 @@ const APP_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 // "ADM-"/"RH-") — d'où une recherche de compte commune (findAccount), qui
 // fait marcher « mot de passe oublié » et « déconnecter partout » pour tous
 // sans code dédié par rôle.
-type TypeCompte = "apprenant" | "formateur" | "agent" | "staff";
+type TypeCompte = "apprenant" | "formateur" | "agent" | "superviseur" | "staff";
 type Account = {
   type: TypeCompte;
   id: string;
@@ -52,6 +52,23 @@ export class AuthService {
     if (formateur) return { ...formateur, type: "formateur" };
     const agent = await this.prisma.agent.findUnique({ where });
     if (agent) return { ...agent, type: "agent" };
+    // Les identifiants du superviseur vivent dans CompteSuperviseur ; `id`
+    // est celui du compte (cible de updateAccountPassword).
+    const compte = await this.prisma.compteSuperviseur.findFirst({
+      where: "resetToken" in where ? { resetToken: where.resetToken } : { superviseur: { matricule: where.matricule } },
+      include: { superviseur: true },
+    });
+    if (compte) {
+      return {
+        type: "superviseur",
+        id: compte.id,
+        matricule: compte.superviseur.matricule,
+        prenom: compte.superviseur.prenom,
+        email: compte.superviseur.email,
+        password: compte.password,
+        resetTokenExpiresAt: compte.resetTokenExpiresAt,
+      };
+    }
     const staff = await this.prisma.compteStaff.findUnique({ where });
     if (staff && staff.actif) return { ...staff, type: "staff" };
     return null;
@@ -68,6 +85,7 @@ export class AuthService {
   private updateAccountPassword(account: Account, data: Record<string, unknown>) {
     if (account.type === "formateur") return this.prisma.formateur.update({ where: { id: account.id }, data });
     if (account.type === "agent") return this.prisma.agent.update({ where: { id: account.id }, data });
+    if (account.type === "superviseur") return this.prisma.compteSuperviseur.update({ where: { id: account.id }, data });
     if (account.type === "staff") return this.prisma.compteStaff.update({ where: { id: account.id }, data });
     return this.prisma.apprenant.update({ where: { id: account.id }, data });
   }
@@ -117,6 +135,19 @@ export class AuthService {
 
     const valid = await bcrypt.compare(password, agent.password);
     return valid ? agent : null;
+  }
+
+  // Superviseur (espace du 2026-10-28) : sans mot de passe, pas de connexion
+  // (compte non encore activé par la RH).
+  async loginSuperviseur(matricule: string, password: string) {
+    const compte = await this.prisma.compteSuperviseur.findFirst({
+      where: { superviseur: { matricule } },
+      include: { superviseur: true },
+    });
+    if (!compte) return null;
+
+    const valid = await bcrypt.compare(password, compte.password);
+    return valid ? compte.superviseur : null;
   }
 
   async changePassword(dto: ChangePasswordDto) {
@@ -213,6 +244,20 @@ export class AuthService {
       throw new BadRequestException("Cet agent est inactif : son espace n'est plus accessible.");
     }
     return { token: createViewAsToken(matricule, "agent") };
+  }
+
+  // Équivalent superviseur — la RH ouvre son espace tel qu'il le voit. Sans
+  // compte d'accès (CompteSuperviseur), il n'y a rien à ouvrir : même règle
+  // que pour un agent inactif.
+  async createSuperviseurViewAsToken(matricule: string) {
+    const compte = await this.prisma.compteSuperviseur.findFirst({
+      where: { superviseur: { matricule } },
+      select: { id: true },
+    });
+    if (!compte) {
+      throw new BadRequestException("Ce superviseur n'a pas encore d'accès : envoyez-lui ses identifiants d'abord.");
+    }
+    return { token: createViewAsToken(matricule, "superviseur") };
   }
 
   // Équivalent formateur — n'a de sens réel que depuis que chaque formateur
