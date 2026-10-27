@@ -27,6 +27,7 @@ const NAV_ITEMS = [
   // de production passe les appels clients, l'agent d'acquisition amène des
   // apprenants).
   { href: "/compte/admin/agents-production", label: "Agents de production", icon: "☏", roles: ["rh"] },
+  { href: "/compte/admin/superviseurs", label: "Superviseurs", icon: "☉", roles: ["rh"] },
   { href: "/compte/admin/partenaires", label: "Partenaires", icon: "◎", roles: ["rh"] },
   { href: "/compte/admin/agents-acquisition", label: "Agents d'Acquisition", icon: "✚", roles: ["rh"] },
   { href: "/compte/admin/reunions", label: "Réunions", icon: "☰", roles: ["admin"] },

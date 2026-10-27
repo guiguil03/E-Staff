@@ -16,7 +16,7 @@ interface Journee {
   heuresTravaillees: number;
   heuresPanne: number;
   remarques: string | null;
-  statutValidation: "a_valider" | "valide";
+  statutValidation: "a_valider" | "a_corriger" | "valide";
   commentaireSuperviseur: string | null;
 }
 
@@ -33,7 +33,14 @@ interface SuiviActivite {
     superviseurNom: string | null;
     superviseurEmail: string | null;
     supportEmail: string | null;
+    supportTelephone: string | null;
+    supportWhatsapp: string | null;
   };
+  commentairesSuperviseur: { jour: string; commentaire: string; alerte: Alerte }[];
+  salleBriefDisponible: boolean;
+  messages: { id: string; texte: string; createdAt: string; de: string; diffusion: boolean }[];
+  reunions: { id: string; titre: string; debut: string; dureeMin: number; type: string; de: string }[];
+  alerteOuverte: { id: string; creeeLe: string } | null;
   mission: { id: string; clientNom: string; objectifJournalier: number | null } | null;
   appels: {
     enCours: { id: string; debut: string } | null;
@@ -190,6 +197,281 @@ function ChronoAppel({
             {enCours ? "■ Raccrocher" : "▶ Prendre l'appel"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Une ligne de contact : toute la ligne est cliquable, valeur en blanc pour
+// rester lisible sur le fond sombre.
+function ContactLigne({
+  icone,
+  titre,
+  valeur,
+  href,
+  externe,
+}: {
+  icone: string;
+  titre: string;
+  valeur: string;
+  href: string;
+  externe?: boolean;
+}) {
+  return (
+    <li>
+      <a
+        href={href}
+        {...(externe ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+        className="flex items-center gap-3 rounded border border-white/15 bg-obsidian px-3 py-2.5 transition-colors hover:border-accent hover:bg-accent/10"
+      >
+        <span
+          aria-hidden
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-base text-accent"
+        >
+          {icone}
+        </span>
+        <span className="min-w-0">
+          <span className="block font-mono text-[10px] uppercase tracking-widest text-white/45">
+            {titre}
+          </span>
+          <span className="block break-all font-sans text-sm font-medium text-white">{valeur}</span>
+        </span>
+      </a>
+    </li>
+  );
+}
+
+// Communication : commentaires du superviseur, moyens de joindre
+// l'encadrement et salle virtuelle de brief.
+function CommunicationAgent({
+  data,
+  matricule,
+}: {
+  data: SuiviActivite;
+  matricule: string | null;
+}) {
+  const [salle, setSalle] = useState<"idle" | "loading" | "indisponible" | "erreur">("idle");
+  const { assistance } = data;
+
+  async function ouvrirSalle() {
+    setSalle("loading");
+    // Fenêtre ouverte tout de suite (clic utilisateur) pour ne pas être
+    // bloquée par le navigateur une fois la réponse reçue.
+    const fenetre = window.open("", "_blank");
+    try {
+      const r = await apiPost<{ configured: boolean; url: string | null }>(
+        `/agents/${matricule}/salle-brief`,
+        {}
+      );
+      if (r.url && fenetre) {
+        fenetre.location.href = r.url;
+        setSalle("idle");
+      } else {
+        fenetre?.close();
+        setSalle(r.url ? "idle" : "indisponible");
+      }
+    } catch {
+      fenetre?.close();
+      setSalle("erreur");
+    }
+  }
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-3">
+      <div className={CARD}>
+        <h3 className="font-display text-lg font-semibold text-white">Commentaire du superviseur</h3>
+        {data.commentairesSuperviseur.length === 0 ? (
+          <p className="mt-3 font-sans text-sm text-white/50">
+            Aucun commentaire pour l&apos;instant. Votre superviseur peut en laisser en validant
+            vos journées.
+          </p>
+        ) : (
+          <ul className="mt-3 space-y-3">
+            {data.commentairesSuperviseur.map((c) => (
+              <li
+                key={c.jour}
+                className={`border-l-2 pl-3 ${
+                  c.alerte === "vert"
+                    ? "border-statusGreen"
+                    : c.alerte === "orange"
+                      ? "border-statusOrange"
+                      : "border-statusRed"
+                }`}
+              >
+                <p className="font-mono text-[11px] text-white/40">{fmtDate(c.jour)}</p>
+                <p className="font-sans text-sm text-white/80">« {c.commentaire} »</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className={CARD}>
+        <h3 className="font-display text-lg font-semibold text-white">Me joindre / joindre l&apos;équipe</h3>
+        <ul className="mt-3 space-y-2">
+          {assistance.superviseurEmail ? (
+            <ContactLigne
+              icone="✉"
+              titre={`Superviseur · ${assistance.superviseurNom ?? ""}`}
+              valeur={assistance.superviseurEmail}
+              href={`mailto:${assistance.superviseurEmail}`}
+            />
+          ) : (
+            <li className="rounded border border-white/10 px-3 py-2.5 font-sans text-sm text-white/50">
+              Aucun superviseur affecté.
+            </li>
+          )}
+          {assistance.supportEmail && (
+            <ContactLigne
+              icone="✉"
+              titre="Support · e-mail"
+              valeur={assistance.supportEmail}
+              href={`mailto:${assistance.supportEmail}`}
+            />
+          )}
+          {assistance.supportTelephone && (
+            <ContactLigne
+              icone="☎"
+              titre="Support · téléphone"
+              valeur={assistance.supportTelephone}
+              href={`tel:${assistance.supportTelephone.replace(/\s/g, "")}`}
+            />
+          )}
+          {assistance.supportWhatsapp && (
+            <ContactLigne
+              icone="💬"
+              titre="Support · WhatsApp"
+              valeur="Écrire au support"
+              href={`https://wa.me/${assistance.supportWhatsapp}`}
+              externe
+            />
+          )}
+          {!assistance.supportEmail && !assistance.supportTelephone && !assistance.supportWhatsapp && (
+            <li className="rounded border border-white/10 px-3 py-2.5 font-sans text-sm text-white/50">
+              Contacts du support non configurés.
+            </li>
+          )}
+        </ul>
+      </div>
+
+      <div className={CARD}>
+        <h3 className="font-display text-lg font-semibold text-white">Salle de brief</h3>
+        <p className="mt-1 font-sans text-xs text-white/50">
+          Salle de visio de votre mission pour les briefs avec votre superviseur.
+        </p>
+        <button
+          type="button"
+          onClick={ouvrirSalle}
+          disabled={!data.salleBriefDisponible || salle === "loading"}
+          className="mt-4 rounded bg-accent px-4 py-2 font-sans text-sm font-semibold text-obsidian disabled:opacity-40"
+        >
+          {salle === "loading" ? "Ouverture..." : "🎥 Rejoindre la salle de brief"}
+        </button>
+        {!data.salleBriefDisponible && (
+          <p className="mt-2 font-sans text-xs text-white/50">
+            Disponible dès que vous êtes affecté à une mission.
+          </p>
+        )}
+        {salle === "indisponible" && (
+          <p className="mt-2 font-sans text-xs text-statusOrange">
+            La salle virtuelle n&apos;est pas encore activée. Utilisez les moyens de contact
+            ci-contre en attendant.
+          </p>
+        )}
+        {salle === "erreur" && (
+          <p className="mt-2 font-sans text-xs text-statusRed">
+            Impossible d&apos;ouvrir la salle pour le moment.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Échanges avec le superviseur : ses consignes et les réunions où je suis
+// invité.
+function EchangesSuperviseur({
+  data,
+  matricule,
+}: {
+  data: SuiviActivite;
+  matricule: string | null;
+}) {
+  const [erreur, setErreur] = useState<string | null>(null);
+
+  async function rejoindre(reunionId: string) {
+    setErreur(null);
+    const fenetre = window.open("", "_blank");
+    try {
+      const r = await apiPost<{ configured: boolean; url: string | null }>(
+        `/agents/${matricule}/reunions/${reunionId}/salle`,
+        {}
+      );
+      if (r.url && fenetre) {
+        fenetre.location.href = r.url;
+      } else {
+        fenetre?.close();
+        setErreur("La salle virtuelle n'est pas encore activée.");
+      }
+    } catch (e) {
+      fenetre?.close();
+      setErreur(e instanceof Error ? e.message : "Impossible d'ouvrir la salle.");
+    }
+  }
+
+  const quand = (iso: string) =>
+    new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <div className={CARD}>
+        <h3 className="font-display text-lg font-semibold text-white">Messages de mon superviseur</h3>
+        {data.messages.length === 0 ? (
+          <p className="mt-3 font-sans text-sm text-white/50">Aucun message pour l&apos;instant.</p>
+        ) : (
+          <ul className="mt-3 space-y-3">
+            {data.messages.map((m) => (
+              <li key={m.id} className="rounded border border-white/10 bg-obsidian p-3">
+                <p className="font-mono text-[11px] text-white/45">
+                  {quand(m.createdAt)} · {m.de}
+                  {m.diffusion ? " · à toute l'équipe" : " · pour vous"}
+                </p>
+                <p className="mt-1 font-sans text-sm text-white">{m.texte}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className={CARD}>
+        <h3 className="font-display text-lg font-semibold text-white">Mes réunions</h3>
+        {data.reunions.length === 0 ? (
+          <p className="mt-3 font-sans text-sm text-white/50">Aucune réunion planifiée.</p>
+        ) : (
+          <ul className="mt-3 space-y-3">
+            {data.reunions.map((r) => (
+              <li
+                key={r.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded border border-white/10 bg-obsidian p-3"
+              >
+                <p className="font-sans text-sm text-white">
+                  {r.titre}
+                  <span className="block font-mono text-[11px] text-white/45">
+                    {quand(r.debut)} · {r.dureeMin} min · {r.type} · {r.de}
+                  </span>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => rejoindre(r.id)}
+                  className="rounded bg-accent px-3 py-1.5 font-sans text-xs font-semibold text-obsidian"
+                >
+                  🎥 Rejoindre
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {erreur && <p className="mt-2 font-sans text-xs text-statusOrange">{erreur}</p>}
       </div>
     </div>
   );
@@ -361,6 +643,19 @@ export default function SuiviActiviteAgent() {
     }
   }
 
+  async function signalerAssistance() {
+    setErreur(null);
+    setAppelBusy(true);
+    try {
+      await apiPost(`/agents/${matricule}/alerte`, {});
+      await charger();
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : "Signalement impossible.");
+    } finally {
+      setAppelBusy(false);
+    }
+  }
+
   async function basculerAppel(action: "demarrer" | "terminer") {
     setErreur(null);
     setAppelBusy(true);
@@ -434,7 +729,22 @@ export default function SuiviActiviteAgent() {
               </p>
             </div>
 
-            <div className="relative">
+            <div className="relative flex flex-wrap items-center gap-2">
+              {data.alerteOuverte ? (
+                <span className="rounded border border-statusOrange/50 bg-statusOrange/10 px-3 py-2 font-sans text-sm text-statusOrange">
+                  🚨 Superviseur prévenu
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={signalerAssistance}
+                  disabled={appelBusy || !data.salleBriefDisponible}
+                  title="Prévenir mon superviseur que j'ai besoin d'aide"
+                  className="rounded border border-statusRed/60 bg-statusRed/10 px-3 py-2 font-sans text-sm font-semibold text-statusRed hover:bg-statusRed/20 disabled:opacity-40"
+                >
+                  🚨 J&apos;ai besoin d&apos;aide
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setAide((v) => !v)}
@@ -486,6 +796,9 @@ export default function SuiviActiviteAgent() {
         onDemarrer={() => basculerAppel("demarrer")}
         onTerminer={() => basculerAppel("terminer")}
       />
+
+      <CommunicationAgent data={data} matricule={matricule} />
+      <EchangesSuperviseur data={data} matricule={matricule} />
 
       {/* 4 cartes de rémunération */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -598,6 +911,14 @@ export default function SuiviActiviteAgent() {
                 Objectif journalier : {data.mission.objectifJournalier} · le pourcentage atteint est
                 calculé automatiquement.
               </p>
+              {data.saisieDuJour?.statutValidation === "a_corriger" && (
+                <p className="mt-3 rounded border border-statusOrange/50 bg-statusOrange/10 px-3 py-2 font-sans text-sm text-statusOrange">
+                  ↩ Votre superviseur vous renvoie cette journée pour correction
+                  {data.saisieDuJour.commentaireSuperviseur
+                    ? ` : « ${data.saisieDuJour.commentaireSuperviseur} »`
+                    : "."}
+                </p>
+              )}
               {verrouille && (
                 <p className="mt-3 rounded border border-statusGreen/40 bg-statusGreen/10 px-3 py-2 font-sans text-sm text-statusGreen">
                   🔒 Journée validée par votre superviseur — elle n&apos;est plus modifiable.
@@ -672,7 +993,11 @@ export default function SuiviActiviteAgent() {
                           {a.emoji} {j.tauxAtteint}%
                         </td>
                         <td className="py-2 pr-3 font-sans text-sm text-white/70">
-                          {j.statutValidation === "valide" ? "Validé" : "À valider"}
+                          {j.statutValidation === "valide"
+                            ? "Validé"
+                            : j.statutValidation === "a_corriger"
+                              ? "À corriger"
+                              : "À valider"}
                         </td>
                         <td className="py-2 font-sans text-xs italic text-white/60">
                           {j.commentaireSuperviseur ?? "—"}

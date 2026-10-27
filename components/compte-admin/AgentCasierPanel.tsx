@@ -377,6 +377,31 @@ export default function AgentCasierPanel({ id }: { id: string }) {
     }
   }
 
+  async function ouvrirSalleBrief() {
+    setError(null);
+    const fenetre = window.open("", "_blank");
+    try {
+      const r = await apiPostAuthed<{ configured: boolean; url: string | null }>(
+        `/agents/${id}/salle-brief-rh`,
+        {},
+        adminHeaders()
+      );
+      if (r.url && fenetre) {
+        fenetre.location.href = r.url;
+      } else {
+        fenetre?.close();
+        setError(
+          r.configured
+            ? "Impossible d'ouvrir la salle de brief."
+            : "La salle virtuelle n'est pas activée (clé Daily absente)."
+        );
+      }
+    } catch (err) {
+      fenetre?.close();
+      setError(messageErreur(err));
+    }
+  }
+
   async function lierCandidat() {
     setSaving(true);
     setError(null);
@@ -881,6 +906,18 @@ export default function AgentCasierPanel({ id }: { id: string }) {
           <p className="mt-1 font-sans text-xs text-white/50">
             Ce que vous saisissez ici apparaît dans « Mon casier » de l&apos;agent.
           </p>
+
+          <div className="mt-4 border-t border-white/10 pt-4">
+            <h4 className="font-display text-base font-semibold text-white">Salle de brief</h4>
+            <p className="mt-1 font-sans text-xs text-white/50">
+              Visio de la mission active, partagée avec l&apos;agent.
+            </p>
+            <div className="mt-2">
+              <Button variant="ghostDark" onClick={ouvrirSalleBrief}>
+                🎥 Ouvrir la salle de brief
+              </Button>
+            </div>
+          </div>
 
           <div className="mt-4 border-t border-white/10 pt-4">
             <h4 className="font-display text-base font-semibold text-white">Test du candidat</h4>

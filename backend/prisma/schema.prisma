@@ -1009,7 +1009,15 @@ model Superviseur {
   moyenPaiementType      String? // "RIB" | "MVola" | "Orange Money" | "Airtel Money"
   coordonneesVerifieesLe DateTime?
 
+  // Identifiants de connexion : table séparée (CompteSuperviseur) pour que
+  // le hash du mot de passe ne sorte jamais avec la fiche — Superviseur est
+  // inclus (`include: { superviseur: true }`) dans de nombreuses réponses RH.
+  compte CompteSuperviseur?
+
   missions              Mission[]
+  messages              MessageSuperviseur[]
+  reunions              ReunionSuperviseur[]
+  absences              AbsenceSuperviseur[]
   rapportsHebdo         RapportHebdoSuperviseur[]
   paiements             PaiementSuperviseur[]
   performancesParClient PerformanceSuperviseurClient[]
@@ -1170,9 +1178,12 @@ model Agent {
   moyenPaiementType      String? // "RIB" | "MVola" | "Orange Money" | "Airtel Money"
   coordonneesVerifieesLe DateTime?
 
-  missions  Mission[]
-  documents AgentDocument[]
-  appels    AppelAgent[]
+  missions       Mission[]
+  documents      AgentDocument[]
+  appels         AppelAgent[]
+  alertes        AlerteAgent[]
+  messagesRecus  MessageSuperviseur[]
+  reunionsInvite ReunionParticipant[]
 
   // Candidat dont l'agent est issu — permet d'afficher ses résultats de test
   // (admission/recrutement) dans son casier. Lien posé explicitement par la
@@ -1297,6 +1308,12 @@ model Mission {
   // affiché tant qu'aucune cible n'est fixée (jamais un objectif inventé).
   objectifJournalier Int?
   objectifHebdo      Int?
+
+  // Salle de brief (visio Daily) persistante de la mission — créée à la
+  // première ouverture (voir AgentsService.ouvrirSalleBrief), réutilisée
+  // ensuite par l'agent et la RH/le superviseur.
+  briefRoomName String?
+  briefRoomUrl  String?
 
   suivisHebdo       SuiviAgentHebdo[]
   suivisJournaliers SuiviAgentJournalier[]
@@ -1789,7 +1806,7 @@ model AppelAgent {
   agentId String
   agent   Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
-  debut DateTime @default(now())
+  debut DateTime  @default(now())
   fin   DateTime?
 
   @@index([agentId, debut])
@@ -1811,4 +1828,114 @@ model NoteClientAgent {
   createdAt DateTime @default(now())
 
   @@index([missionId, date])
+}
+
+// Signalement « j'ai besoin d'aide » d'un agent à son superviseur. Une seule
+// alerte ouverte (traiteeLe = null) par agent à la fois — voir
+// AgentsService.signalerAssistance.
+model AlerteAgent {
+  id String @id @default(cuid())
+
+  agentId String
+  agent   Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  message String?
+
+  creeeLe   DateTime  @default(now())
+  traiteeLe DateTime?
+
+  @@index([agentId, traiteeLe])
+}
+
+// Consigne / annonce du superviseur. agentId null = diffusion à tous les
+// agents qu'il supervise.
+model MessageSuperviseur {
+  id String @id @default(cuid())
+
+  superviseurId String
+  superviseur   Superviseur @relation(fields: [superviseurId], references: [id], onDelete: Cascade)
+
+  agentId String?
+  agent   Agent?  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  texte String
+
+  createdAt DateTime @default(now())
+
+  @@index([superviseurId, createdAt])
+  @@index([agentId, createdAt])
+}
+
+// Point individuel ou collectif planifié par le superviseur avec ses agents.
+// La salle de visio (Daily) est créée à la première ouverture.
+model ReunionSuperviseur {
+  id String @id @default(cuid())
+
+  superviseurId String
+  superviseur   Superviseur @relation(fields: [superviseurId], references: [id], onDelete: Cascade)
+
+  titre    String
+  debut    DateTime
+  dureeMin Int      @default(30)
+  // "individuelle" | "collective"
+  type     String
+
+  roomName String?
+  roomUrl  String?
+
+  participants ReunionParticipant[]
+
+  createdAt DateTime @default(now())
+
+  @@index([superviseurId, debut])
+}
+
+model ReunionParticipant {
+  id String @id @default(cuid())
+
+  reunionId String
+  reunion   ReunionSuperviseur @relation(fields: [reunionId], references: [id], onDelete: Cascade)
+
+  agentId String
+  agent   Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([reunionId, agentId])
+  @@index([agentId])
+}
+
+// Absence du superviseur, saisie par la RH — les heures non justifiées sont
+// retenues au taux horaire du fixe (voir common/suivi-superviseur.ts).
+model AbsenceSuperviseur {
+  id String @id @default(cuid())
+
+  superviseurId String
+  superviseur   Superviseur @relation(fields: [superviseurId], references: [id], onDelete: Cascade)
+
+  jour      DateTime
+  heures    Float
+  justifiee Boolean  @default(false)
+  motif     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([superviseurId, jour])
+}
+
+// Accès de connexion d'un superviseur à son Espace — mêmes champs d'auth que
+// Agent (hash bcrypt, jamais le mot de passe en clair ; identifiants envoyés
+// par e-mail par la RH, voir SuperviseursService.regenererIdentifiants).
+// Absente = le superviseur n'a pas encore d'accès.
+model CompteSuperviseur {
+  id String @id @default(cuid())
+
+  superviseurId String      @unique
+  superviseur   Superviseur @relation(fields: [superviseurId], references: [id], onDelete: Cascade)
+
+  password            String
+  resetToken          String?   @unique
+  resetTokenExpiresAt DateTime?
+  sessionsRevoqueesAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

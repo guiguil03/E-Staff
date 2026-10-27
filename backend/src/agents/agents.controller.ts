@@ -24,6 +24,7 @@ import { UpsertAgentDto } from "./dto/upsert-agent.dto";
 import { LierCandidatDto } from "./dto/lier-candidat.dto";
 import { NoteClientDto } from "./dto/note-client.dto";
 import { SaisieJourneeDto } from "./dto/saisie-journee.dto";
+import { SignalerAssistanceDto } from "./dto/signaler-assistance.dto";
 import { StatutPresenceDto } from "./dto/statut-presence.dto";
 import { UpsertSuiviJournalierDto } from "./dto/upsert-suivi-journalier.dto";
 import { ValiderJourneeDto } from "./dto/valider-journee.dto";
@@ -123,6 +124,12 @@ export class AgentsController {
   }
 
   @UseGuards(RhGuard)
+  @Post(":id/salle-brief-rh")
+  salleBriefRh(@Param("id") id: string) {
+    return this.service.salleBriefRh(id);
+  }
+
+  @UseGuards(RhGuard)
   @Put(":id/candidat")
   lierCandidat(@Param("id") id: string, @Body() dto: LierCandidatDto) {
     return this.service.lierCandidat(id, dto.email);
@@ -135,6 +142,24 @@ export class AgentsController {
   }
 
   // ---- Espace Agent (session agent) ----------------------------------------
+
+  @UseGuards(AgentGuard)
+  @Post(":matricule/alerte")
+  signalerAssistance(@Param("matricule") matricule: string, @Body() dto: SignalerAssistanceDto) {
+    return this.service.signalerAssistance(matricule, dto.message);
+  }
+
+  @UseGuards(AgentGuard)
+  @Post(":matricule/reunions/:reunionId/salle")
+  salleReunion(@Param("matricule") matricule: string, @Param("reunionId") reunionId: string) {
+    return this.service.salleReunionAgent(matricule, reunionId);
+  }
+
+  @UseGuards(AgentGuard)
+  @Post(":matricule/salle-brief")
+  salleBriefAgent(@Param("matricule") matricule: string) {
+    return this.service.salleBriefAgent(matricule);
+  }
 
   @UseGuards(AgentGuard)
   @Get(":matricule/mon-casier")

@@ -62,6 +62,7 @@ describe("AuthService", () => {
     formateur: { findUnique: jest.Mock; update: jest.Mock };
     agent: { findUnique: jest.Mock; update: jest.Mock };
     compteStaff: { findUnique: jest.Mock; update: jest.Mock };
+    compteSuperviseur: { findFirst: jest.Mock; update: jest.Mock };
   };
   let email: { send: jest.Mock };
   let service: AuthService;
@@ -82,6 +83,10 @@ describe("AuthService", () => {
       },
       compteStaff: {
         findUnique: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
+      },
+      compteSuperviseur: {
+        findFirst: jest.fn().mockResolvedValue(null),
         update: jest.fn(),
       },
     };
@@ -165,6 +170,48 @@ describe("AuthService", () => {
       const agent = await makeAgent();
       prisma.agent.findUnique.mockResolvedValue(agent);
       expect(await service.loginAgent("ETF-AG-2026-0003", "Sup3rSecret!")).toBe(agent);
+    });
+  });
+
+  describe("loginSuperviseur", () => {
+    const sup = { id: "s1", matricule: "ETF-SUP-2026-0001", prenom: "Lina", email: "l@x.mg" };
+
+    it("retourne null sans compte d'accès (superviseur pas encore activé par la RH)", async () => {
+      expect(await service.loginSuperviseur("ETF-SUP-2026-0001", "whatever")).toBeNull();
+    });
+
+    it("retourne null si le mot de passe est incorrect", async () => {
+      prisma.compteSuperviseur.findFirst.mockResolvedValue({
+        password: await bcrypt.hash("bon-mdp", 4),
+        superviseur: sup,
+      });
+      expect(await service.loginSuperviseur("ETF-SUP-2026-0001", "mauvais")).toBeNull();
+    });
+
+    it("retourne le superviseur quand le mot de passe est correct", async () => {
+      prisma.compteSuperviseur.findFirst.mockResolvedValue({
+        password: await bcrypt.hash("bon-mdp", 4),
+        superviseur: sup,
+      });
+      expect(await service.loginSuperviseur("ETF-SUP-2026-0001", "bon-mdp")).toEqual(sup);
+    });
+  });
+
+  describe("mot de passe oublié — matricule Superviseur", () => {
+    it("pose le jeton de réinitialisation sur le COMPTE (pas sur la fiche) et envoie l'e-mail", async () => {
+      prisma.compteSuperviseur.findFirst.mockResolvedValue({
+        id: "cs1",
+        password: "x",
+        resetTokenExpiresAt: null,
+        superviseur: { matricule: "ETF-SUP-2026-0001", prenom: "Lina", email: "l@x.mg" },
+      });
+
+      await service.forgotPassword({ matricule: "ETF-SUP-2026-0001" } as never);
+
+      expect(prisma.compteSuperviseur.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: "cs1" }, data: expect.objectContaining({ resetToken: expect.any(String) }) })
+      );
+      expect(email.send).toHaveBeenCalledTimes(1);
     });
   });
 

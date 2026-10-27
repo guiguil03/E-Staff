@@ -140,7 +140,9 @@ export class ProductionService {
 
   listSuperviseurs() {
     return this.prisma.superviseur.findMany({
-      include: { missions: { where: { dateFin: null } } },
+      // `compte` : seulement l'id (le superviseur a-t-il un accès ?) —
+      // jamais le hash du mot de passe.
+      include: { missions: { where: { dateFin: null } }, compte: { select: { id: true } } },
       orderBy: { nom: "asc" },
     });
   }

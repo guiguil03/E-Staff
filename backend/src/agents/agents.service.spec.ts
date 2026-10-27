@@ -4,6 +4,7 @@ import { AgentsService } from "./agents.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../common/email.service";
 import { StorageService } from "../common/storage.service";
+import { DailyService } from "../classe-virtuelle/daily.service";
 
 // Agent de production (compte du 2026-10-22). Ce que cette suite fige :
 //   - la numérotation du matricule (préfixe distinct des apprenants et des
@@ -65,6 +66,7 @@ describe("AgentsService", () => {
   let prisma: ReturnType<typeof makePrismaMock>;
   let email: { send: jest.Mock };
   let storage: { uploadBuffer: jest.Mock; deleteObject: jest.Mock; getObjectStream: jest.Mock };
+  let daily: { createRoom: jest.Mock; mintMeetingToken: jest.Mock };
   let service: AgentsService;
 
   beforeEach(() => {
@@ -75,10 +77,15 @@ describe("AgentsService", () => {
       deleteObject: jest.fn().mockResolvedValue(undefined),
       getObjectStream: jest.fn(),
     };
+    daily = {
+      createRoom: jest.fn().mockResolvedValue({ configured: false }),
+      mintMeetingToken: jest.fn().mockResolvedValue(null),
+    };
     service = new AgentsService(
       prisma as unknown as PrismaService,
       email as unknown as EmailService,
-      storage as unknown as StorageService
+      storage as unknown as StorageService,
+      daily as unknown as DailyService
     );
   });
 
@@ -670,6 +677,60 @@ describe("AgentsService", () => {
         { periode: "2026-09", percu: 330, enAttente: 0 },
       ]);
       expect(r.paiements.totalPercu).toBe(330);
+    });
+  });
+
+  describe("salle de brief", () => {
+    const agentAvecMission = (mission: Record<string, unknown> = {}) => ({
+      id: "agent-1",
+      prenom: "Tiana",
+      nom: "Test",
+      documents: [],
+      missions: [
+        { id: "m1", dateFin: null, briefRoomName: null, briefRoomUrl: null, contrat: { clientNom: "Acme" }, suivisHebdo: [], suivisJournaliers: [], ...mission },
+      ],
+    });
+
+    it("renvoie « non configuré » sans clé Daily, sans rien enregistrer", async () => {
+      prisma.agent.findUnique.mockResolvedValue(agentAvecMission());
+
+      const r = await service.salleBriefAgent("ETF-AG-2026-0001");
+
+      expect(r).toEqual({ configured: false, url: null });
+      expect((prisma.mission as any).update).toBeUndefined();
+    });
+
+    it("crée la salle une fois, l'enregistre et joint un jeton nominatif", async () => {
+      (prisma.mission as any).update = jest.fn().mockResolvedValue({});
+      prisma.agent.findUnique.mockResolvedValue(agentAvecMission());
+      daily.createRoom.mockResolvedValue({ configured: true, roomName: "brief-m1", roomUrl: "https://x.daily.co/brief-m1" });
+      daily.mintMeetingToken.mockResolvedValue("tok");
+
+      const r = await service.salleBriefAgent("ETF-AG-2026-0001");
+
+      expect(r.url).toBe("https://x.daily.co/brief-m1?t=tok");
+      expect((prisma.mission as any).update).toHaveBeenCalledWith({
+        where: { id: "m1" },
+        data: { briefRoomName: "brief-m1", briefRoomUrl: "https://x.daily.co/brief-m1" },
+      });
+    });
+
+    it("réutilise la salle existante au lieu d'en recréer une", async () => {
+      prisma.agent.findUnique.mockResolvedValue(
+        agentAvecMission({ briefRoomName: "brief-m1", briefRoomUrl: "https://x.daily.co/brief-m1" })
+      );
+      daily.mintMeetingToken.mockResolvedValue(null);
+
+      const r = await service.salleBriefAgent("ETF-AG-2026-0001");
+
+      expect(daily.createRoom).not.toHaveBeenCalled();
+      expect(r.url).toBe("https://x.daily.co/brief-m1");
+    });
+
+    it("refuse sans mission active", async () => {
+      prisma.agent.findUnique.mockResolvedValue({ ...agentAvecMission(), missions: [] });
+
+      await expect(service.salleBriefAgent("ETF-AG-2026-0001")).rejects.toThrow(BadRequestException);
     });
   });
 });

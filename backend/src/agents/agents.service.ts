@@ -5,6 +5,8 @@ import * as path from "path";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../common/email.service";
 import { StorageService } from "../common/storage.service";
+import { DailyService } from "../classe-virtuelle/daily.service";
+import { ouvrirSalleVisio } from "../common/salle-visio";
 import {
   credentialsBox,
   emailParagraph,
@@ -89,7 +91,8 @@ export class AgentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
-    private readonly storage: StorageService
+    private readonly storage: StorageService,
+    private readonly daily: DailyService
   ) {}
 
   // ---- Compte & annuaire (RH) ----------------------------------------------
@@ -634,6 +637,33 @@ export class AgentsService {
       orderBy: { debut: "asc" },
     });
     const appelEnCours = appelsDuJour.find((a) => a.fin === null) ?? null;
+
+    // Échanges avec le superviseur : consignes (individuelles ou diffusées à
+    // toute son équipe), réunions où l'agent est invité, alerte en cours.
+    const superviseurId = mission?.superviseurId ?? null;
+    const [messagesRecus, reunionsInvite, alerteOuverte] = await Promise.all([
+      this.prisma.messageSuperviseur.findMany({
+        where: {
+          OR: [
+            { agentId: agent.id },
+            ...(superviseurId ? [{ agentId: null, superviseurId }] : []),
+          ],
+        },
+        include: { superviseur: true },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      }),
+      this.prisma.reunionSuperviseur.findMany({
+        where: {
+          participants: { some: { agentId: agent.id } },
+          debut: { gte: new Date(Date.now() - 3600_000) },
+        },
+        include: { superviseur: true },
+        orderBy: { debut: "asc" },
+        take: 10,
+      }),
+      this.prisma.alerteAgent.findFirst({ where: { agentId: agent.id, traiteeLe: null } }),
+    ]);
     const secondesAppels = appelsDuJour
       .filter((a) => a.fin !== null)
       .reduce((sum, a) => sum + Math.round((a.fin!.getTime() - a.debut.getTime()) / 1000), 0);
@@ -698,7 +728,39 @@ export class AgentsService {
           : null,
         superviseurEmail: mission?.superviseur?.email ?? null,
         supportEmail: process.env.SUPPORT_EMAIL ?? null,
+        // Numéros du support, renseignés par variables d'environnement
+        // (chiffres uniquement côté WhatsApp, format international).
+        supportTelephone: process.env.SUPPORT_PHONE ?? null,
+        supportWhatsapp: process.env.SUPPORT_WHATSAPP?.replace(/\D/g, "") || null,
       },
+      // Derniers commentaires du superviseur (posés à la validation d'une
+      // journée), du plus récent au plus ancien.
+      commentairesSuperviseur: [...releves]
+        .filter((r) => r.commentaireSuperviseur)
+        .reverse()
+        .slice(0, 5)
+        .map((r) => ({
+          jour: r.jour,
+          commentaire: r.commentaireSuperviseur,
+          alerte: niveauAlerte(r.tauxAtteint),
+        })),
+      salleBriefDisponible: Boolean(mission),
+      messages: messagesRecus.map((m) => ({
+        id: m.id,
+        texte: m.texte,
+        createdAt: m.createdAt,
+        de: `${m.superviseur.prenom} ${m.superviseur.nom}`,
+        diffusion: m.agentId === null,
+      })),
+      reunions: reunionsInvite.map((r) => ({
+        id: r.id,
+        titre: r.titre,
+        debut: r.debut,
+        dureeMin: r.dureeMin,
+        type: r.type,
+        de: `${r.superviseur.prenom} ${r.superviseur.nom}`,
+      })),
+      alerteOuverte: alerteOuverte ? { id: alerteOuverte.id, creeeLe: alerteOuverte.creeeLe } : null,
       mission: mission
         ? {
             id: mission.id,
@@ -772,7 +834,9 @@ export class AgentsService {
     const releve = await this.prisma.suiviAgentJournalier.upsert({
       where: { missionId_jour: { missionId: mission.id, jour } },
       create: { missionId: mission.id, jour, ...donnees },
-      update: donnees,
+      // Une journée renvoyée pour correction repasse « à valider » dès que
+      // l'agent la ressaisit.
+      update: { ...donnees, statutValidation: "a_valider" },
     });
     return {
       id: releve.id,
@@ -806,6 +870,106 @@ export class AgentsService {
     const fin = new Date();
     await this.prisma.appelAgent.update({ where: { id: enCours.id }, data: { fin } });
     return { secondes: Math.round((fin.getTime() - enCours.debut.getTime()) / 1000) };
+  }
+
+  // Bouton d'alerte : l'agent signale qu'il a besoin d'assistance. Une seule
+  // alerte ouverte à la fois — un second clic renvoie la même (le superviseur
+  // la voit déjà), au lieu d'empiler des signalements.
+  async signalerAssistance(matricule: string, message?: string | null) {
+    const agent = await this.prisma.agent.findUnique({ where: { matricule } });
+    if (!agent) throw new NotFoundException("Agent introuvable.");
+    const ouverte = await this.prisma.alerteAgent.findFirst({
+      where: { agentId: agent.id, traiteeLe: null },
+    });
+    if (ouverte) return { id: ouverte.id, creeeLe: ouverte.creeeLe, dejaOuverte: true };
+    const alerte = await this.prisma.alerteAgent.create({
+      data: { agentId: agent.id, message: message?.trim() || null },
+    });
+    return { id: alerte.id, creeeLe: alerte.creeeLe, dejaOuverte: false };
+  }
+
+  // Rejoindre une réunion planifiée par le superviseur — réservé aux agents
+  // invités.
+  async salleReunionAgent(matricule: string, reunionId: string) {
+    const agent = await this.prisma.agent.findUnique({ where: { matricule } });
+    if (!agent) throw new NotFoundException("Agent introuvable.");
+    const reunion = await this.prisma.reunionSuperviseur.findFirst({
+      where: { id: reunionId, participants: { some: { agentId: agent.id } } },
+    });
+    if (!reunion) throw new NotFoundException("Réunion introuvable.");
+    return ouvrirSalleVisio(
+      this.daily,
+      {
+        roomId: `reunion-${reunion.id}`,
+        roomName: reunion.roomName,
+        roomUrl: reunion.roomUrl,
+        dureeValiditeSecondes: 30 * 86400,
+        persister: (roomName, roomUrl) =>
+          this.prisma.reunionSuperviseur.update({
+            where: { id: reunion.id },
+            data: { roomName, roomUrl },
+          }),
+      },
+      { userId: `agent-${agent.id}`, userName: `${agent.prenom} ${agent.nom}`, owner: false }
+    );
+  }
+
+  // Salle de brief : une salle Daily persistante par mission, créée à la
+  // première ouverture. `configured: false` tant que DAILY_API_KEY n'est
+  // pas posée — le front l'affiche honnêtement. Le jeton nominatif identifie
+  // le participant ; `owner` pour la RH/le superviseur.
+  private async ouvrirSalleBrief(
+    mission: { id: string; briefRoomName: string | null; briefRoomUrl: string | null },
+    participant: { userId: string; userName: string; owner: boolean }
+  ) {
+    let roomName = mission.briefRoomName;
+    let roomUrl = mission.briefRoomUrl;
+    if (!roomName || !roomUrl) {
+      const nouvelle = await this.daily.createRoom(
+        `brief-${mission.id}`,
+        Math.floor(Date.now() / 1000) + 365 * 86400
+      );
+      if (!nouvelle.configured || !nouvelle.roomName || !nouvelle.roomUrl) {
+        return { configured: nouvelle.configured, url: null as string | null };
+      }
+      roomName = nouvelle.roomName;
+      roomUrl = nouvelle.roomUrl;
+      await this.prisma.mission.update({
+        where: { id: mission.id },
+        data: { briefRoomName: roomName, briefRoomUrl: roomUrl },
+      });
+    }
+    const token = await this.daily.mintMeetingToken({
+      roomName,
+      userId: participant.userId,
+      userName: participant.userName,
+      isOwner: participant.owner,
+    });
+    return { configured: true, url: token ? `${roomUrl}?t=${token}` : roomUrl };
+  }
+
+  async salleBriefAgent(matricule: string) {
+    const agent = await this.agentParMatricule(matricule);
+    const mission = agent.missions.find((m) => m.dateFin === null);
+    if (!mission) throw new BadRequestException("Aucune mission active : pas de salle de brief.");
+    return this.ouvrirSalleBrief(mission, {
+      userId: `agent-${agent.id}`,
+      userName: `${agent.prenom} ${agent.nom}`,
+      owner: false,
+    });
+  }
+
+  // Côté RH/superviseur : ouvre la salle de la mission active de l'agent.
+  async salleBriefRh(agentId: string) {
+    const mission = await this.prisma.mission.findFirst({
+      where: { agentId, dateFin: null },
+    });
+    if (!mission) throw new BadRequestException("Cet agent n'a pas de mission active.");
+    return this.ouvrirSalleBrief(mission, {
+      userId: "rh-superviseur",
+      userName: "Superviseur / RH",
+      owner: true,
+    });
   }
 
   // Validation par la RH/le superviseur, avec une note facultative
