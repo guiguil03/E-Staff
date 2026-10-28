@@ -21,6 +21,8 @@ interface Agent {
   peutSeConnecter: boolean;
   contratDepose: boolean;
   missionsCount: number;
+  superviseurId: string | null;
+  superviseurNom: string | null;
   missionActive: {
     id: string;
     clientNom: string;
@@ -28,6 +30,12 @@ interface Agent {
     dateDebut: string;
     superviseurNom: string | null;
   } | null;
+}
+
+interface Superviseur {
+  id: string;
+  prenom: string;
+  nom: string;
 }
 
 const STATUTS = [
@@ -53,6 +61,7 @@ const emptyForm = {
   salaireBase: "",
   moyenPaiementType: "",
   ribOuMobileMoney: "",
+  superviseurId: "",
 };
 
 const inputClass =
@@ -78,6 +87,7 @@ function messageErreur(err: unknown): string {
 // perdre l'historique de missions et de paie.
 export default function AgentsPanel() {
   const [agents, setAgents] = useState<Agent[] | "loading" | "erreur">("loading");
+  const [superviseurs, setSuperviseurs] = useState<Superviseur[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "error" | "success">("idle");
@@ -93,6 +103,11 @@ export default function AgentsPanel() {
   }
 
   useEffect(refresh, []);
+  useEffect(() => {
+    apiGet<Superviseur[]>("/production/superviseurs", adminHeaders())
+      .then(setSuperviseurs)
+      .catch(() => setSuperviseurs([]));
+  }, []);
 
   async function create() {
     if (!form.prenom.trim() || !form.nom.trim() || !form.email.trim()) return;
@@ -112,6 +127,7 @@ export default function AgentsPanel() {
           salaireBase: form.salaireBase ? Number(form.salaireBase) : null,
           moyenPaiementType: form.moyenPaiementType.trim() || null,
           ribOuMobileMoney: form.ribOuMobileMoney.trim() || null,
+          superviseurId: form.superviseurId || null,
         },
         adminHeaders()
       );
@@ -140,6 +156,34 @@ export default function AgentsPanel() {
           telephone: agent.telephone,
           poste: agent.poste,
           statut,
+        },
+        adminHeaders()
+      );
+      refresh();
+    } catch (err) {
+      setError(messageErreur(err));
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  // Rattachement hiérarchique direct, indépendant de la mission — renvoie
+  // les champs d'identité tels quels (le DTO d'upsert les exige), seule la
+  // valeur de superviseurId change.
+  async function assignerSuperviseur(agent: Agent, superviseurId: string) {
+    setActionId(agent.id);
+    setError(null);
+    try {
+      await apiPut(
+        `/agents/${agent.id}`,
+        {
+          prenom: agent.prenom,
+          nom: agent.nom,
+          email: agent.email,
+          telephone: agent.telephone,
+          poste: agent.poste,
+          statut: agent.statut,
+          superviseurId: superviseurId || null,
         },
         adminHeaders()
       );
@@ -345,6 +389,24 @@ export default function AgentsPanel() {
                   onChange={(e) => setForm({ ...form, ribOuMobileMoney: e.target.value })}
                 />
               </div>
+              <div>
+                <label className={LABEL} htmlFor="agent-superviseur">
+                  Superviseur
+                </label>
+                <select
+                  id="agent-superviseur"
+                  className={`mt-1 ${inputClass}`}
+                  value={form.superviseurId}
+                  onChange={(e) => setForm({ ...form, superviseurId: e.target.value })}
+                >
+                  <option value="">— Non assigné —</option>
+                  {superviseurs.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.prenom} {s.nom}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="mt-4 flex items-center gap-3">
@@ -383,6 +445,7 @@ export default function AgentsPanel() {
                     <th className={`${LABEL} py-2`}>Matricule</th>
                     <th className={`${LABEL} py-2`}>Agent</th>
                     <th className={`${LABEL} py-2`}>Poste</th>
+                    <th className={`${LABEL} py-2`}>Superviseur</th>
                     <th className={`${LABEL} py-2`}>Mission active</th>
                     <th className={`${LABEL} py-2`}>Embauche</th>
                     <th className={`${LABEL} py-2`}>Statut</th>
@@ -410,6 +473,22 @@ export default function AgentsPanel() {
                         )}
                       </td>
                       <td className="py-3 font-sans text-sm text-white/70">{a.poste ?? "—"}</td>
+                      <td className="py-3">
+                        <select
+                          aria-label={`Superviseur de ${a.prenom} ${a.nom}`}
+                          value={a.superviseurId ?? ""}
+                          disabled={actionId === a.id}
+                          onChange={(e) => assignerSuperviseur(a, e.target.value)}
+                          className={`${inputClass} w-auto py-1 text-xs`}
+                        >
+                          <option value="">— Non assigné —</option>
+                          {superviseurs.map((s) => (
+                            <option key={s.id} value={s.id} className="text-obsidian">
+                              {s.prenom} {s.nom}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
                       <td className="py-3">
                         {a.missionActive ? (
                           <>

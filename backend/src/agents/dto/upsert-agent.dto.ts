@@ -26,4 +26,7 @@ export class UpsertAgentDto {
   // vérification RH (voir AgentsService.updateAgent).
   @IsOptional() @IsString() ribOuMobileMoney?: string | null;
   @IsOptional() @IsString() moyenPaiementType?: string | null;
+
+  // Rattachement hiérarchique direct — voir Agent.superviseurId.
+  @IsOptional() @IsString() superviseurId?: string | null;
 }

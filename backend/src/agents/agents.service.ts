@@ -130,9 +130,20 @@ export class AgentsService {
     });
   }
 
+  // Un superviseurId fourni doit exister — même garde-fou que
+  // ProductionService.createMission pour Mission.superviseurId.
+  private async verifierSuperviseur(superviseurId: string | null | undefined) {
+    if (!superviseurId) return;
+    const superviseur = await this.prisma.superviseur.findUnique({
+      where: { id: superviseurId },
+    });
+    if (!superviseur) throw new NotFoundException("Superviseur introuvable.");
+  }
+
   async listAgents() {
     const agents = await this.prisma.agent.findMany({
       include: {
+        superviseur: true,
         missions: {
           include: { contrat: true, superviseur: true },
           orderBy: { dateDebut: "desc" },
@@ -161,6 +172,8 @@ export class AgentsService {
         peutSeConnecter: a.password !== null,
         contratDepose: a.documents.length > 0,
         missionsCount: a.missions.length,
+        superviseurId: a.superviseurId,
+        superviseurNom: a.superviseur ? `${a.superviseur.prenom} ${a.superviseur.nom}` : null,
         missionActive: missionActive
           ? {
               id: missionActive.id,
@@ -177,6 +190,7 @@ export class AgentsService {
   }
 
   async createAgent(dto: UpsertAgentDto) {
+    await this.verifierSuperviseur(dto.superviseurId);
     const matricule = await this.prochainMatricule();
     const temporaryPassword = generateTemporaryPassword();
     const agent = await this.prisma.agent.create({
@@ -194,6 +208,7 @@ export class AgentsService {
         moyenPaiementType: dto.moyenPaiementType ?? null,
         coordonneesVerifieesLe:
           dto.ribOuMobileMoney || dto.moyenPaiementType ? new Date() : null,
+        superviseurId: dto.superviseurId ?? null,
         password: await bcrypt.hash(temporaryPassword, 10),
       },
     });
@@ -205,6 +220,7 @@ export class AgentsService {
   async updateAgent(id: string, dto: UpsertAgentDto) {
     const existing = await this.prisma.agent.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException("Agent introuvable.");
+    await this.verifierSuperviseur(dto.superviseurId);
 
     // Passage à "inactif" : les sessions ouvertes doivent tomber tout de
     // suite (sessionToujoursValide refuse déjà le rôle agent inactif, mais
@@ -238,6 +254,7 @@ export class AgentsService {
           dto.ribOuMobileMoney !== undefined || dto.moyenPaiementType !== undefined
             ? new Date()
             : undefined,
+        superviseurId: dto.superviseurId === undefined ? undefined : dto.superviseurId,
         sessionsRevoqueesAt: desactive ? new Date() : undefined,
       },
     });
@@ -488,6 +505,7 @@ export class AgentsService {
     const agent = await this.prisma.agent.findUnique({
       where: { matricule },
       include: {
+        superviseur: true,
         documents: { orderBy: { createdAt: "desc" } },
         missions: {
           include: {
@@ -592,6 +610,12 @@ export class AgentsService {
       statut: agent.statut,
       dateEmbauche: agent.dateEmbauche,
       salaireBase: agent.salaireBase,
+      // Superviseur rattaché à l'agent — permanent, indépendant de la
+      // mission (voir Agent.superviseurId), distinct de
+      // missions[].superviseurNom qui ne vaut que pour la mission.
+      superviseurNom: agent.superviseur
+        ? `${agent.superviseur.prenom} ${agent.superviseur.nom}`
+        : null,
       coordonneesPaiement:
         agent.moyenPaiementType && agent.ribOuMobileMoney
           ? {
@@ -709,6 +733,7 @@ export class AgentsService {
     return {
       id: agent.id,
       ...dossier,
+      superviseurId: agent.superviseurId,
       peutSeConnecter: agent.password !== null,
       tauxJournaliers: dashboard.tauxJournaliers,
       comparatifHebdo: dashboard.comparatifHebdo,

@@ -51,6 +51,12 @@ interface LignePaie {
   datePaiement: string | null;
 }
 
+interface Superviseur {
+  id: string;
+  prenom: string;
+  nom: string;
+}
+
 interface AgentCasier {
   id: string;
   matricule: string;
@@ -63,6 +69,11 @@ interface AgentCasier {
   dateEmbauche: string | null;
   salaireBase: number | null;
   peutSeConnecter: boolean;
+  // Rattachement hiérarchique direct — permanent, indépendant de la
+  // mission (distinct des superviseurNom portés par chaque mission
+  // ci-dessous).
+  superviseurId: string | null;
+  superviseurNom: string | null;
   coordonneesPaiement: { type: string; numero: string; verifieLe: string | null } | null;
   contrat: DocumentApi | null;
   autresDocuments: DocumentApi[];
@@ -146,6 +157,7 @@ function messageErreur(err: unknown): string {
 // les taux d'atteinte affichés dans son Espace Agent) et l'état de sa paie.
 export default function AgentCasierPanel({ id }: { id: string }) {
   const [casier, setCasier] = useState<AgentCasier | "loading" | "erreur">("loading");
+  const [superviseurs, setSuperviseurs] = useState<Superviseur[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -161,6 +173,7 @@ export default function AgentCasierPanel({ id }: { id: string }) {
     salaireBase: "",
     moyenPaiementType: "",
     ribOuMobileMoney: "",
+    superviseurId: "",
   });
 
   // Objectifs de la mission active
@@ -193,6 +206,7 @@ export default function AgentCasierPanel({ id }: { id: string }) {
           salaireBase: data.salaireBase?.toString() ?? "",
           moyenPaiementType: data.coordonneesPaiement?.type ?? "",
           ribOuMobileMoney: data.coordonneesPaiement?.numero ?? "",
+          superviseurId: data.superviseurId ?? "",
         });
         setObjectifs({
           journalier: data.missionActive?.objectifJournalier?.toString() ?? "",
@@ -203,6 +217,11 @@ export default function AgentCasierPanel({ id }: { id: string }) {
   }
 
   useEffect(reload, [id]);
+  useEffect(() => {
+    apiGet<Superviseur[]>("/production/superviseurs", adminHeaders())
+      .then(setSuperviseurs)
+      .catch(() => setSuperviseurs([]));
+  }, []);
 
   // `casier` est chargé avant tout rendu du formulaire — comparaison avec
   // les valeurs d'origine pour ne toucher à la date de vérification que
@@ -243,6 +262,7 @@ export default function AgentCasierPanel({ id }: { id: string }) {
           ribOuMobileMoney: coordonneesModifiees
             ? fiche.ribOuMobileMoney.trim() || null
             : undefined,
+          superviseurId: fiche.superviseurId || null,
         },
         adminHeaders()
       );
@@ -430,6 +450,24 @@ export default function AgentCasierPanel({ id }: { id: string }) {
                 {STATUTS.map((s) => (
                   <option key={s.value} value={s.value}>
                     {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={LABEL} htmlFor="casier-superviseur">
+                Superviseur
+              </label>
+              <select
+                id="casier-superviseur"
+                className={`mt-1 ${inputClass}`}
+                value={fiche.superviseurId}
+                onChange={(e) => setFiche({ ...fiche, superviseurId: e.target.value })}
+              >
+                <option value="">— Non assigné —</option>
+                {superviseurs.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.prenom} {s.nom}
                   </option>
                 ))}
               </select>

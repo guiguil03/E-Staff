@@ -54,7 +54,15 @@ export async function fetchOffresEntreprises(): Promise<OffresEntreprises> {
     const res = await fetch(`${API_URL}/entreprises/offres`, { next: { revalidate: 60 } });
     if (!res.ok) throw new Error(String(res.status));
     return (await res.json()) as OffresEntreprises;
-  } catch {
+  } catch (err) {
+    // Repli silencieux auparavant : si le backend est injoignable (mauvais
+    // NEXT_PUBLIC_API_URL pour cet environnement Vercel, backend down,
+    // CORS...), la page affichait indéfiniment les données figées
+    // ci-dessous sans aucune trace — les modifications RH semblent alors ne
+    // "jamais" être prises en compte, sans qu'on sache pourquoi. Ce log
+    // apparaît dans les logs serveur Vercel (Server Component) et donne au
+    // moins l'URL interrogée et l'erreur réelle.
+    console.error(`[fetchOffresEntreprises] échec d'appel à ${API_URL}/entreprises/offres —`, err);
     return FALLBACK;
   }
 }
