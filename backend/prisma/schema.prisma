@@ -1021,6 +1021,10 @@ model Superviseur {
   rapportsHebdo         RapportHebdoSuperviseur[]
   paiements             PaiementSuperviseur[]
   performancesParClient PerformanceSuperviseurClient[]
+  // Rattachement hiérarchique direct — distinct de Mission.superviseurId
+  // (qui dit qui encadre quel contrat). Un agent reste rattaché à son
+  // superviseur même hors mission (entre deux clients), voir Agent.superviseurId.
+  agentsRattaches       Agent[]
 }
 
 // Paie d'un superviseur pour une période — le Fixe + la somme des primes
@@ -1178,6 +1182,13 @@ model Agent {
   moyenPaiementType      String? // "RIB" | "MVola" | "Orange Money" | "Airtel Money"
   coordonneesVerifieesLe DateTime?
 
+  // Rattachement hiérarchique de l'agent à un superviseur — permanent,
+  // indépendant des missions (contrairement à Mission.superviseurId, qui ne
+  // dit qui encadre l'agent que pendant une mission donnée). Nullable tant
+  // que la RH ne l'a pas affecté.
+  superviseurId String?
+  superviseur   Superviseur? @relation(fields: [superviseurId], references: [id])
+
   missions       Mission[]
   documents      AgentDocument[]
   appels         AppelAgent[]
@@ -1194,6 +1205,8 @@ model Agent {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([superviseurId])
 }
 
 // Documents rattachés à un agent — contrat de travail déposé par la RH
