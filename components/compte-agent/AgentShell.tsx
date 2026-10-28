@@ -13,6 +13,7 @@ import ViewAsBanner from "@/components/ViewAsBanner";
 // la page Sécurité commune à tous les rôles.
 const NAV_ITEMS = [
   { href: "/compte/agent", label: "Mes performances", icon: "▲" },
+  { href: "/compte/agent/mon-casier", label: "Mon casier", icon: "▣" },
   { href: "/compte/agent/mon-dossier", label: "Mon dossier", icon: "❖" },
   { href: "/compte/agent/paiements", label: "Mes paiements", icon: "◆" },
   { href: "/compte/securite", label: "Sécurité", icon: "⚙" },
