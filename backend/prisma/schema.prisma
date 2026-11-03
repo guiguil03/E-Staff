@@ -813,6 +813,10 @@ model Apprenant {
   // Messages privés reçus de son formateur (voir Diffusion.apprenantId).
   messagesPrives Diffusion[]
 
+  // Profil ciblé par une entreprise cliente dans le vivier de talents — voir
+  // model InteretVivier, même principe que Agent.interetsVivier.
+  interetsVivier InteretVivier[]
+
   @@index([groupeId])
   @@index([connecteurId])
   @@index([agentAcquisitionId])
@@ -1089,6 +1093,13 @@ model ContratB2B {
   entrepriseProjetId String?
   entrepriseProjet   EntrepriseProjet? @relation(fields: [entrepriseProjetId], references: [id])
 
+  // Compte Entreprise (Espace client) rattaché à ce contrat — nullable : les
+  // contrats existants n'en ont pas, la RH les rattache après coup (voir
+  // EntreprisesComptesService.rattacherContrat). Un compte Entreprise peut
+  // avoir plusieurs contrats (plusieurs équipes/missions en parallèle).
+  entrepriseId String?
+  entreprise   Entreprise? @relation(fields: [entrepriseId], references: [id])
+
   // Apporteur d'affaires à l'origine de ce client — déclenche la commission
   // de démarrage (10%, une fois) au profit de cet apporteur. Nullable : un
   // contrat créé directement par la RH sans apporteur.
@@ -1119,11 +1130,15 @@ model ContratB2B {
   rapportsHebdo           RapportHebdoSuperviseur[]
   commissionDemarrage     CommissionDemarrageApporteur?
   performancesSuperviseur PerformanceSuperviseurClient[]
+  interetsVivier          InteretVivier[]
+  supportsFormation       SupportFormationEntreprise[]
+  messagesEntreprise      MessageEntreprise[]
 
   createdAt DateTime @default(now())
 
   @@index([entrepriseProjetId])
   @@index([connecteurId])
+  @@index([entrepriseId])
 }
 
 // Agent de production — personne qui passe les appels pour les clients
@@ -1195,6 +1210,11 @@ model Agent {
   alertes        AlerteAgent[]
   messagesRecus  MessageSuperviseur[]
   reunionsInvite ReunionParticipant[]
+  // Profil ciblé par une entreprise cliente dans le vivier de talents — voir
+  // model InteretVivier. L'entreprise ne voit jamais cet agent nommément
+  // avant que la RH ne valide l'affectation (voir
+  // EntreprisesComptesService.listerVivier).
+  interetsVivier InteretVivier[]
 
   // Candidat dont l'agent est issu — permet d'afficher ses résultats de test
   // (admission/recrutement) dans son casier. Lien posé explicitement par la
@@ -1951,4 +1971,241 @@ model CompteSuperviseur {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Espace Entreprise (client B2B) — compte connecté pour l'entreprise cliente
+// qui externalise une équipe chez e-Staf (2026-11-03). Distinct des leads
+// publics EntrepriseProjet/EntrepriseFormation : ici un vrai compte, créé par
+// la RH, qui donne accès en LECTURE au tableau de bord de ses propres
+// contrats (même principe que l'Espace Superviseur), au vivier de talents
+// (profils anonymisés — voir InteretVivier), aux salles d'entretien, à
+// l'upload de supports de formation, au casier (contrat/factures) et à un
+// fil d'échange avec le Superviseur. Un compte Entreprise peut regrouper
+// plusieurs ContratB2B (plusieurs équipes/missions en parallèle).
+// ---------------------------------------------------------------------------
+
+model Entreprise {
+  id String @id @default(cuid())
+
+  matricule     String  @unique // "ETF-ENT-2026-..."
+  raisonSociale String
+  contactNom    String
+  email         String
+  telephone     String?
+
+  // "actif" | "inactif"
+  statut String @default("actif")
+
+  // Identifiants de connexion : table séparée (même principe que
+  // CompteSuperviseur) pour que le hash du mot de passe ne sorte jamais avec
+  // la fiche — Entreprise est inclus (`include: { entreprise: true }`) dans
+  // les réponses RH (contrats, production).
+  compte CompteEntreprise?
+
+  contrats          ContratB2B[]
+  interetsVivier    InteretVivier[]
+  entretiens        EntretienVirtuel[]
+  documents         EntrepriseDocument[]
+  supportsFormation SupportFormationEntreprise[]
+  messages          MessageEntreprise[]
+  lives             EntrepriseLive[]
+  stands            StandForum[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CompteEntreprise {
+  id String @id @default(cuid())
+
+  entrepriseId String     @unique
+  entreprise   Entreprise @relation(fields: [entrepriseId], references: [id], onDelete: Cascade)
+
+  password            String
+  resetToken          String?   @unique
+  resetTokenExpiresAt DateTime?
+  sessionsRevoqueesAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Intérêt exprimé par une entreprise cliente pour un profil du vivier de
+// talents (Agent ou Apprenant disponible) — jamais une affectation directe :
+// la RH reste seule décisionnaire (voir ProductionService.createMission),
+// cette ligne ne fait que faire remonter la demande. `agentId`/`apprenantId`
+// ne sont JAMAIS renvoyés tels quels à l'entreprise avant que `statut` ne
+// passe à "affecte" (voir EntreprisesComptesService.listerVivier, qui ne
+// renvoie qu'un identifiant pseudonymisé et des champs non-identifiants).
+model InteretVivier {
+  id String @id @default(cuid())
+
+  entrepriseId String
+  entreprise   Entreprise @relation(fields: [entrepriseId], references: [id])
+
+  contratId String?
+  contrat   ContratB2B? @relation(fields: [contratId], references: [id])
+
+  agentId String?
+  agent   Agent?  @relation(fields: [agentId], references: [id])
+
+  apprenantId String?
+  apprenant   Apprenant? @relation(fields: [apprenantId], references: [id])
+
+  posteSouhaite String?
+  message       String?
+
+  // "nouveau" | "vu" | "propose" | "affecte" | "refuse"
+  statut    String   @default("nouveau")
+  createdAt DateTime @default(now())
+
+  entretiens EntretienVirtuel[]
+
+  @@index([entrepriseId])
+  @@index([agentId])
+  @@index([apprenantId])
+}
+
+// Salle d'entretien virtuel ouverte par l'entreprise pour un profil du
+// vivier — même principe de salle Daily persistante que
+// common/salle-visio.ts (ouvrirSalleVisio), créée à la première ouverture.
+// Le lien est transmis par e-mail (candidat sans compte à ce stade du
+// pipeline), jamais affiché publiquement.
+model EntretienVirtuel {
+  id String @id @default(cuid())
+
+  entrepriseId String
+  entreprise   Entreprise @relation(fields: [entrepriseId], references: [id])
+
+  interetVivierId String?
+  interetVivier   InteretVivier? @relation(fields: [interetVivierId], references: [id])
+
+  titre        String
+  startAt      DateTime?
+  dureeMinutes Int       @default(30)
+
+  dailyRoomName String?
+  dailyRoomUrl  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([entrepriseId])
+}
+
+// Support de formation déposé par l'entreprise cliente pour les agents de
+// son/ses équipe(s) — même pattern que SupportCours (formateur -> groupe),
+// mais rattaché à un ContratB2B plutôt qu'à un Groupe académique.
+// contratId null = visible par tous les agents de toutes les équipes de
+// cette entreprise.
+model SupportFormationEntreprise {
+  id String @id @default(cuid())
+
+  entrepriseId String
+  entreprise   Entreprise @relation(fields: [entrepriseId], references: [id])
+
+  contratId String?
+  contrat   ContratB2B? @relation(fields: [contratId], references: [id])
+
+  filename   String
+  storageKey String
+  mimeType   String
+
+  createdAt DateTime @default(now())
+
+  @@index([entrepriseId])
+  @@index([contratId])
+}
+
+// Documents rattachés à un compte Entreprise — contrat e-Staf déposé par la
+// RH, visible/téléchargeable par l'entreprise dans son casier. Calqué sur
+// AgentDocument/FormateurDocument.
+model EntrepriseDocument {
+  id String @id @default(cuid())
+
+  entrepriseId String
+  entreprise   Entreprise @relation(fields: [entrepriseId], references: [id], onDelete: Cascade)
+
+  type       String // "contrat" | "autre"
+  filename   String
+  storageKey String
+  uploadedBy String // "rh"
+
+  createdAt DateTime @default(now())
+
+  @@index([entrepriseId])
+}
+
+// Fil d'échange entre l'entreprise cliente et le Superviseur en charge d'un
+// de ses contrats — reçoit les bilans hebdo (voir RapportHebdoSuperviseur,
+// consulté en lecture, pas réécrit ici) et permet une discussion à deux voix
+// (`auteur`). Même principe que MessageSuperviseur, côté entreprise.
+model MessageEntreprise {
+  id String @id @default(cuid())
+
+  entrepriseId String
+  entreprise   Entreprise @relation(fields: [entrepriseId], references: [id])
+
+  contratId String?
+  contrat   ContratB2B? @relation(fields: [contratId], references: [id])
+
+  // "entreprise" | "superviseur"
+  auteur String
+  texte  String
+
+  createdAt DateTime @default(now())
+
+  @@index([entrepriseId])
+  @@index([contratId])
+}
+
+// Live organisé par l'entreprise cliente dans la communauté e-Staf — distinct
+// de ForumLive (qui reste réservé à l'Admin, "Live du mois"). Même salle
+// Daily en mode broadcast-only (voir DailyService.createRoom(..., true)).
+model EntrepriseLive {
+  id String @id @default(cuid())
+
+  entrepriseId String
+  entreprise   Entreprise @relation(fields: [entrepriseId], references: [id])
+
+  titre        String
+  description  String?
+  startAt      DateTime?
+  dureeMinutes Int       @default(60)
+
+  dailyRoomName String?
+  dailyRoomUrl  String?
+
+  // "planifie" | "en_direct" | "termine" | "annule"
+  statut String @default("planifie")
+
+  createdAt DateTime @default(now())
+
+  @@index([entrepriseId])
+}
+
+// Stand virtuel d'une entreprise cliente au forum — présentation, offres,
+// créneaux d'entretien proposés. Rien de comparable n'existait avant
+// (confirmé par grep "stand|exposant|exhibitor" sur tout le repo) : nouvelle
+// fonctionnalité de bout en bout. Visible publiquement sur /forum une fois
+// `statut: "publie"`.
+model StandForum {
+  id String @id @default(cuid())
+
+  entrepriseId String
+  entreprise   Entreprise @relation(fields: [entrepriseId], references: [id])
+
+  nom               String
+  presentation      String?
+  offresTexte       String?
+  logoKey           String?
+  creneauxEntretien String? // JSON [{ startAt, dureeMinutes }]
+
+  // "brouillon" | "publie"
+  statut String @default("brouillon")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entrepriseId])
 }

@@ -25,7 +25,7 @@ const APP_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 // "ADM-"/"RH-") — d'où une recherche de compte commune (findAccount), qui
 // fait marcher « mot de passe oublié » et « déconnecter partout » pour tous
 // sans code dédié par rôle.
-type TypeCompte = "apprenant" | "formateur" | "agent" | "superviseur" | "staff";
+type TypeCompte = "apprenant" | "formateur" | "agent" | "superviseur" | "entreprise" | "staff";
 type Account = {
   type: TypeCompte;
   id: string;
@@ -69,6 +69,23 @@ export class AuthService {
         resetTokenExpiresAt: compte.resetTokenExpiresAt,
       };
     }
+    // Entreprise cliente (Espace Entreprise, 2026-11-03) : mêmes identifiants
+    // satellites que CompteSuperviseur, voir model CompteEntreprise.
+    const compteEntreprise = await this.prisma.compteEntreprise.findFirst({
+      where: "resetToken" in where ? { resetToken: where.resetToken } : { entreprise: { matricule: where.matricule } },
+      include: { entreprise: true },
+    });
+    if (compteEntreprise) {
+      return {
+        type: "entreprise",
+        id: compteEntreprise.id,
+        matricule: compteEntreprise.entreprise.matricule,
+        prenom: compteEntreprise.entreprise.contactNom,
+        email: compteEntreprise.entreprise.email,
+        password: compteEntreprise.password,
+        resetTokenExpiresAt: compteEntreprise.resetTokenExpiresAt,
+      };
+    }
     const staff = await this.prisma.compteStaff.findUnique({ where });
     if (staff && staff.actif) return { ...staff, type: "staff" };
     return null;
@@ -86,6 +103,7 @@ export class AuthService {
     if (account.type === "formateur") return this.prisma.formateur.update({ where: { id: account.id }, data });
     if (account.type === "agent") return this.prisma.agent.update({ where: { id: account.id }, data });
     if (account.type === "superviseur") return this.prisma.compteSuperviseur.update({ where: { id: account.id }, data });
+    if (account.type === "entreprise") return this.prisma.compteEntreprise.update({ where: { id: account.id }, data });
     if (account.type === "staff") return this.prisma.compteStaff.update({ where: { id: account.id }, data });
     return this.prisma.apprenant.update({ where: { id: account.id }, data });
   }
@@ -148,6 +166,21 @@ export class AuthService {
 
     const valid = await bcrypt.compare(password, compte.password);
     return valid ? compte.superviseur : null;
+  }
+
+  // Entreprise cliente (Espace Entreprise, 2026-11-03) : une entreprise
+  // "inactive" (fin de relation commerciale) ne peut plus se connecter, même
+  // avec les bons identifiants — son compte reste en base (historique des
+  // contrats conservé), voir Entreprise.statut.
+  async loginEntreprise(matricule: string, password: string) {
+    const compte = await this.prisma.compteEntreprise.findFirst({
+      where: { entreprise: { matricule } },
+      include: { entreprise: true },
+    });
+    if (!compte || compte.entreprise.statut === "inactif") return null;
+
+    const valid = await bcrypt.compare(password, compte.password);
+    return valid ? compte.entreprise : null;
   }
 
   async changePassword(dto: ChangePasswordDto) {
@@ -270,5 +303,19 @@ export class AuthService {
     const formateur = await this.prisma.formateur.findUnique({ where: { matricule } });
     if (!formateur) throw new NotFoundException("Formateur introuvable.");
     return { token: createViewAsToken(matricule, "formateur") };
+  }
+
+  // Équivalent entreprise cliente — la RH ouvre son espace tel qu'elle le
+  // voit. Sans compte d'accès (CompteEntreprise), rien à ouvrir : même règle
+  // que pour un superviseur sans identifiants.
+  async createEntrepriseViewAsToken(matricule: string) {
+    const compte = await this.prisma.compteEntreprise.findFirst({
+      where: { entreprise: { matricule } },
+      select: { id: true },
+    });
+    if (!compte) {
+      throw new BadRequestException("Cette entreprise n'a pas encore d'accès : envoyez-lui ses identifiants d'abord.");
+    }
+    return { token: createViewAsToken(matricule, "entreprise") };
   }
 }

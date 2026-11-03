@@ -24,6 +24,7 @@ import { OffresEmploiModule } from "./offres-emploi/offres-emploi.module";
 import { OffresEntreprisesModule } from "./offres-entreprises/offres-entreprises.module";
 import { MediaWallModule } from "./media-wall/media-wall.module";
 import { ComptesStaffModule } from "./comptes-staff/comptes-staff.module";
+import { EntreprisesComptesModule } from "./entreprises-comptes/entreprises-comptes.module";
 import { AntiAbusCronService } from "./common/anti-abus-cron.service";
 
 @Module({
@@ -51,6 +52,7 @@ import { AntiAbusCronService } from "./common/anti-abus-cron.service";
     OffresEntreprisesModule,
     MediaWallModule,
     ComptesStaffModule,
+    EntreprisesComptesModule,
   ],
   controllers: [AppController],
   providers: [AppService, AntiAbusCronService],

@@ -28,6 +28,7 @@ import { ouvrirSalleVisio } from "../common/salle-visio";
 import { ValiderJourneeDto } from "../agents/dto/valider-journee.dto";
 import { AbsenceSuperviseurDto } from "./dto/absence-superviseur.dto";
 import { EnvoyerMessageDto } from "./dto/envoyer-message.dto";
+import { EnvoyerMessageEntrepriseDto } from "./dto/envoyer-message-entreprise.dto";
 import { PlanifierReunionDto } from "./dto/planifier-reunion.dto";
 
 function round2(n: number): number {
@@ -740,5 +741,51 @@ export class SuperviseursService {
     if (!absence) throw new NotFoundException("Absence introuvable.");
     await this.prisma.absenceSuperviseur.delete({ where: { id: absenceId } });
     return { ok: true };
+  }
+
+  // ---- Échange avec l'entreprise cliente (2026-11-03) ------------------------
+  //
+  // Voir MessageEntreprise dans schema.prisma : même fil que celui lu par
+  // l'Espace Entreprise (EntreprisesComptesService.listMessages), le
+  // superviseur n'y accède que pour les contrats qu'il encadre (vérifié via
+  // Mission.superviseurId, jamais via le compte Entreprise lui-même).
+
+  private async contratsEncadresPar(superviseurId: string): Promise<string[]> {
+    const missions = await this.prisma.mission.findMany({
+      where: { superviseurId },
+      select: { contratId: true },
+      distinct: ["contratId"],
+    });
+    return missions.map((m) => m.contratId);
+  }
+
+  private async verifierContratEncadre(superviseurId: string, contratId: string) {
+    const mission = await this.prisma.mission.findFirst({ where: { contratId, superviseurId } });
+    if (!mission) throw new ForbiddenException("Vous n'encadrez pas ce contrat.");
+  }
+
+  async listMessagesEntreprise(matricule: string, contratId?: string) {
+    const sup = await this.prisma.superviseur.findUnique({ where: { matricule } });
+    if (!sup) throw new NotFoundException("Superviseur introuvable.");
+    if (contratId) await this.verifierContratEncadre(sup.id, contratId);
+    const contratIds = contratId ? [contratId] : await this.contratsEncadresPar(sup.id);
+    if (contratIds.length === 0) return [];
+    return this.prisma.messageEntreprise.findMany({
+      where: { contratId: { in: contratIds } },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  async envoyerMessageEntreprise(matricule: string, dto: EnvoyerMessageEntrepriseDto) {
+    const sup = await this.prisma.superviseur.findUnique({ where: { matricule } });
+    if (!sup) throw new NotFoundException("Superviseur introuvable.");
+    await this.verifierContratEncadre(sup.id, dto.contratId);
+    const contrat = await this.prisma.contratB2B.findUnique({ where: { id: dto.contratId } });
+    if (!contrat?.entrepriseId) {
+      throw new BadRequestException("Ce contrat n'est pas encore rattaché à un compte Entreprise.");
+    }
+    return this.prisma.messageEntreprise.create({
+      data: { entrepriseId: contrat.entrepriseId, contratId: dto.contratId, auteur: "superviseur", texte: dto.texte },
+    });
   }
 }
