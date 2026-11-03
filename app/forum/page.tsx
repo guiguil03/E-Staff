@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Reveal from "@/components/Reveal";
 import LiveSection from "@/components/forum/LiveSection";
+import StandsForumSection from "@/components/forum/StandsForumSection";
 import ForumAccessGate from "@/components/forum/ForumAccessGate";
 
 export const metadata: Metadata = {
@@ -45,6 +46,7 @@ export default function ForumPage() {
         <section className="border-t border-accent/15 px-4 pb-20 pt-4 sm:px-6">
           <div className="mx-auto max-w-4xl">
             <LiveSection />
+            <StandsForumSection />
           </div>
         </section>
       </div>

@@ -63,6 +63,7 @@ describe("AuthService", () => {
     agent: { findUnique: jest.Mock; update: jest.Mock };
     compteStaff: { findUnique: jest.Mock; update: jest.Mock };
     compteSuperviseur: { findFirst: jest.Mock; update: jest.Mock };
+    compteEntreprise: { findFirst: jest.Mock; update: jest.Mock };
   };
   let email: { send: jest.Mock };
   let service: AuthService;
@@ -86,6 +87,10 @@ describe("AuthService", () => {
         update: jest.fn(),
       },
       compteSuperviseur: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
+      },
+      compteEntreprise: {
         findFirst: jest.fn().mockResolvedValue(null),
         update: jest.fn(),
       },

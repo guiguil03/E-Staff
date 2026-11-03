@@ -31,4 +31,8 @@ export const ROLE_ROUTES: Record<string, string> = {
   // de nav est filtré par rôle dans RhShell.
   admin: "/compte/admin/academie",
   rh: "/compte/admin",
+  // Entreprise cliente (Espace Entreprise, 2026-11-03) : équipes en temps
+  // réel, vivier de talents, entretiens, formation, casier et échange avec
+  // le superviseur.
+  entreprise: "/compte/entreprise",
 };

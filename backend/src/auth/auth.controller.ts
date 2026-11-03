@@ -104,6 +104,9 @@ export class AuthController {
     const apprenant = await this.authService.loginApprenant(dto.matricule, dto.password);
     if (apprenant) return connecter(apprenant.matricule, "apprenant");
 
+    const entreprise = await this.authService.loginEntreprise(dto.matricule, dto.password);
+    if (entreprise) return connecter(entreprise.matricule, "entreprise");
+
     await recordFailure(key);
     throw new UnauthorizedException("Matricule ou mot de passe invalide.");
   }
@@ -243,5 +246,13 @@ export class AuthController {
   @Post("view-as/formateur/:matricule")
   createFormateurViewAs(@Param("matricule") matricule: string) {
     return this.authService.createFormateurViewAsToken(matricule);
+  }
+
+  // "Se connecter en tant que" (RH -> compte entreprise cliente) — voir
+  // AuthService.createEntrepriseViewAsToken.
+  @UseGuards(RhGuard)
+  @Post("view-as/entreprise/:matricule")
+  createEntrepriseViewAs(@Param("matricule") matricule: string) {
+    return this.authService.createEntrepriseViewAsToken(matricule);
   }
 }

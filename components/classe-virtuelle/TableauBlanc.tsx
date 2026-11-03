@@ -18,7 +18,7 @@ if (typeof window !== "undefined") {
 const Excalidraw = dynamic(async () => (await import("@excalidraw/excalidraw")).Excalidraw, {
   ssr: false,
   loading: () => (
-    <div className="flex h-full items-center justify-center font-sans text-sm text-white/50">
+    <div className="flex h-full items-center justify-center font-sans text-sm text-white/10">
       Chargement du tableau...
     </div>
   ),

@@ -16,6 +16,7 @@ import { SuperviseurGuard } from "../common/superviseur.guard";
 import { ValiderJourneeDto } from "../agents/dto/valider-journee.dto";
 import { AbsenceSuperviseurDto } from "./dto/absence-superviseur.dto";
 import { EnvoyerMessageDto } from "./dto/envoyer-message.dto";
+import { EnvoyerMessageEntrepriseDto } from "./dto/envoyer-message-entreprise.dto";
 import { PlanifierReunionDto } from "./dto/planifier-reunion.dto";
 import { SuperviseursService } from "./superviseurs.service";
 
@@ -135,5 +136,19 @@ export class SuperviseursController {
   @Post(":matricule/reunions/:id/salle")
   salleReunion(@Param("matricule") matricule: string, @Param("id") id: string) {
     return this.service.salleReunion(matricule, id);
+  }
+
+  // ---- Échange avec l'entreprise cliente (bilans hebdo + discussion) --------
+
+  @UseGuards(SuperviseurGuard)
+  @Get(":matricule/messages-entreprise")
+  listMessagesEntreprise(@Param("matricule") matricule: string, @Query("contratId") contratId?: string) {
+    return this.service.listMessagesEntreprise(matricule, contratId || undefined);
+  }
+
+  @UseGuards(SuperviseurGuard)
+  @Post(":matricule/messages-entreprise")
+  envoyerMessageEntreprise(@Param("matricule") matricule: string, @Body() dto: EnvoyerMessageEntrepriseDto) {
+    return this.service.envoyerMessageEntreprise(matricule, dto);
   }
 }
