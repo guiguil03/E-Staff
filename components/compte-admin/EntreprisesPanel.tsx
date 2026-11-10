@@ -24,8 +24,15 @@ interface Contrat {
   entrepriseId: string | null;
 }
 
+interface SuperviseurOption {
+  id: string;
+  prenom: string;
+  nom: string;
+}
+
 interface Interet {
   id: string;
+  entrepriseId: string;
   statut: string;
   posteSouhaite: string | null;
   message: string | null;
@@ -69,6 +76,11 @@ export default function EntreprisesPanel() {
   const [message, setMessage] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
   const [contratChoisi, setContratChoisi] = useState<Record<string, string>>({});
+  // Affectation en lot : profils cochés + paramètres communs saisis une fois.
+  const [superviseurs, setSuperviseurs] = useState<SuperviseurOption[]>([]);
+  const [selection, setSelection] = useState<string[]>([]);
+  const [lot, setLot] = useState({ contratId: "", superviseurId: "", role: "", dateDebut: "" });
+  const [lotBusy, setLotBusy] = useState(false);
 
   function refresh() {
     setEntreprises("loading");
@@ -76,6 +88,7 @@ export default function EntreprisesPanel() {
     apiGet<Contrat[]>("/production/contrats", adminHeaders()).then(setContrats).catch(() => {});
     setInterets("loading");
     apiGet<Interet[]>("/entreprises-comptes/interets", adminHeaders()).then(setInterets).catch(() => setInterets("erreur"));
+    apiGet<SuperviseurOption[]>("/production/superviseurs", adminHeaders()).then(setSuperviseurs).catch(() => {});
     setEntretiens("loading");
     apiGet<EntretienRh[]>("/entreprises-comptes/entretiens", adminHeaders()).then(setEntretiens).catch(() => setEntretiens("erreur"));
   }
@@ -102,6 +115,60 @@ export default function EntreprisesPanel() {
       setError(e instanceof Error ? e.message : "Impossible d'ouvrir la salle.");
     } finally {
       setRejoindreId(null);
+    }
+  }
+
+  // Seuls les profils pas encore affectés ni refusés peuvent être cochés.
+  const affectables = Array.isArray(interets) ? interets.filter((i) => i.statut !== "affecte" && i.statut !== "refuse") : [];
+
+  function basculerSelection(id: string) {
+    setSelection((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  }
+
+  // Contrats proposables : ceux de l'entreprise des profils cochés, ou sans
+  // entreprise rattachée (le serveur refuse de toute façon un contrat d'une
+  // autre entreprise).
+  const entreprisesChoisies = new Set(
+    Array.isArray(interets) ? interets.filter((i) => selection.includes(i.id)).map((i) => i.entrepriseId) : []
+  );
+  const contratsLot = contrats.filter((c) => !c.entrepriseId || entreprisesChoisies.has(c.entrepriseId));
+
+  async function affecterLot() {
+    if (selection.length === 0 || !lot.contratId || !lot.role.trim() || !lot.dateDebut) return;
+    setLotBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const r = await apiPostAuthed<{
+        affectes: number;
+        echecs: number;
+        resultats: { interetId: string; ok: boolean; erreur?: string }[];
+      }>(
+        "/entreprises-comptes/interets/affecter-lot",
+        {
+          interetIds: selection,
+          contratId: lot.contratId,
+          superviseurId: lot.superviseurId || undefined,
+          role: lot.role.trim(),
+          dateDebut: new Date(lot.dateDebut).toISOString(),
+        },
+        adminHeaders()
+      );
+      const nomDe = (id: string) => {
+        const i = Array.isArray(interets) ? interets.find((x) => x.id === id) : undefined;
+        const p = i?.agent ?? i?.apprenant;
+        return p ? `${p.prenom} ${p.nom}` : id;
+      };
+      const echecs = r.resultats.filter((x) => !x.ok).map((x) => `${nomDe(x.interetId)} : ${x.erreur}`);
+      setMessage(`${r.affectes} profil(s) affecté(s) en une fois.`);
+      if (echecs.length > 0) setError(`${echecs.length} échec(s) — ${echecs.join(" · ")}`);
+      // Les profils en échec restent cochés pour une nouvelle tentative.
+      setSelection(r.resultats.filter((x) => !x.ok).map((x) => x.interetId));
+      refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Échec de l'affectation en lot.");
+    } finally {
+      setLotBusy(false);
     }
   }
 
@@ -377,18 +444,107 @@ export default function EntreprisesPanel() {
         <div className="rounded border border-white/10 bg-obsidianCard p-6">
           <h3 className="font-display text-base font-semibold text-white">Intérêts du vivier de talents</h3>
           <p className="mt-1 font-sans text-xs text-white/50">
-            Une entreprise a exprimé un intérêt pour un profil — proposez-le, puis affectez-le via Production &gt; Missions une fois
-            les détails (poste, date, superviseur) négociés.
+            Une entreprise a exprimé un intérêt pour un profil — proposez-le. Une fois les entretiens validés, cochez les profils
+            retenus et affectez-les en une fois (contrat, superviseur, poste et date saisis une seule fois).
           </p>
           {interets === "loading" && <p className="mt-4 font-sans text-sm text-white/50">Chargement...</p>}
           {interets === "erreur" && <p className="mt-4 font-sans text-sm text-white/50">Erreur de chargement.</p>}
           {Array.isArray(interets) && interets.length === 0 && (
             <p className="mt-4 font-sans text-sm text-white/50">Aucun intérêt transmis pour l&apos;instant.</p>
           )}
+          {affectables.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setSelection(selection.length === affectables.length ? [] : affectables.map((i) => i.id))}
+                className="font-mono text-[11px] uppercase tracking-widest text-accent hover:underline"
+              >
+                {selection.length === affectables.length ? "Tout décocher" : "Tout cocher"}
+              </button>
+              <span className="font-mono text-[11px] text-white/40">{selection.length} sélectionné(s)</span>
+            </div>
+          )}
+
+          {selection.length > 0 && (
+            <div className="mt-3 rounded border border-accent/40 bg-accent/5 p-4">
+              <p className="font-sans text-sm font-semibold text-white">Affecter les {selection.length} profil(s) cochés</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className={LABEL_CLS} htmlFor="lot-contrat">Contrat</label>
+                  <select
+                    id="lot-contrat"
+                    value={lot.contratId}
+                    onChange={(e) => setLot((l) => ({ ...l, contratId: e.target.value }))}
+                    className={INPUT_CLS}
+                  >
+                    <option value="">— Choisir un contrat —</option>
+                    {contratsLot.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.clientNom}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={LABEL_CLS} htmlFor="lot-superviseur">Superviseur</label>
+                  <select
+                    id="lot-superviseur"
+                    value={lot.superviseurId}
+                    onChange={(e) => setLot((l) => ({ ...l, superviseurId: e.target.value }))}
+                    className={INPUT_CLS}
+                  >
+                    <option value="">— Sans superviseur —</option>
+                    {superviseurs.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.prenom} {s.nom}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={LABEL_CLS} htmlFor="lot-role">Poste / rôle</label>
+                  <input
+                    id="lot-role"
+                    value={lot.role}
+                    onChange={(e) => setLot((l) => ({ ...l, role: e.target.value }))}
+                    className={INPUT_CLS}
+                  />
+                </div>
+                <div>
+                  <label className={LABEL_CLS} htmlFor="lot-debut">Date de début</label>
+                  <input
+                    id="lot-debut"
+                    type="date"
+                    value={lot.dateDebut}
+                    onChange={(e) => setLot((l) => ({ ...l, dateDebut: e.target.value }))}
+                    className={INPUT_CLS}
+                  />
+                </div>
+              </div>
+              <div className="mt-3">
+                <Button onClick={affecterLot} disabled={lotBusy || !lot.contratId || !lot.role.trim() || !lot.dateDebut}>
+                  {lotBusy ? "Affectation..." : `Affecter ${selection.length} profil(s)`}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {Array.isArray(interets) && interets.length > 0 && (
             <ul className="mt-4 space-y-2">
               {interets.map((i) => (
-                <li key={i.id} className="rounded border border-white/10 bg-obsidian px-4 py-3">
+                <li key={i.id} className="flex items-start gap-3 rounded border border-white/10 bg-obsidian px-4 py-3">
+                  {i.statut !== "affecte" && i.statut !== "refuse" ? (
+                    <input
+                      type="checkbox"
+                      aria-label="Sélectionner ce profil"
+                      checked={selection.includes(i.id)}
+                      onChange={() => basculerSelection(i.id)}
+                      className="mt-1 h-4 w-4 shrink-0 accent-accent"
+                    />
+                  ) : (
+                    <span className="mt-1 inline-block h-4 w-4 shrink-0" aria-hidden />
+                  )}
+                  <div className="min-w-0 flex-1">
                   <p className="font-sans text-sm text-white">
                     {i.entreprise.raisonSociale} →{" "}
                     {i.agent ? `${i.agent.prenom} ${i.agent.nom} (${i.agent.matricule})` : i.apprenant ? `${i.apprenant.prenom} ${i.apprenant.nom} (${i.apprenant.matricule})` : "—"}
@@ -414,6 +570,7 @@ export default function EntreprisesPanel() {
                         </button>
                       </>
                     )}
+                  </div>
                   </div>
                 </li>
               ))}
