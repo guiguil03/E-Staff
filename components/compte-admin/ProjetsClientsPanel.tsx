@@ -22,6 +22,46 @@ interface ProjetClient {
   needsDetails: string;
   status: EntrepriseProjetStatus;
   createdAt: string;
+  rdvDebut: string | null;
+  rdvLien: string | null;
+  rdvStatut: "confirme" | "annule" | null;
+}
+
+function fmtRdv(iso: string): string {
+  return new Date(iso).toLocaleString("fr-FR", {
+    timeZone: "Indian/Antananarivo",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+// Entretien de cadrage réservé via Cal.com (webhook -> EntrepriseProjet.rdv*).
+function Entretien({ p }: { p: ProjetClient }) {
+  if (!p.rdvDebut || !p.rdvStatut) {
+    return <span className="font-sans text-xs text-white/30">Aucun entretien</span>;
+  }
+  const annule = p.rdvStatut === "annule";
+  return (
+    <span className="flex flex-wrap items-center gap-2 font-sans text-xs">
+      <span className={annule ? "text-white/40 line-through" : "text-white/80"}>
+        {fmtRdv(p.rdvDebut)}
+      </span>
+      {annule ? (
+        <span className="text-red-400">Annulé</span>
+      ) : (
+        p.rdvLien && (
+          <a
+            href={p.rdvLien}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded border border-accent/50 px-2 py-0.5 text-accent hover:bg-accent/10"
+          >
+            Rejoindre
+          </a>
+        )
+      )}
+    </span>
+  );
 }
 
 const STATUTS: { value: EntrepriseProjetStatus; label: string }[] = [
@@ -120,6 +160,7 @@ export default function ProjetsClientsPanel() {
         return (
           <div key={p.id} className="rounded border border-white/10 bg-obsidianCard p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
               <button
                 type="button"
                 onClick={() => setOuvert(isOpen ? null : p.id)}
@@ -131,6 +172,10 @@ export default function ProjetsClientsPanel() {
                   {new Date(p.createdAt).toLocaleDateString("fr-FR")}
                 </p>
               </button>
+                <p className="mt-1 flex flex-wrap items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-white/40">
+                  Entretien : <Entretien p={p} />
+                </p>
+              </div>
               <select
                 aria-label={`Statut de ${p.companyName}`}
                 value={p.status}

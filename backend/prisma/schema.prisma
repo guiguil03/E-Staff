@@ -47,6 +47,14 @@ model EntrepriseProjet {
   status    String   @default("nouveau")
   createdAt DateTime @default(now())
 
+  // Entretien de cadrage réservé via Cal.com (webhook BOOKING_* — voir
+  // CalWebhookController). Rapprochement par e-mail du contact ; on garde le
+  // dernier rendez-vous. rdvStatut : "confirme" | "annule".
+  rdvDebut  DateTime?
+  rdvLien   String?
+  rdvCalUid String?
+  rdvStatut String?
+
   contratsB2B ContratB2B[]
 }
 

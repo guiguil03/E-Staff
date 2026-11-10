@@ -497,3 +497,20 @@ Retrying 1/3...
  GET /icon.png?959f9f8d5416bb80 200 in 62ms
  GET /sw.js 404 in 187ms
  GET /compte/admin/superviseurs 200 in 177ms
+ GET / 200 in 1324ms
+ GET /icon.png?959f9f8d5416bb80 200 in 314ms
+ GET /sw.js 404 in 607ms
+ ○ Compiling /offres/examens ...
+ ✓ Compiled /offres/examens in 8.4s (1592 modules)
+ GET /offres/examens 200 in 9900ms
+ ✓ Compiled in 1304ms (725 modules)
+ GET /sw.js 404 in 610ms
+ GET /offres/examens 200 in 971ms
+ GET / 200 in 1358ms
+ GET /offres/examens 200 in 262ms
+ GET / 200 in 191ms
+ GET /sw.js 404 in 151ms
+ GET /icon.png?959f9f8d5416bb80 200 in 131ms
+ GET /icon.png?959f9f8d5416bb80 200 in 233ms
+ GET /sw.js 404 in 237ms
+ GET /sw.js 404 in 177ms
