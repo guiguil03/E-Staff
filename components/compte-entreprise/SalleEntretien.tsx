@@ -4,10 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost } from "@/lib/api";
 import { entrepriseMatricule, fmtDateHeure } from "./entrepriseApi";
 
-interface Interet {
-  id: string;
-  statut: string;
-  profil: { nom: string; matricule: string } | null;
+interface Profil {
+  ref: string;
+  label: string;
+  poste: string | null;
+  niveau: string | null;
+  totalScore: number | null;
+  experienceAnnees: number | null;
 }
 
 interface Entretien {
@@ -16,6 +19,8 @@ interface Entretien {
   startAt: string | null;
   dureeMinutes: number;
   createdAt: string;
+  salleDisponible: boolean;
+  profilLabel: string | null;
 }
 
 const CARD = "rounded border border-white/10 bg-obsidianCard p-5";
@@ -25,19 +30,21 @@ const INPUT =
 const BTN = "rounded bg-accent px-4 py-2 font-sans text-sm font-semibold text-obsidian disabled:opacity-40";
 const messageErreur = (e: unknown) => (e instanceof Error ? e.message : "Une erreur est survenue.");
 
-// Salle d'entretien virtuel — l'entreprise planifie un entretien avec un
-// profil du vivier (ou un candidat hors vivier, e-mail saisi à la main) ;
-// le lien de la salle Daily est envoyé par e-mail au candidat, qui n'a pas
-// de compte à ce stade du pipeline.
+// Salle d'entretien virtuel — l'entreprise choisit un profil ANONYMISÉ du
+// vivier de talents (ou saisit l'e-mail d'un candidat hors vivier) et planifie
+// l'entretien. Le lien de la salle Daily est envoyé par e-mail au candidat
+// (qui n'a pas de compte à ce stade) ; l'entreprise rejoint la sienne depuis
+// la liste ci-dessous, via un lien nominatif émis à la demande.
 export default function SalleEntretien() {
-  const [interets, setInterets] = useState<Interet[]>([]);
+  const [profils, setProfils] = useState<Profil[] | "loading" | "erreur">("loading");
+  const [profilRef, setProfilRef] = useState("");
   const [entretiens, setEntretiens] = useState<Entretien[] | "loading" | "erreur">("loading");
   const [titre, setTitre] = useState("");
-  const [interetId, setInteretId] = useState("");
   const [emailCandidat, setEmailCandidat] = useState("");
   const [startAt, setStartAt] = useState("");
   const [dureeMinutes, setDureeMinutes] = useState("30");
   const [busy, setBusy] = useState(false);
+  const [rejoindreId, setRejoindreId] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   const [succes, setSucces] = useState<string | null>(null);
   const matricule = entrepriseMatricule();
@@ -45,12 +52,11 @@ export default function SalleEntretien() {
   const charger = useCallback(() => {
     if (!matricule) {
       setEntretiens("erreur");
+      setProfils("erreur");
       return;
     }
     apiGet<Entretien[]>(`/entreprises-comptes/${matricule}/entretiens`).then(setEntretiens).catch(() => setEntretiens("erreur"));
-    apiGet<Interet[]>(`/entreprises-comptes/${matricule}/vivier/interets`)
-      .then((i) => setInterets(i.filter((x) => x.statut === "affecte" || x.statut === "propose")))
-      .catch(() => {});
+    apiGet<Profil[]>(`/entreprises-comptes/${matricule}/vivier`).then(setProfils).catch(() => setProfils("erreur"));
   }, [matricule]);
 
   useEffect(() => {
@@ -64,8 +70,8 @@ export default function SalleEntretien() {
     try {
       const r = await apiPost<{ configured: boolean; emailEnvoye: boolean }>(`/entreprises-comptes/${matricule}/entretiens`, {
         titre,
-        interetVivierId: interetId || undefined,
-        emailCandidat: interetId ? undefined : emailCandidat || undefined,
+        profilRef: profilRef || undefined,
+        emailCandidat: profilRef ? undefined : emailCandidat || undefined,
         startAt: startAt ? new Date(startAt).toISOString() : undefined,
         dureeMinutes: Number(dureeMinutes),
       });
@@ -77,7 +83,7 @@ export default function SalleEntretien() {
             : "Entretien créé — la salle virtuelle n'est pas encore activée sur la plateforme."
       );
       setTitre("");
-      setInteretId("");
+      setProfilRef("");
       setEmailCandidat("");
       setStartAt("");
       charger();
@@ -85,6 +91,28 @@ export default function SalleEntretien() {
       setErreur(messageErreur(e));
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Lien nominatif émis à la demande (jamais l'URL brute de la salle). L'onglet
+  // est ouvert tout de suite pour ne pas être bloqué par l'anti-popup.
+  async function rejoindre(id: string) {
+    setErreur(null);
+    setRejoindreId(id);
+    const win = window.open("", "_blank");
+    try {
+      const r = await apiPost<{ configured: boolean; url: string | null }>(
+        `/entreprises-comptes/${matricule}/entretiens/${id}/rejoindre`,
+        {}
+      );
+      if (!r.url) throw new Error("La salle virtuelle n'est pas encore activée sur la plateforme.");
+      if (win) win.location.href = r.url;
+      else window.location.href = r.url;
+    } catch (e) {
+      win?.close();
+      setErreur(messageErreur(e));
+    } finally {
+      setRejoindreId(null);
     }
   }
 
@@ -104,20 +132,55 @@ export default function SalleEntretien() {
             <label className={LABEL} htmlFor="ent-titre">Titre</label>
             <input id="ent-titre" maxLength={160} className={`mt-1 ${INPUT}`} value={titre} onChange={(e) => setTitre(e.target.value)} />
           </div>
+
           <div className="sm:col-span-2">
-            <label className={LABEL} htmlFor="ent-profil">Profil du vivier (optionnel)</label>
-            <select id="ent-profil" className={`mt-1 ${INPUT}`} value={interetId} onChange={(e) => setInteretId(e.target.value)}>
-              <option value="">— Candidat hors vivier —</option>
-              {interets.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.profil ? i.profil.nom : `Demande ${i.id.slice(0, 6)}`}
-                </option>
-              ))}
-            </select>
+            <p className={LABEL}>Avec qui souhaitez-vous faire l&apos;entretien ?</p>
+            <p className="mt-1 font-sans text-xs text-white/50">
+              Profils anonymisés du vivier de talents : l&apos;invitation part vers le candidat sans que son identité vous soit révélée.
+            </p>
+            {profils === "loading" ? (
+              <p className="mt-2 font-sans text-sm text-white/50">Chargement du vivier...</p>
+            ) : profils === "erreur" ? (
+              <p className="mt-2 font-sans text-sm text-white/50">Vivier indisponible : saisissez l&apos;e-mail d&apos;un candidat ci-dessous.</p>
+            ) : profils.length === 0 ? (
+              <p className="mt-2 font-sans text-sm text-white/50">Aucun profil disponible dans le vivier pour l&apos;instant.</p>
+            ) : (
+              <ul className="mt-2 grid max-h-72 gap-2 overflow-y-auto sm:grid-cols-2" role="radiogroup" aria-label="Profils du vivier">
+                {profils.map((p) => {
+                  const choisi = profilRef === p.ref;
+                  const details = [
+                    p.totalScore !== null ? `Score ${p.totalScore}/100` : null,
+                    p.experienceAnnees !== null ? `${p.experienceAnnees} an(s) d'expérience` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
+                  return (
+                    <li key={p.ref}>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={choisi}
+                        onClick={() => setProfilRef(choisi ? "" : p.ref)}
+                        className={`w-full rounded border px-3 py-2 text-left font-sans text-sm transition-colors ${
+                          choisi ? "border-accent bg-accent/10 text-white" : "border-white/15 text-white/80 hover:border-white/30"
+                        }`}
+                      >
+                        <span className="font-semibold">{p.label}</span>
+                        <span className="block text-xs text-white/60">
+                          {[p.poste, p.niveau].filter(Boolean).join(" · ") || "Profil du vivier"}
+                        </span>
+                        {details && <span className="block text-xs text-white/45">{details}</span>}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
-          {!interetId && (
+
+          {!profilRef && (
             <div className="sm:col-span-2">
-              <label className={LABEL} htmlFor="ent-email">E-mail du candidat</label>
+              <label className={LABEL} htmlFor="ent-email">Ou e-mail d&apos;un candidat hors vivier</label>
               <input
                 id="ent-email"
                 type="email"
@@ -138,7 +201,7 @@ export default function SalleEntretien() {
         </div>
         <button
           className={`mt-3 ${BTN}`}
-          disabled={busy || !titre.trim() || (!interetId && !emailCandidat.trim())}
+          disabled={busy || !titre.trim() || (!profilRef && !emailCandidat.trim())}
           onClick={planifier}
         >
           Planifier et envoyer l&apos;invitation
@@ -156,11 +219,21 @@ export default function SalleEntretien() {
         ) : (
           <ul className="mt-3 divide-y divide-white/5">
             {entretiens.map((e) => (
-              <li key={e.id} className="py-2 font-sans text-sm text-white">
-                {e.titre}
-                <span className="block font-mono text-[11px] text-white/45">
-                  {e.startAt ? fmtDateHeure(e.startAt) : "Date à définir"} · {e.dureeMinutes} min
+              <li key={e.id} className="flex flex-wrap items-center justify-between gap-3 py-2 font-sans text-sm text-white">
+                <span>
+                  {e.titre}
+                  <span className="block font-mono text-[11px] text-white/45">
+                    {e.startAt ? fmtDateHeure(e.startAt) : "Date à définir"} · {e.dureeMinutes} min
+                    {e.profilLabel ? ` · ${e.profilLabel}` : ""}
+                  </span>
                 </span>
+                {e.salleDisponible ? (
+                  <button className={BTN} disabled={rejoindreId === e.id} onClick={() => rejoindre(e.id)}>
+                    {rejoindreId === e.id ? "Ouverture..." : "Rejoindre la salle"}
+                  </button>
+                ) : (
+                  <span className="font-mono text-[11px] text-white/35">Salle indisponible</span>
+                )}
               </li>
             ))}
           </ul>

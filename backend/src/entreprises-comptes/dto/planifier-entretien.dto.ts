@@ -2,6 +2,11 @@ import { IsEmail, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min }
 
 export class PlanifierEntretienDto {
   @IsOptional() @IsString() interetVivierId?: string;
+  // Profil anonymisé choisi directement dans le vivier ("agent:<id>" ou
+  // "apprenant:<id>", voir listerVivier) : le serveur crée (ou réutilise)
+  // l'intérêt correspondant et résout l'e-mail réel côté serveur — l'entreprise
+  // ne voit jamais l'identité.
+  @IsOptional() @IsString() profilRef?: string;
   @IsString() @IsNotEmpty() @MaxLength(160) titre!: string;
   @IsOptional() @IsString() startAt?: string; // ISO
   @IsOptional() @IsInt() @Min(10) @Max(240) dureeMinutes?: number;

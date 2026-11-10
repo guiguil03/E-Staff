@@ -359,7 +359,10 @@ export class EntreprisesComptesService {
 
   async listerVivier(matricule: string) {
     await this.chargerEntreprise(matricule);
+    return this.profilsVivier();
+  }
 
+  private async profilsVivier() {
     const [agents, apprenants] = await Promise.all([
       this.prisma.agent.findMany({
         where: { statut: "actif", missions: { none: { dateFin: null } } },
@@ -507,14 +510,129 @@ export class EntreprisesComptesService {
 
   async listEntretiens(matricule: string) {
     const entreprise = await this.chargerEntreprise(matricule);
-    return this.prisma.entretienVirtuel.findMany({
+    const entretiens = await this.prisma.entretienVirtuel.findMany({
       where: { entrepriseId: entreprise.id },
+      include: { interetVivier: true },
       orderBy: { createdAt: "desc" },
     });
+    // L'URL brute de la salle n'est jamais exposée : l'entreprise passe par
+    // /rejoindre, qui émet un jeton nominatif. Le profil reste anonymisé.
+    return entretiens.map((e) => {
+      const iv = e.interetVivier;
+      const ref = iv?.agentId ? `agent:${iv.agentId}` : iv?.apprenantId ? `apprenant:${iv.apprenantId}` : null;
+      return {
+        id: e.id,
+        titre: e.titre,
+        startAt: e.startAt,
+        dureeMinutes: e.dureeMinutes,
+        createdAt: e.createdAt,
+        salleDisponible: !!(e.dailyRoomName && e.dailyRoomUrl),
+        profilLabel: ref ? this.labelProfil(ref) : null,
+      };
+    });
+  }
+
+  private labelProfil(ref: string): string {
+    const [type, id] = ref.split(":");
+    const hash = crypto.createHash("sha256").update(id).digest("hex").slice(0, 6).toUpperCase();
+    return `Profil ${type === "agent" ? "AG" : "AP"}-${hash}`;
+  }
+
+  // Lien d'accès nominatif à la salle d'un entretien — entreprise (propriétaire
+  // de l'entretien) ou RH e-Staf (supervision). Le candidat, lui, reçoit son
+  // lien par e-mail à la planification.
+  private async lienSalle(
+    entretien: { id: string; dailyRoomName: string | null; dailyRoomUrl: string | null },
+    participant: { userId: string; userName: string }
+  ) {
+    if (!entretien.dailyRoomName || !entretien.dailyRoomUrl) {
+      throw new BadRequestException("La salle de cet entretien n'est pas disponible.");
+    }
+    return ouvrirSalleVisio(
+      this.daily,
+      {
+        roomId: `entretien-${entretien.id}`,
+        roomName: entretien.dailyRoomName,
+        roomUrl: entretien.dailyRoomUrl,
+        dureeValiditeSecondes: 7 * 86400,
+        persister: async () => undefined,
+      },
+      { ...participant, owner: true }
+    );
+  }
+
+  async rejoindreEntretien(matricule: string, entretienId: string) {
+    const entreprise = await this.chargerEntreprise(matricule);
+    const entretien = await this.prisma.entretienVirtuel.findFirst({
+      where: { id: entretienId, entrepriseId: entreprise.id },
+    });
+    if (!entretien) throw new NotFoundException("Entretien introuvable.");
+    return this.lienSalle(entretien, { userId: `entreprise-${entreprise.id}`, userName: entreprise.raisonSociale });
+  }
+
+  // ---- RH : vue d'ensemble des entretiens --------------------------------------
+
+  async listEntretiensRh() {
+    const entretiens = await this.prisma.entretienVirtuel.findMany({
+      include: { entreprise: true, interetVivier: { include: { agent: true, apprenant: true } } },
+      orderBy: [{ startAt: "desc" }, { createdAt: "desc" }],
+      take: 200,
+    });
+    return entretiens.map((e) => {
+      const personne = e.interetVivier?.agent ?? e.interetVivier?.apprenant ?? null;
+      return {
+        id: e.id,
+        titre: e.titre,
+        startAt: e.startAt,
+        dureeMinutes: e.dureeMinutes,
+        createdAt: e.createdAt,
+        entreprise: e.entreprise.raisonSociale,
+        candidat: personne ? `${personne.prenom} ${personne.nom}` : "Candidat hors vivier",
+        salleDisponible: !!(e.dailyRoomName && e.dailyRoomUrl),
+      };
+    });
+  }
+
+  async rejoindreEntretienRh(entretienId: string) {
+    const entretien = await this.prisma.entretienVirtuel.findUnique({ where: { id: entretienId } });
+    if (!entretien) throw new NotFoundException("Entretien introuvable.");
+    return this.lienSalle(entretien, { userId: "rh-estaf", userName: "RH e-Staf" });
+  }
+
+  // Le profil doit appartenir au vivier présenté à l'entreprise (mêmes
+  // critères que listerVivier) ; un intérêt existant est réutilisé pour ne
+  // pas dupliquer les demandes côté RH.
+  private async interetPourProfil(entrepriseId: string, profilRef: string): Promise<string> {
+    const [type, id] = profilRef.split(":");
+    if ((type !== "agent" && type !== "apprenant") || !id) {
+      throw new BadRequestException("Référence de profil invalide.");
+    }
+    const vivier = await this.profilsVivier();
+    if (!vivier.some((p) => p.ref === profilRef)) throw new NotFoundException("Profil introuvable ou plus disponible.");
+
+    const existant = await this.prisma.interetVivier.findFirst({
+      where: { entrepriseId, ...(type === "agent" ? { agentId: id } : { apprenantId: id }) },
+      orderBy: { createdAt: "desc" },
+    });
+    if (existant) return existant.id;
+    const cree = await this.prisma.interetVivier.create({
+      data: {
+        entrepriseId,
+        agentId: type === "agent" ? id : null,
+        apprenantId: type === "apprenant" ? id : null,
+        message: "Entretien demandé depuis la salle d'entretien.",
+      },
+    });
+    return cree.id;
   }
 
   async planifierEntretien(matricule: string, dto: PlanifierEntretienDto) {
     const entreprise = await this.chargerEntreprise(matricule);
+
+    // Profil choisi directement dans le vivier : intérêt créé/réutilisé.
+    if (dto.profilRef && !dto.interetVivierId) {
+      dto = { ...dto, interetVivierId: await this.interetPourProfil(entreprise.id, dto.profilRef) };
+    }
 
     let emailDestinataire = dto.emailCandidat ?? null;
     let nomDestinataire = "Candidat";
