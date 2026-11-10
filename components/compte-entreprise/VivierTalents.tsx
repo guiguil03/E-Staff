@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiGetBlob, apiPost } from "@/lib/api";
 import { entrepriseMatricule, fmtDate, INTERET_STATUT_LABELS } from "./entrepriseApi";
 
 interface Profil {
@@ -44,6 +44,123 @@ const BTN_GHOST =
 const INPUT =
   "w-full rounded border border-white/15 bg-obsidian px-3 py-2 font-sans text-sm text-white placeholder:text-white/30 focus:border-accent focus:outline-none disabled:opacity-40";
 const messageErreur = (e: unknown) => (e instanceof Error ? e.message : "Une erreur est survenue.");
+
+interface MediasVivier {
+  cvDisponible: boolean;
+  videoDisponible: boolean;
+  audios: { id: string; situationIndex: number }[];
+}
+
+// CV, vidéo de présentation et audios d'un profil du vivier, consultables
+// avant de le sélectionner pour un entretien. Les fichiers sont récupérés via
+// fetch authentifié (session entreprise) puis lus depuis un blob : un lien
+// direct vers l'API n'enverrait pas la session (domaines différents).
+function MediasProfil({ matricule, profilRef }: { matricule: string | null; profilRef: string }) {
+  const [ouvert, setOuvert] = useState(false);
+  const [medias, setMedias] = useState<MediasVivier | "loading" | "erreur" | null>(null);
+  const [sources, setSources] = useState<Record<string, string>>({});
+  const [chargement, setChargement] = useState<string | null>(null);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [type, id] = profilRef.split(":");
+  const base = `/entreprises-comptes/${matricule}/vivier-medias/${type}/${id}`;
+
+  // Libère les URL de blob à la fermeture du composant.
+  useEffect(() => {
+    return () => Object.values(sources).forEach((u) => URL.revokeObjectURL(u));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function basculer() {
+    const suivant = !ouvert;
+    setOuvert(suivant);
+    if (suivant && medias === null && matricule) {
+      setMedias("loading");
+      apiGet<MediasVivier>(base).then(setMedias).catch(() => setMedias("erreur"));
+    }
+  }
+
+  async function charger(cle: string, chemin: string) {
+    setErreur(null);
+    setChargement(cle);
+    try {
+      const blob = await apiGetBlob(`${base}${chemin}`, {});
+      setSources((s) => ({ ...s, [cle]: URL.createObjectURL(blob) }));
+    } catch {
+      setErreur("Fichier indisponible pour le moment.");
+    } finally {
+      setChargement(null);
+    }
+  }
+
+  async function ouvrirCv() {
+    // Onglet ouvert tout de suite pour ne pas être bloqué par l'anti-popup.
+    const win = window.open("", "_blank");
+    try {
+      const blob = await apiGetBlob(`${base}/cv`, {});
+      const url = URL.createObjectURL(blob);
+      if (win) win.location.href = url;
+      else window.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      win?.close();
+      setErreur("CV indisponible pour le moment.");
+    }
+  }
+
+  return (
+    <div className="mt-3">
+      <button type="button" className={`${BTN_GHOST} w-full`} onClick={basculer} aria-expanded={ouvert}>
+        {ouvert ? "Masquer CV, vidéo et audio" : "Voir CV, vidéo et audio"}
+      </button>
+      {ouvert && (
+        <div className="mt-2 space-y-2 rounded border border-white/10 p-3">
+          {medias === "loading" && <p className="font-sans text-xs text-white/50">Chargement...</p>}
+          {medias === "erreur" && <p className="font-sans text-xs text-white/50">Médias indisponibles pour ce profil.</p>}
+          {medias && medias !== "loading" && medias !== "erreur" && (
+            <>
+              {!medias.cvDisponible && !medias.videoDisponible && medias.audios.length === 0 && (
+                <p className="font-sans text-xs text-white/50">Aucun CV, vidéo ou audio déposé pour ce profil.</p>
+              )}
+              {medias.cvDisponible && (
+                <button type="button" className={BTN_GHOST} onClick={ouvrirCv}>
+                  Voir le CV
+                </button>
+              )}
+              {medias.videoDisponible &&
+                (sources.video ? (
+                  <video controls src={sources.video} className="w-full rounded" />
+                ) : (
+                  <button type="button" className={BTN_GHOST} disabled={chargement === "video"} onClick={() => charger("video", "/video")}>
+                    {chargement === "video" ? "Chargement..." : "▶ Vidéo de présentation"}
+                  </button>
+                ))}
+              {medias.audios.map((a) => {
+                const cle = `audio-${a.id}`;
+                return sources[cle] ? (
+                  <div key={a.id}>
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-white/40">Situation {a.situationIndex}</p>
+                    <audio controls src={sources[cle]} className="mt-1 w-full" />
+                  </div>
+                ) : (
+                  <button
+                    key={a.id}
+                    type="button"
+                    className={`${BTN_GHOST} block`}
+                    disabled={chargement === cle}
+                    onClick={() => charger(cle, `/audio/${a.id}`)}
+                  >
+                    {chargement === cle ? "Chargement..." : `♪ Audio — situation ${a.situationIndex}`}
+                  </button>
+                );
+              })}
+            </>
+          )}
+          {erreur && <p className="font-sans text-xs text-statusRed">{erreur}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Vivier de talents (profils anonymisés) : l'entreprise voit des profils
 // filtrés (compétences, disponibilité) sans aucune donnée d'identité, et
@@ -118,7 +235,8 @@ export default function VivierTalents() {
       <div className={CARD}>
         <h3 className="font-display text-lg font-semibold text-white">Profils disponibles</h3>
         <p className="mt-1 font-sans text-xs text-white/50">
-          Profils anonymisés — exprimez votre intérêt, la RH e-Staf valide ensuite l&apos;affectation à votre équipe.
+          Consultez le CV, la vidéo et l&apos;audio d&apos;un profil, puis sélectionnez-le pour un entretien. Pour une affectation à votre
+          équipe, exprimez votre intérêt : la RH e-Staf valide ensuite.
         </p>
         {profils.length === 0 ? (
           <p className="mt-4 font-sans text-sm text-white/50">Aucun profil disponible pour l&apos;instant.</p>
@@ -135,6 +253,13 @@ export default function VivierTalents() {
                 {p.experienceAnnees !== null && (
                   <p className="font-sans text-xs text-white/50">{p.experienceAnnees} an(s) d&apos;expérience</p>
                 )}
+                <MediasProfil matricule={matricule} profilRef={p.ref} />
+                <a
+                  href={`/compte/entreprise/entretiens?profil=${encodeURIComponent(p.ref)}`}
+                  className={`${BTN} mt-3 block w-full text-center`}
+                >
+                  Sélectionner pour un entretien
+                </a>
                 <input
                   aria-label="Message (optionnel)"
                   placeholder="Message (optionnel)…"
@@ -144,7 +269,7 @@ export default function VivierTalents() {
                   onChange={(e) => setMessages({ ...messages, [p.ref]: e.target.value })}
                 />
                 <button
-                  className={`${BTN} mt-2 w-full`}
+                  className={`${BTN_GHOST} mt-2 w-full`}
                   disabled={busy === p.ref}
                   onClick={() => exprimerInteret(p)}
                 >
