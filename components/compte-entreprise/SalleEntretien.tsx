@@ -63,6 +63,14 @@ export default function SalleEntretien() {
     charger();
   }, [charger]);
 
+  // Profil présélectionné depuis le vivier (?profil=agent:<id> / apprenant:<id>).
+  // Lu côté client via window.location : évite de rendre la page dépendante
+  // de useSearchParams (boundary Suspense obligatoire au build).
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get("profil");
+    if (ref) setProfilRef(ref);
+  }, []);
+
   async function planifier() {
     setErreur(null);
     setSucces(null);

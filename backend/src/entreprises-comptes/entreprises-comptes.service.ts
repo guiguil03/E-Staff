@@ -27,6 +27,7 @@ import { CreateEntrepriseDto } from "./dto/create-entreprise.dto";
 import { RattacherContratDto } from "./dto/rattacher-contrat.dto";
 import { ExprimerInteretDto } from "./dto/exprimer-interet.dto";
 import { TraiterInteretDto } from "./dto/traiter-interet.dto";
+import { AffecterLotDto } from "./dto/affecter-lot.dto";
 import { PlanifierEntretienDto } from "./dto/planifier-entretien.dto";
 import { EnvoyerMessageEntrepriseDto } from "./dto/envoyer-message-entreprise.dto";
 import { UpsertEntrepriseLiveDto } from "./dto/upsert-entreprise-live.dto";
@@ -245,6 +246,41 @@ export class EntreprisesComptesService {
     }
 
     return this.prisma.interetVivier.update({ where: { id: interetId }, data: { statut: dto.statut } });
+  }
+
+  // Affectation en lot : une Mission par profil coché, avec les mêmes
+  // contrat / superviseur / rôle / date. Chaque profil est traité
+  // indépendamment : un échec (déjà en mission, déjà affecté, contrat d'une
+  // autre entreprise…) n'annule pas les autres et est rapporté ligne par ligne.
+  async affecterLot(dto: AffecterLotDto) {
+    const contrat = await this.prisma.contratB2B.findUnique({ where: { id: dto.contratId } });
+    if (!contrat) throw new NotFoundException("Contrat introuvable.");
+
+    const resultats: { interetId: string; ok: boolean; erreur?: string }[] = [];
+    for (const interetId of [...new Set(dto.interetIds)]) {
+      try {
+        const interet = await this.prisma.interetVivier.findUnique({ where: { id: interetId } });
+        if (!interet) throw new NotFoundException("Intérêt introuvable.");
+        if (interet.statut === "affecte") throw new BadRequestException("Déjà affecté.");
+        if (contrat.entrepriseId && contrat.entrepriseId !== interet.entrepriseId) {
+          throw new BadRequestException("Ce contrat appartient à une autre entreprise que la demande.");
+        }
+        await this.traiterInteret(interetId, {
+          statut: "affecte",
+          contratId: dto.contratId,
+          superviseurId: dto.superviseurId,
+          role: dto.role,
+          dateDebut: dto.dateDebut,
+          tarifNegocie: dto.tarifNegocie,
+          objectifJournalier: dto.objectifJournalier,
+          objectifHebdo: dto.objectifHebdo,
+        });
+        resultats.push({ interetId, ok: true });
+      } catch (e) {
+        resultats.push({ interetId, ok: false, erreur: e instanceof Error ? e.message : "Échec de l'affectation." });
+      }
+    }
+    return { affectes: resultats.filter((r) => r.ok).length, echecs: resultats.filter((r) => !r.ok).length, resultats };
   }
 
   // ---- Tableau de bord (lecture, vision globale + par contrat) -------------
@@ -504,6 +540,82 @@ export class EntreprisesComptesService {
     const key = interet?.agent?.candidat?.videoPresentationKey;
     if (!interet || !key) throw new NotFoundException("Vidéo indisponible.");
     return this.storage.getObjectStream(key);
+  }
+
+  // ---- Vivier : médias du candidat (CV, vidéo, audios) -----------------------
+  // Consultables AVANT de sélectionner un profil pour un entretien. Le profil
+  // doit appartenir au vivier présenté à l'entreprise (mêmes critères que
+  // listerVivier) ; chaque flux est servi uniquement par ces routes, jamais par
+  // une URL de stockage.
+
+  private async mediasDuProfil(matricule: string, type: string, id: string) {
+    await this.chargerEntreprise(matricule);
+    if (type !== "agent" && type !== "apprenant") throw new BadRequestException("Type de profil invalide.");
+    const vivier = await this.profilsVivier();
+    if (!vivier.some((p) => p.ref === `${type}:${id}`)) {
+      throw new NotFoundException("Profil introuvable ou plus disponible.");
+    }
+
+    if (type === "agent") {
+      const agent = await this.prisma.agent.findUnique({
+        where: { id },
+        include: { candidat: { include: { attempts: { orderBy: { createdAt: "desc" }, take: 1 } } } },
+      });
+      return { candidat: agent?.candidat ?? null, attemptId: agent?.candidat?.attempts[0]?.id ?? null };
+    }
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { id },
+      include: { evaluationAttempt: { include: { candidat: true } } },
+    });
+    return {
+      candidat: apprenant?.evaluationAttempt?.candidat ?? null,
+      attemptId: apprenant?.evaluationAttempt?.id ?? null,
+    };
+  }
+
+  async listMediasVivier(matricule: string, type: string, id: string) {
+    const { candidat, attemptId } = await this.mediasDuProfil(matricule, type, id);
+    const audios = attemptId
+      ? await this.prisma.situationResponse.findMany({
+          where: { attemptId },
+          select: { id: true, situationIndex: true },
+          orderBy: { situationIndex: "asc" },
+        })
+      : [];
+    return {
+      cvDisponible: !!candidat?.cvKey,
+      videoDisponible: !!candidat?.videoPresentationKey,
+      audios: audios.map((a) => ({ id: a.id, situationIndex: a.situationIndex })),
+    };
+  }
+
+  async getCvVivierStream(matricule: string, type: string, id: string) {
+    const { candidat } = await this.mediasDuProfil(matricule, type, id);
+    if (!candidat?.cvKey) throw new NotFoundException("CV indisponible.");
+    return this.storage.getObjectStream(candidat.cvKey).catch(() => {
+      throw new NotFoundException("CV indisponible.");
+    });
+  }
+
+  async getVideoVivierStream(matricule: string, type: string, id: string) {
+    const { candidat } = await this.mediasDuProfil(matricule, type, id);
+    if (!candidat?.videoPresentationKey) throw new NotFoundException("Vidéo indisponible.");
+    return this.storage.getObjectStream(candidat.videoPresentationKey).catch(() => {
+      throw new NotFoundException("Vidéo indisponible.");
+    });
+  }
+
+  async getAudioVivierStream(matricule: string, type: string, id: string, reponseId: string) {
+    const { attemptId } = await this.mediasDuProfil(matricule, type, id);
+    // L'audio doit appartenir à la tentative DE CE profil — sinon n'importe
+    // quel identifiant de réponse serait lisible via un profil du vivier.
+    const reponse = attemptId
+      ? await this.prisma.situationResponse.findFirst({ where: { id: reponseId, attemptId } })
+      : null;
+    if (!reponse) throw new NotFoundException("Audio indisponible.");
+    return this.storage.getObjectStream(reponse.audioUrl).catch(() => {
+      throw new NotFoundException("Audio indisponible.");
+    });
   }
 
   // ---- Salle d'entretien virtuel ---------------------------------------------

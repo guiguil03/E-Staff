@@ -28,6 +28,7 @@ import { CreateEntrepriseDto } from "./dto/create-entreprise.dto";
 import { RattacherContratDto } from "./dto/rattacher-contrat.dto";
 import { ExprimerInteretDto } from "./dto/exprimer-interet.dto";
 import { TraiterInteretDto } from "./dto/traiter-interet.dto";
+import { AffecterLotDto } from "./dto/affecter-lot.dto";
 import { PlanifierEntretienDto } from "./dto/planifier-entretien.dto";
 import { EnvoyerMessageEntrepriseDto } from "./dto/envoyer-message-entreprise.dto";
 import { UpsertEntrepriseLiveDto } from "./dto/upsert-entreprise-live.dto";
@@ -112,6 +113,12 @@ export class EntreprisesComptesController {
   @Get("interets")
   listInterets(@Query("entrepriseId") entrepriseId?: string) {
     return this.service.listInterets(entrepriseId || undefined);
+  }
+
+  @UseGuards(RhGuard)
+  @Post("interets/affecter-lot")
+  affecterLot(@Body() dto: AffecterLotDto) {
+    return this.service.affecterLot(dto);
   }
 
   @UseGuards(RhGuard)
@@ -236,6 +243,54 @@ export class EntreprisesComptesController {
   @Get(":matricule/vivier/interets/:id/bilan/video")
   async getBilanVideo(@Param("matricule") matricule: string, @Param("id") id: string, @Res() res: Response) {
     const { stream, contentType } = await this.service.getBilanVideoStream(matricule, id);
+    if (contentType) res.set("Content-Type", contentType);
+    stream.pipe(res);
+  }
+
+  // Médias d'un profil du vivier (CV, vidéo de présentation, audios), avant
+  // sélection pour un entretien — préfixe distinct de `vivier/interets/...`.
+  @UseGuards(EntrepriseGuard)
+  @Get(":matricule/vivier-medias/:type/:id")
+  listMediasVivier(@Param("matricule") matricule: string, @Param("type") type: string, @Param("id") id: string) {
+    return this.service.listMediasVivier(matricule, type, id);
+  }
+
+  @UseGuards(EntrepriseGuard)
+  @Get(":matricule/vivier-medias/:type/:id/cv")
+  async getCvVivier(
+    @Param("matricule") matricule: string,
+    @Param("type") type: string,
+    @Param("id") id: string,
+    @Res() res: Response
+  ) {
+    const { stream, contentType } = await this.service.getCvVivierStream(matricule, type, id);
+    res.set("Content-Type", contentType ?? "application/pdf");
+    stream.pipe(res);
+  }
+
+  @UseGuards(EntrepriseGuard)
+  @Get(":matricule/vivier-medias/:type/:id/video")
+  async getVideoVivier(
+    @Param("matricule") matricule: string,
+    @Param("type") type: string,
+    @Param("id") id: string,
+    @Res() res: Response
+  ) {
+    const { stream, contentType } = await this.service.getVideoVivierStream(matricule, type, id);
+    res.set("Content-Type", contentType ?? "video/webm");
+    stream.pipe(res);
+  }
+
+  @UseGuards(EntrepriseGuard)
+  @Get(":matricule/vivier-medias/:type/:id/audio/:reponseId")
+  async getAudioVivier(
+    @Param("matricule") matricule: string,
+    @Param("type") type: string,
+    @Param("id") id: string,
+    @Param("reponseId") reponseId: string,
+    @Res() res: Response
+  ) {
+    const { stream, contentType } = await this.service.getAudioVivierStream(matricule, type, id, reponseId);
     if (contentType) res.set("Content-Type", contentType);
     stream.pipe(res);
   }
