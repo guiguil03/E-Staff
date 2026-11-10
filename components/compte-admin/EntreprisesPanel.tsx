@@ -36,6 +36,17 @@ interface Interet {
   contrat: { clientNom: string } | null;
 }
 
+interface EntretienRh {
+  id: string;
+  titre: string;
+  startAt: string | null;
+  dureeMinutes: number;
+  createdAt: string;
+  entreprise: string;
+  candidat: string;
+  salleDisponible: boolean;
+}
+
 const emptyForm = { raisonSociale: "", contactNom: "", email: "", telephone: "" };
 const INPUT_CLS =
   "mt-1 w-full rounded border border-white/20 bg-obsidianCard px-3 py-2 font-sans text-sm text-white placeholder:text-white/30 outline-none focus:border-accent";
@@ -49,6 +60,8 @@ export default function EntreprisesPanel() {
   const [entreprises, setEntreprises] = useState<Entreprise[] | "loading" | "erreur">("loading");
   const [contrats, setContrats] = useState<Contrat[]>([]);
   const [interets, setInterets] = useState<Interet[] | "loading" | "erreur">("loading");
+  const [entretiens, setEntretiens] = useState<EntretienRh[] | "loading" | "erreur">("loading");
+  const [rejoindreId, setRejoindreId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
@@ -63,9 +76,34 @@ export default function EntreprisesPanel() {
     apiGet<Contrat[]>("/production/contrats", adminHeaders()).then(setContrats).catch(() => {});
     setInterets("loading");
     apiGet<Interet[]>("/entreprises-comptes/interets", adminHeaders()).then(setInterets).catch(() => setInterets("erreur"));
+    setEntretiens("loading");
+    apiGet<EntretienRh[]>("/entreprises-comptes/entretiens", adminHeaders()).then(setEntretiens).catch(() => setEntretiens("erreur"));
   }
 
   useEffect(refresh, []);
+
+  // Accès RH à la salle d'un entretien (supervision) : lien nominatif émis à
+  // la demande, onglet ouvert d'emblée pour éviter l'anti-popup.
+  async function rejoindreEntretien(id: string) {
+    setError(null);
+    setRejoindreId(id);
+    const win = window.open("", "_blank");
+    try {
+      const r = await apiPostAuthed<{ configured: boolean; url: string | null }>(
+        `/entreprises-comptes/entretiens/${id}/rejoindre`,
+        {},
+        adminHeaders()
+      );
+      if (!r.url) throw new Error("La salle virtuelle n'est pas activée sur la plateforme.");
+      if (win) win.location.href = r.url;
+      else window.location.href = r.url;
+    } catch (e) {
+      win?.close();
+      setError(e instanceof Error ? e.message : "Impossible d'ouvrir la salle.");
+    } finally {
+      setRejoindreId(null);
+    }
+  }
 
   async function create() {
     if (!form.raisonSociale.trim() || !form.contactNom.trim() || !form.email.trim()) return;
@@ -288,6 +326,49 @@ export default function EntreprisesPanel() {
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      </Reveal>
+
+      <Reveal delay={60}>
+        <div className="rounded border border-white/10 bg-obsidianCard p-6">
+          <h3 className="font-display text-base font-semibold text-white">Entretiens planifiés par les entreprises</h3>
+          <p className="mt-1 font-sans text-xs text-white/50">
+            Salles d&apos;entretien virtuelles ouvertes par les entreprises avec un talent du vivier — vous pouvez rejoindre la salle pour
+            superviser.
+          </p>
+          {entretiens === "loading" && <p className="mt-4 font-sans text-sm text-white/50">Chargement...</p>}
+          {entretiens === "erreur" && <p className="mt-4 font-sans text-sm text-white/50">Erreur de chargement.</p>}
+          {Array.isArray(entretiens) && entretiens.length === 0 && (
+            <p className="mt-4 font-sans text-sm text-white/50">Aucun entretien planifié pour l&apos;instant.</p>
+          )}
+          {Array.isArray(entretiens) && entretiens.length > 0 && (
+            <ul className="mt-4 space-y-2">
+              {entretiens.map((e) => (
+                <li key={e.id} className="flex flex-wrap items-center justify-between gap-3 rounded border border-white/10 bg-obsidian px-4 py-3">
+                  <div>
+                    <p className="font-sans text-sm text-white">
+                      {e.entreprise} → {e.candidat}
+                    </p>
+                    <p className="font-mono text-[11px] text-white/45">
+                      {e.titre} · {e.startAt ? new Date(e.startAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "Date à définir"} ·{" "}
+                      {e.dureeMinutes} min
+                    </p>
+                  </div>
+                  {e.salleDisponible ? (
+                    <button
+                      onClick={() => rejoindreEntretien(e.id)}
+                      disabled={rejoindreId === e.id}
+                      className="font-mono text-[11px] uppercase tracking-widest text-accent hover:underline disabled:opacity-40"
+                    >
+                      {rejoindreId === e.id ? "Ouverture..." : "Rejoindre la salle"}
+                    </button>
+                  ) : (
+                    <span className="font-mono text-[11px] text-white/35">Salle indisponible</span>
+                  )}
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </Reveal>
