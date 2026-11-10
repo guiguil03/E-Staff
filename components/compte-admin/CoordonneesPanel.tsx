@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Reveal from "@/components/Reveal";
-import { apiGet, apiGetBlob } from "@/lib/api";
+import { ApiError, apiGet, apiGetBlob } from "@/lib/api";
 import { adminHeaders } from "./adminHeaders";
 
 interface CoordonneesRow {
@@ -30,9 +30,16 @@ async function ouvrirFichier(path: string) {
     if (win) win.location.href = url;
     else window.location.href = url;
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  } catch {
+  } catch (e) {
     win?.close();
-    window.alert("Impossible d'ouvrir le fichier (accès refusé ou fichier introuvable).");
+    const status = e instanceof ApiError ? e.status : null;
+    window.alert(
+      status === 401 || status === 403
+        ? "Session RH expirée ou invalide : reconnectez-vous puis réessayez."
+        : status === 404
+          ? "Fichier introuvable (le CV n'est plus présent dans le stockage)."
+          : `Impossible d'ouvrir le fichier${status ? ` (erreur ${status})` : ""}.`
+    );
   }
 }
 
