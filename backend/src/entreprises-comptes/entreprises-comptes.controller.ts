@@ -93,6 +93,21 @@ export class EntreprisesComptesController {
     return this.service.createEntreprise(dto);
   }
 
+  // Supervision RH des entretiens planifiés par les entreprises (avec lien
+  // d'accès à la salle). Routes littérales : aucune collision avec
+  // `:matricule/entretiens` (deux segments, le second littéral).
+  @UseGuards(RhGuard)
+  @Get("entretiens")
+  listEntretiensRh() {
+    return this.service.listEntretiensRh();
+  }
+
+  @UseGuards(RhGuard)
+  @Post("entretiens/:id/rejoindre")
+  rejoindreEntretienRh(@Param("id") id: string) {
+    return this.service.rejoindreEntretienRh(id);
+  }
+
   @UseGuards(RhGuard)
   @Get("interets")
   listInterets(@Query("entrepriseId") entrepriseId?: string) {
@@ -231,6 +246,12 @@ export class EntreprisesComptesController {
   @Get(":matricule/entretiens")
   listEntretiens(@Param("matricule") matricule: string) {
     return this.service.listEntretiens(matricule);
+  }
+
+  @UseGuards(EntrepriseGuard)
+  @Post(":matricule/entretiens/:id/rejoindre")
+  rejoindreEntretien(@Param("matricule") matricule: string, @Param("id") id: string) {
+    return this.service.rejoindreEntretien(matricule, id);
   }
 
   @UseGuards(EntrepriseGuard)
