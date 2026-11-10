@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Reveal from "@/components/Reveal";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiGetBlob } from "@/lib/api";
 import { adminHeaders } from "./adminHeaders";
 
 interface CoordonneesRow {
@@ -18,7 +18,23 @@ interface CoordonneesRow {
   typeCours: string | null;
 }
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL_Dev ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+// Les endpoints CV / vidéo sont protégés par la session RH : un simple
+// <a href> cross-origin n'envoie pas l'authentification (401). On récupère
+// donc le fichier via fetch authentifié puis on l'ouvre depuis un blob.
+async function ouvrirFichier(path: string) {
+  // Onglet ouvert synchroniquement pour ne pas être bloqué par l'anti-popup.
+  const win = window.open("", "_blank");
+  try {
+    const blob = await apiGetBlob(path, adminHeaders());
+    const url = URL.createObjectURL(blob);
+    if (win) win.location.href = url;
+    else window.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch {
+    win?.close();
+    window.alert("Impossible d'ouvrir le fichier (accès refusé ou fichier introuvable).");
+  }
+}
 
 // Tableau consolidé — une ligne par candidat avec ses coordonnées, son CV
 // (s'il a été déposé à l'étape "Coordonnées" du test) et les liens vers ses
@@ -115,14 +131,13 @@ export default function CoordonneesPanel() {
                     </td>
                     <td className="py-2.5 pr-4">
                       {r.cvDisponible ? (
-                        <a
-                          href={`${API_URL}/evaluation/candidats/${r.candidatId}/cv`}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          type="button"
+                          onClick={() => void ouvrirFichier(`/evaluation/candidats/${r.candidatId}/cv`)}
                           className="font-mono text-xs text-accent hover:underline"
                         >
                           Voir le CV
-                        </a>
+                        </button>
                       ) : (
                         <span className="font-mono text-xs text-white/30">—</span>
                       )}
@@ -131,15 +146,14 @@ export default function CoordonneesPanel() {
                       {r.videoResponseIds.length > 0 ? (
                         <div className="flex flex-wrap gap-2">
                           {r.videoResponseIds.map((id, i) => (
-                            <a
+                            <button
                               key={id}
-                              href={`${API_URL}/evaluation/video-responses/${id}/video`}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                              type="button"
+                              onClick={() => void ouvrirFichier(`/evaluation/video-responses/${id}/video`)}
                               className="font-mono text-xs text-accent hover:underline"
                             >
                               Vidéo {i + 1}
-                            </a>
+                            </button>
                           ))}
                         </div>
                       ) : (
